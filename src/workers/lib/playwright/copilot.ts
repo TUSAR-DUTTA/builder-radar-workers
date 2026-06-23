@@ -12,28 +12,35 @@ export async function closeCopilotBrowser() {
 
 export async function scrapeCopilotPrompt(prompt: string): Promise<{ text: string; citations: { url: string; title?: string }[] }> {
   if (!sharedCopilotBrowser) {
+    // Navigate once during init — just like chatgpt.ts. Never re-navigate on subsequent calls
+    // because every page.goto() on copilot.microsoft.com triggers a Cloudflare Turnstile challenge.
     const runtime = await launchSeededPersistentContext('copilot');
     const ctx = runtime.context;
     const page = await ctx.newPage();
     await page.goto('https://copilot.microsoft.com/', { waitUntil: 'domcontentloaded', timeout: 45_000 });
-    await page.waitForTimeout(2500);
+    await page.waitForTimeout(3000);
     sharedCopilotBrowser = { runtime, page };
   }
 
   const { page } = sharedCopilotBrowser;
 
   try {
-    await page.goto('https://copilot.microsoft.com/', { waitUntil: 'domcontentloaded', timeout: 45_000 });
-    await page.waitForTimeout(1000);
-
+    // Auth check without re-navigating — check current URL/DOM state
     if (page.url().includes('login') || await page.locator('text="Sign in"').isVisible().catch(() => false)) {
       await captureDebug(page, 'copilot', 'unauthenticated');
       throw new Error('Copilot session is unauthenticated (redirected to login page).');
     }
 
+    // Click "New chat" to start a fresh conversation (avoids page.goto which triggers Turnstile)
+    const newChatBtn = await firstVisibleLocator(page, '[aria-label="New chat"], a[href="/"], button:has-text("New chat"), [title="New chat"]');
+    if (newChatBtn) {
+      await newChatBtn.click({ timeout: 5000 }).catch(() => {});
+      await page.waitForTimeout(1500);
+    }
+
     let composer: import('playwright').Locator | null = null;
     for (let i = 0; i < 15; i++) {
-      composer = await firstVisibleLocator(page, '[contenteditable="true"], textarea, #searchbox, [aria-label*="Ask"], [placeholder*="Ask"], .cib-serp-main, cib-serp-main');
+      composer = await firstVisibleLocator(page, '[contenteditable="true"], textarea, #searchbox, [aria-label*="Ask"], [placeholder*="Ask"]');
       if (composer) break;
       await page.waitForTimeout(1000);
     }
@@ -54,8 +61,8 @@ export async function scrapeCopilotPrompt(prompt: string): Promise<{ text: strin
     });
     await composer.fill('').catch(() => {});
     await page.keyboard.insertText(`Use web search and answer this buyer question with citations:\n\n${prompt}`);
-    
-    // Use the same tech that chatgpt is using: click the submit button if available
+
+    // Click send button (same as chatgpt.ts approach)
     await page.waitForTimeout(500);
     const submitButton = await firstVisibleLocator(page, 'button[title="Submit"], button[aria-label*="Submit"], button[aria-label*="Send"]');
     if (submitButton) {

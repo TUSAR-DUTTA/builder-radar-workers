@@ -62,12 +62,13 @@ export async function scrapeCopilotPrompt(prompt: string): Promise<{ text: strin
     
     // Handle possible CAPTCHA popup by trying to click the Turnstile checkbox
     try {
-      const frames = page.frames();
-      for (const frame of frames) {
-        if (frame.url().includes('cloudflare') || frame.url().includes('turnstile')) {
-          await frame.locator('input[type="checkbox"]').click({ force: true, timeout: 2000 }).catch(() => {});
-          await page.waitForTimeout(2000);
-        }
+      const turnstileBox = page.locator('#cf-turnstile');
+      if (await turnstileBox.isVisible({ timeout: 5000 })) {
+        await turnstileBox.click({ force: true, timeout: 2000 }).catch(() => {});
+        // Also explicitly click inside the iframe if present
+        const turnstileFrame = page.frameLocator('#cf-turnstile iframe').first();
+        await turnstileFrame.locator('body').click({ force: true, timeout: 2000 }).catch(() => {});
+        await page.waitForTimeout(4000);
       }
     } catch (e) {}
 

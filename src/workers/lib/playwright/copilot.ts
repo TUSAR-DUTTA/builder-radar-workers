@@ -33,7 +33,7 @@ export async function scrapeCopilotPrompt(prompt: string): Promise<{ text: strin
 
     let composer: import('playwright').Locator | null = null;
     for (let i = 0; i < 15; i++) {
-      composer = await firstVisibleLocator(page, '[contenteditable="true"], textarea, #searchbox, [aria-label*="Ask"], [placeholder*="Ask"]');
+      composer = await firstVisibleLocator(page, '[contenteditable="true"], textarea, #searchbox, [aria-label*="Ask"], [placeholder*="Ask"], .cib-serp-main, cib-serp-main');
       if (composer) break;
       await page.waitForTimeout(1000);
     }
@@ -46,7 +46,7 @@ export async function scrapeCopilotPrompt(prompt: string): Promise<{ text: strin
     await composer.click({ timeout: 20_000, force: true }).catch(() => {});
     // Dismiss cookie banner which steals focus
     await page.locator('button:has-text("Accept")').click({ timeout: 1000 }).catch(() => {});
-    await composer.fill('');
+    await composer.fill('', { force: true }).catch(() => {});
     await page.keyboard.insertText(prompt);
     await composer.press('Enter');
     // Fallback: click the send button if Enter didn't work

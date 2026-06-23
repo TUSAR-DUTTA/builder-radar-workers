@@ -43,54 +43,76 @@ export async function scrapeCopilotPrompt(prompt: string): Promise<{ text: strin
       throw new Error(`Copilot composer not found`);
     }
 
-    await composer.click({ timeout: 20_000, force: true }).catch(() => {});
+    await composer.click({ timeout: 20_000, force: true }).catch(async (err) => {
+      await captureDebug(page, 'copilot', 'composer-click-timeout');
+      throw err;
+    });
     // Dismiss cookie banner which steals focus
     for (let i = 0; i < 3; i++) {
       await page.locator('button', { hasText: 'Accept' }).last().click({ timeout: 1000, force: true }).catch(() => {});
     }
     await composer.fill('', { force: true }).catch(() => {});
     
-    // Use the same tech that ChatGPT is using for Copilot (native insertText to avoid Turnstile detection)
-    await page.keyboard.insertText(prompt);
+    await page.keyboard.insertText(`Use web search and answer this buyer question with citations:\n\n${prompt}`);
     
-    const submitButton = await firstVisibleLocator(page, 'button[aria-label="Submit message"], button[title="Submit message"], button[aria-label="Send"], button[title="Send"]');
-    if (submitButton) {
-      const disabled = await submitButton.isDisabled().catch(() => false);
-      if (!disabled) {
-        await submitButton.click({ force: true, timeout: 10_000 });
-      } else {
-        await page.keyboard.press('Enter');
+    // Use Enter instead of clicking the submit button (like Claude/Grok) to reduce bot detection
+    await composer.press('Enter');
+
+    let lastLength = 0;
+    let stableCount = 0;
+    let finalData = { text: '', links: [] as any[] };
+
+    for (let i = 0; i < 90; i++) {
+      await page.waitForTimeout(2000);
+
+      // Check and click Cloudflare Turnstile if it appears
+      const turnstileFrame = page.frameLocator('iframe[src*="challenges.cloudflare.com"]');
+      const cb = turnstileFrame.locator('.cb-c, input[type="checkbox"], label').first();
+      if (await cb.count().catch(() => 0) > 0) {
+        await cb.click({ timeout: 2000, force: true }).catch(() => {});
+      } else if (await turnstileFrame.locator('body').count().catch(() => 0) > 0) {
+        // Fallback: click the center of the iframe
+        await turnstileFrame.locator('body').click({ timeout: 2000, force: true }).catch(() => {});
       }
-    } else {
-      await page.keyboard.press('Enter');
+
+      const data = await page.evaluate(() => {
+        // Check if generation has stopped
+        const stops = Array.from(document.querySelectorAll('button[aria-label="Stop responding"]'));
+        const isGenerating = stops.length > 0;
+
+        const items = Array.from(document.querySelectorAll('[data-content="ai-message"]'));
+        const last = items.at(-1);
+        if (!last) return { text: '', links: [], isGenerating };
+
+        const text = (last.textContent ?? '').replace(/\s+/g, ' ').trim();
+        const links = Array.from(last.querySelectorAll<HTMLAnchorElement>('a[href]'))
+          .map((a) => ({ url: a.href, title: (a.textContent ?? '').trim() || undefined }))
+          .filter((a) => /^https?:\/\//i.test(a.url) && !a.url.includes('bing.com') && !a.url.includes('microsoft.com'))
+          .slice(0, 12);
+          
+        return { text, links, isGenerating };
+      });
+
+      if (data && data.text.length > 40) {
+        if (!data.isGenerating) {
+          if (data.text.length > lastLength) {
+            lastLength = data.text.length;
+            stableCount = 0;
+            finalData = data;
+          } else {
+            stableCount++;
+            if (stableCount >= 2) break; // stable for 4 seconds without "Stop responding"
+          }
+        } else {
+          // It is generating, update final data but don't increment stableCount
+          finalData = data;
+          lastLength = data.text.length;
+          stableCount = 0;
+        }
+      }
     }
 
-    // Copilot streams its reply. Poll until a real assistant message appears AND stops growing 
-    // (streaming finished), pick the best message-like block, and reject the UI-chrome shell
-    // so a bad grab fails loudly (captureDebug) instead of silently saving junk.
-    const UI_CHROME = /message copilot|what should we dive into/i;
-
-    await page.waitForFunction(() => {
-      const stops = Array.from(document.querySelectorAll('button[aria-label="Stop responding"]'));
-      if (stops.length > 0) return false;
-
-      const items = Array.from(document.querySelectorAll('[data-content="ai-message"]'));
-      const last = items.at(-1);
-      if (!last) return false;
-      const txt = last.textContent ?? '';
-      // Wait for it to be long enough
-      return txt.length > 40;
-    }, { timeout: 180_000 }).catch(() => {});
-    await page.waitForTimeout(3000);
-
-    const answer = await page.evaluate(() => {
-      const candidates = Array.from(document.querySelectorAll(
-        '[data-content="ai-message"], [data-author="bot"], [data-author="copilot"], '
-        + '[data-message-author="bot"], [data-message-author="copilot"]'
-      ));
-      if (candidates.length === 0) return '';
-      return (candidates[candidates.length - 1].textContent ?? '').replace(/\s+/g, ' ').trim();
-    });
+    const { text: answer, links } = finalData;
 
     // One-time diagnostic: dump the full answer-area DOM so the assistant-message selector can be
     // pinned from real markup instead of guessed.
@@ -99,14 +121,8 @@ export async function scrapeCopilotPrompt(prompt: string): Promise<{ text: strin
       await captureDebug(page, 'copilot', 'dom-dump', { captured: answer.slice(0, 300) });
     }
 
-    const links = await page.evaluate(() => {
-      const scope = document.querySelector('[data-content="ai-message"], .response-message, [class*="message-body"]') || document.body;
-      return Array.from(scope.querySelectorAll<HTMLAnchorElement>('a[href]'))
-        .map((a) => ({ url: a.href, title: (a.textContent ?? '').trim() || undefined }))
-        .filter((a) => /^https?:\/\//i.test(a.url) && !a.url.includes('microsoft.com') && !a.url.includes('bing.com'))
-        .slice(0, 12);
-    });
 
+    const UI_CHROME = /message copilot|what should we dive into/i;
     if (answer.length < 20 || UI_CHROME.test(answer)) {
       await captureDebug(page, 'copilot', 'bad-response', { captured: answer.slice(0, 200) });
       throw new Error('Copilot did not render a real assistant answer');

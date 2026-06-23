@@ -47,37 +47,54 @@ export async function scrapeGrokPrompt(prompt: string): Promise<{ text: string; 
     await page.keyboard.insertText(prompt);
     await composer.press('Enter');
 
-    await page.waitForTimeout(5000);
+    // Wait for response to stream and stabilize
+    let lastLength = 0;
+    let stableCount = 0;
+    let finalData = { text: '', links: [] as any[] };
+    
+    for (let i = 0; i < 30; i++) {
+      await page.waitForTimeout(1000);
+      const data = await page.evaluate(() => {
+        // Find only assistant responses (skip user prompts)
+        const assistantTurns = Array.from(document.querySelectorAll('.markdown, .message.assistant, [class*="message"][class*="assistant"]'));
+        if (assistantTurns.length === 0) return null;
+        
+        const last = assistantTurns.at(-1)!;
+        
+        let text = '';
+        const paragraphs = last.querySelectorAll('p, li');
+        if (paragraphs.length > 0) {
+          text = Array.from(paragraphs).map(p => p.textContent).join('\n');
+        } else {
+          text = last.textContent ?? '';
+        }
+        text = text.replace(/\s+/g, ' ').trim();
 
-    const data = await page.evaluate(() => {
-      const assistantTurns = Array.from(document.querySelectorAll('.grok-response, .message.assistant, [class*="message-content"], .markdown'));
-      
-      // Filter out navigation/footer links by preferring main content
-      const mainContainer = document.querySelector('main') || document.body;
-      const last = assistantTurns.at(-1) || mainContainer;
-      
-      let text = '';
-      const paragraphs = last.querySelectorAll('p, li');
-      if (paragraphs.length > 0) {
-        text = Array.from(paragraphs).map(p => p.textContent).join('\n');
+        const links = Array.from(last.querySelectorAll<HTMLAnchorElement>('a[href]'))
+          .map((a) => ({ url: a.href, title: (a.textContent ?? '').trim() || undefined }))
+          .filter((a) => /^https?:\/\//i.test(a.url) && !a.url.includes('grok.com') && !a.url.includes('x.com'))
+          .slice(0, 12);
+        return { text, links };
+      });
+
+      if (!data || data.text.length < 5) continue;
+
+      if (data.text.length > lastLength) {
+        lastLength = data.text.length;
+        stableCount = 0;
+        finalData = data;
       } else {
-        text = last.textContent ?? '';
+        stableCount++;
+        if (stableCount >= 3) break; // stable for 3 seconds
       }
-      text = text.replace(/\s+/g, ' ').trim();
+    }
 
-      const links = Array.from(last.querySelectorAll<HTMLAnchorElement>('a[href]'))
-        .map((a) => ({ url: a.href, title: (a.textContent ?? '').trim() || undefined }))
-        .filter((a) => /^https?:\/\//i.test(a.url) && !a.url.includes('grok.com') && !a.url.includes('x.com'))
-        .slice(0, 12);
-      return { text, links };
-    });
-
-    if (data.text.length < 5) {
+    if (finalData.text.length < 5) {
       await captureDebug(page, 'grok', 'bad-response');
       throw new Error('Grok did not render a real assistant answer');
     }
 
-    return { text: data.text, citations: data.links };
+    return { text: finalData.text, citations: finalData.links };
   } catch (err) {
     await closeGrokBrowser();
     throw err;

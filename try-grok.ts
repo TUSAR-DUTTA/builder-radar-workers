@@ -1,3 +1,5 @@
+import { loadSessionsFromEnv } from './src/lib/session-loader';
+loadSessionsFromEnv();
 import { scrapeGrokPrompt } from './src/workers/lib/playwright/grok';
 (async () => {
   try {

@@ -1,3 +1,5 @@
+import { loadSessionsFromEnv } from './src/lib/session-loader';
+loadSessionsFromEnv();
 import { scrapeDeepseekPrompt } from './src/workers/lib/playwright/deepseek';
 (async () => {
   try {

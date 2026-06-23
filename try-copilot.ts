@@ -1,3 +1,5 @@
+import { loadSessionsFromEnv } from './src/lib/session-loader';
+loadSessionsFromEnv();
 import { scrapeCopilotPrompt } from './src/workers/lib/playwright/copilot';
 (async () => {
   try {

@@ -117,7 +117,13 @@ export async function launchSeededPersistentContext(model: AnswerModel): Promise
   await context.route('**/*', (route) => {
     const req = route.request();
     const type = req.resourceType();
-    if (['image', 'media', 'font'].includes(type) || isBlockedTrackerHost(req.url())) {
+    const url = req.url();
+    // Never block anything from Cloudflare challenge domains — Turnstile needs images/fonts to render
+    if (url.includes('challenges.cloudflare.com') || url.includes('cf-turnstile')) {
+      route.continue().catch(() => {});
+      return;
+    }
+    if (['image', 'media', 'font'].includes(type) || isBlockedTrackerHost(url)) {
       route.abort().catch(() => {});
     } else {
       route.continue().catch(() => {});

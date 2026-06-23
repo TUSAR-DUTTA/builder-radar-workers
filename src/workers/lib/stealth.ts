@@ -80,8 +80,6 @@ export const STEALTH_LAUNCH_ARGS: string[] = [
   '--disable-dev-shm-usage',
   '--disable-infobars',
   '--no-first-run',
-  '--no-zygote',
-  '--disable-gpu',
   '--window-size=1440,960',
   '--lang=en-US',
 ];

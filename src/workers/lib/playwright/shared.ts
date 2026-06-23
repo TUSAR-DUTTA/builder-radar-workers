@@ -79,8 +79,7 @@ export async function launchSeededPersistentContext(model: AnswerModel): Promise
 
   const proxyServer = process.env.PLAYWRIGHT_PROXY_SERVER?.trim();
   // We only route these specific bots through residential IP because their anti-bot blocks datacenter ASNs
-  // copilot removed from proxy — residential proxy IPs get flagged by Cloudflare Turnstile; testing direct IP
-  const useProxy = proxyServer && (model === 'perplexity' || model === 'deepseek' || model === 'grok');
+  const useProxy = proxyServer && (model === 'perplexity' || model === 'deepseek' || model === 'grok' || model === 'copilot');
   const proxy = useProxy ? {
     server: proxyServer,
     username: process.env.PLAYWRIGHT_PROXY_USERNAME?.trim(),

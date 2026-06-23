@@ -114,24 +114,32 @@ export async function scrapeCopilotPrompt(prompt: string): Promise<{ text: strin
     for (let i = 0; i < 90; i++) {
       await page.waitForTimeout(2000);
 
-      // Handle Turnstile: look for the iframe Cloudflare JS injects inside #cf-turnstile
-      const tsIframe = page.locator('#cf-turnstile iframe').first();
-      if (await tsIframe.isVisible().catch(() => false)) {
-        console.log('[copilot] Turnstile iframe detected, attempting click...');
+      // Handle Turnstile: wait for the iframe CF JS injects inside #cf-turnstile, then click it
+      const hasTurnstile = await page.locator('#cf-turnstile').isVisible().catch(() => false);
+      if (hasTurnstile) {
+        console.log(`[copilot] iter ${i}: Turnstile container visible, waiting for iframe...`);
         try {
-          const tsFrame = page.frameLocator('#cf-turnstile iframe').first();
-          const checkbox = tsFrame.locator('input[type="checkbox"], .ctp-checkbox-label, body').first();
-          await checkbox.click({ force: true, timeout: 5000 });
-          console.log('[copilot] Turnstile clicked, waiting for token...');
-          await page.waitForFunction(
-            () => {
-              const el = document.querySelector<HTMLInputElement>('[id^="cf-chl-widget"][id$="_response"]');
-              return el && el.value.length > 0;
-            },
-            { timeout: 15_000 }
-          ).catch(() => console.log('[copilot] Turnstile token not received within 15s'));
+          // Wait up to 8s for CF to inject the iframe into the container
+          await page.waitForSelector('#cf-turnstile iframe', { timeout: 8000 }).catch(() => {});
+          const tsIframe = page.locator('#cf-turnstile iframe').first();
+          if (await tsIframe.isVisible().catch(() => false)) {
+            console.log('[copilot] Turnstile iframe found, clicking checkbox...');
+            const tsFrame = page.frameLocator('#cf-turnstile iframe').first();
+            const checkbox = tsFrame.locator('input[type="checkbox"], .ctp-checkbox-label, body').first();
+            await checkbox.click({ force: true, timeout: 5000 });
+            console.log('[copilot] Turnstile clicked, waiting for token...');
+            await page.waitForFunction(
+              () => {
+                const el = document.querySelector<HTMLInputElement>('[id^="cf-chl-widget"][id$="_response"]');
+                return el && el.value.length > 0;
+              },
+              { timeout: 15_000 }
+            ).catch(() => console.log('[copilot] Turnstile token not received within 15s'));
+          } else {
+            console.log('[copilot] Turnstile iframe not visible after wait');
+          }
         } catch (e) {
-          console.log('[copilot] Turnstile click failed:', e);
+          console.log('[copilot] Turnstile handling error:', e);
         }
         await page.waitForTimeout(2000);
       }

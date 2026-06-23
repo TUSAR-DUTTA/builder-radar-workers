@@ -15,12 +15,36 @@ export async function scrapeCopilotPrompt(prompt: string): Promise<{ text: strin
     const runtime = await launchSeededPersistentContext('copilot');
     const ctx = runtime.context;
     const page = await ctx.newPage();
+
+    // Log Cloudflare-related requests to diagnose if their JS is loading
+    page.on('request', (req) => {
+      if (req.url().includes('cloudflare.com') || req.url().includes('cf-turnstile')) {
+        console.log('[copilot] CF request:', req.resourceType(), req.url().slice(0, 120));
+      }
+    });
+    page.on('response', (res) => {
+      if (res.url().includes('cloudflare.com') || res.url().includes('cf-turnstile')) {
+        console.log('[copilot] CF response:', res.status(), res.url().slice(0, 120));
+      }
+    });
+
     console.log('[copilot] Navigating to copilot.microsoft.com...');
     await page.goto('https://copilot.microsoft.com/', { waitUntil: 'domcontentloaded', timeout: 45_000 });
-    await page.waitForTimeout(3000);
+
+    // Wait longer + do human-like behaviour so CF scores us as human BEFORE we send a message
+    await page.waitForTimeout(2000);
+    // Simulate human: move mouse across the page, scroll slightly
+    await page.mouse.move(400, 300, { steps: 20 });
+    await page.mouse.move(700, 200, { steps: 15 });
+    await page.mouse.move(600, 500, { steps: 10 });
+    await page.mouse.wheel(0, 100);
+    await page.mouse.wheel(0, -100);
+    await page.waitForTimeout(2000);
+
     console.log('[copilot] Page loaded, URL:', page.url());
     sharedCopilotBrowser = { runtime, page };
   }
+
 
   const { page } = sharedCopilotBrowser;
 
@@ -117,6 +141,19 @@ export async function scrapeCopilotPrompt(prompt: string): Promise<{ text: strin
       // Handle Turnstile: wait for the iframe CF JS injects inside #cf-turnstile, then click it
       const hasTurnstile = await page.locator('#cf-turnstile').isVisible().catch(() => false);
       if (hasTurnstile) {
+        // One-time diagnostic on first detection
+        if (i === 0) {
+          const diag = await page.evaluate(() => ({
+            turnstileType: typeof (window as any).turnstile,
+            allIframes: Array.from(document.querySelectorAll('iframe')).map(f => f.src?.slice(0, 100) || f.id),
+            cfWidgetValue: (document.querySelector('[id^="cf-chl-widget"]') as HTMLInputElement)?.value?.slice(0, 20) || 'none',
+            cfDivInnerHTML: document.querySelector('#cf-turnstile')?.innerHTML?.slice(0, 200) || 'none',
+          }));
+          console.log('[copilot] TURNSTILE DIAG:', JSON.stringify(diag));
+          // Also list all frames in the context
+          const frames = page.frames();
+          console.log('[copilot] All page frames:', frames.map(f => f.url().slice(0, 100)));
+        }
         console.log(`[copilot] iter ${i}: Turnstile container visible, waiting for iframe...`);
         try {
           // Wait up to 8s for CF to inject the iframe into the container

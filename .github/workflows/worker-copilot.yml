@@ -118,17 +118,9 @@ jobs:
           google-chrome --version
           npx playwright --version
 
-      - name: Restore sessions from secrets
-        run: |
-          mkdir -p /tmp/playwright_sessions
-          mkdir -p /tmp/playwright_debug
-          if [ -n "${{ secrets.COPILOT_SESSION_B64 }}" ]; then
-            echo "${{ secrets.COPILOT_SESSION_B64 }}" | base64 -d > /tmp/playwright_sessions/copilot_auth_state.json
-            echo "Copilot session restored"
-          fi
-
       - name: Run workers
         env:
+          COPILOT_SESSION_B64: ${{ secrets.COPILOT_SESSION_B64 }}
           SCRAPE_PROJECT_ID: ${{ github.event.inputs.project_id }}
           SCRAPE_SOURCES: ${{ github.event.inputs.sources || 'copilot' }}
         run: xvfb-run -a npx tsx src/workers/runner.ts

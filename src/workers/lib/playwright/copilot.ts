@@ -48,35 +48,12 @@ export async function scrapeCopilotPrompt(prompt: string): Promise<{ text: strin
     await page.locator('button:has-text("Accept")').click({ timeout: 1000 }).catch(() => {});
     await composer.fill('', { force: true }).catch(() => {});
     
-    // Move mouse like a human to bypass Turnstile
-    await page.mouse.move(100, 100);
-    await page.waitForTimeout(300);
-    await page.mouse.move(300, 400);
-    await page.waitForTimeout(200);
+    // Use the same tech that ChatGPT is using for Copilot (native insertText to avoid Turnstile detection)
+    await page.keyboard.insertText(prompt);
     
-    // Type slowly instead of instantaneous pasting
-    await page.keyboard.type(prompt, { delay: 45 });
-    await page.waitForTimeout(500);
-    await composer.press('Enter');
-    await page.waitForTimeout(1000);
+    // Submit using Enter key directly
+    await composer.press('Enter').catch(() => {});
     
-    // Handle possible CAPTCHA popup by trying to click the Turnstile checkbox
-    try {
-      const turnstileBox = page.locator('#cf-turnstile');
-      if (await turnstileBox.isVisible({ timeout: 5000 })) {
-        const box = await turnstileBox.boundingBox();
-        if (box) {
-          // Move mouse slowly to the checkbox
-          await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 10 });
-          await page.waitForTimeout(500);
-          await page.mouse.down();
-          await page.waitForTimeout(100);
-          await page.mouse.up();
-          await page.waitForTimeout(4000);
-        }
-      }
-    } catch (e) {}
-
     // Fallback: click the send button if Enter didn't work
     await page.locator('button[aria-label="Submit"], button[title="Submit"], button[aria-label="Send"], button[title="Send"]').click({ timeout: 2000 }).catch(() => {});
 

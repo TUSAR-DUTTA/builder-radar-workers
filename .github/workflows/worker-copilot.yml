@@ -124,3 +124,10 @@ jobs:
           SCRAPE_PROJECT_ID: ${{ github.event.inputs.project_id }}
           SCRAPE_SOURCES: ${{ github.event.inputs.sources || 'copilot' }}
         run: xvfb-run -a npx tsx try-copilot.ts
+
+      - name: Upload Debug Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: copilot-playwright-debug
+          path: /tmp/playwright_debug/

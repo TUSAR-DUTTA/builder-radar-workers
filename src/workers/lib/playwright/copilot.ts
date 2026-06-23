@@ -47,8 +47,30 @@ export async function scrapeCopilotPrompt(prompt: string): Promise<{ text: strin
     // Dismiss cookie banner which steals focus
     await page.locator('button:has-text("Accept")').click({ timeout: 1000 }).catch(() => {});
     await composer.fill('', { force: true }).catch(() => {});
-    await page.keyboard.insertText(prompt);
+    
+    // Move mouse like a human to bypass Turnstile
+    await page.mouse.move(100, 100);
+    await page.waitForTimeout(300);
+    await page.mouse.move(300, 400);
+    await page.waitForTimeout(200);
+    
+    // Type slowly instead of instantaneous pasting
+    await page.keyboard.type(prompt, { delay: 45 });
+    await page.waitForTimeout(500);
     await composer.press('Enter');
+    await page.waitForTimeout(1000);
+    
+    // Handle possible CAPTCHA popup by trying to click the Turnstile checkbox
+    try {
+      const frames = page.frames();
+      for (const frame of frames) {
+        if (frame.url().includes('cloudflare') || frame.url().includes('turnstile')) {
+          await frame.locator('input[type="checkbox"]').click({ force: true, timeout: 2000 }).catch(() => {});
+          await page.waitForTimeout(2000);
+        }
+      }
+    } catch (e) {}
+
     // Fallback: click the send button if Enter didn't work
     await page.locator('button[aria-label="Submit"], button[title="Submit"], button[aria-label="Send"], button[title="Send"]').click({ timeout: 2000 }).catch(() => {});
 

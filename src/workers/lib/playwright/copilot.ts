@@ -71,19 +71,35 @@ export async function scrapeCopilotPrompt(prompt: string): Promise<{ text: strin
         // Try to click the checkbox directly
         const cb = turnstileFrame.locator('.cb-c, input[type="checkbox"], .mark').first();
         if (await cb.count().catch(() => 0) > 0) {
-          await cb.hover({ timeout: 1000 }).catch(() => {});
-          await cb.click({ timeout: 2000, delay: 50 }).catch(() => {});
+          const box = await cb.boundingBox().catch(() => null);
+          if (box) {
+            const targetX = box.x + box.width / 2 + (Math.random() * 4 - 2);
+            const targetY = box.y + box.height / 2 + (Math.random() * 4 - 2);
+            await page.mouse.move(targetX, targetY, { steps: 25 });
+            await page.waitForTimeout(100 + Math.random() * 100);
+            await page.mouse.down();
+            await page.waitForTimeout(30 + Math.random() * 50);
+            await page.mouse.up();
+          }
         } else {
           // Fallback: click the left side of the iframe where the checkbox usually is
-          await turnstileFrame.locator('body').hover({ position: { x: 30, y: 30 }, timeout: 1000 }).catch(() => {});
-          await turnstileFrame.locator('body').click({ position: { x: 30, y: 30 }, timeout: 2000, delay: 50 }).catch(() => {});
+          const box = await turnstileFrame.locator('body').boundingBox().catch(() => null);
+          if (box) {
+            await page.mouse.move(box.x + 30, box.y + 30, { steps: 25 });
+            await page.waitForTimeout(100);
+            await page.mouse.click(box.x + 30, box.y + 30, { delay: 50 });
+          }
         }
       } else {
         // If frameLocator fails, try clicking the container div's inner widget area
         const tsWidget = page.locator('#cf-turnstile > div, #cf-turnstile iframe').first();
         if (await tsWidget.isVisible().catch(() => false)) {
-          await tsWidget.hover({ position: { x: 30, y: 30 }, timeout: 1000 }).catch(() => {});
-          await tsWidget.click({ position: { x: 30, y: 30 }, timeout: 2000, delay: 50 }).catch(() => {});
+          const box = await tsWidget.boundingBox().catch(() => null);
+          if (box) {
+            await page.mouse.move(box.x + 30, box.y + 30, { steps: 25 });
+            await page.waitForTimeout(100);
+            await page.mouse.click(box.x + 30, box.y + 30, { delay: 50 });
+          }
         }
       }
 

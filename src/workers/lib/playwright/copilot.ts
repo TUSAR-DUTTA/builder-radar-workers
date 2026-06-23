@@ -43,20 +43,22 @@ export async function scrapeCopilotPrompt(prompt: string): Promise<{ text: strin
       throw new Error(`Copilot composer not found`);
     }
 
-    await composer.click({ timeout: 20_000, force: true }).catch(async (err) => {
+    // Dismiss cookie banner which steals focus
+    for (let i = 0; i < 3; i++) {
+      await page.locator('button', { hasText: 'Accept' }).last().click({ timeout: 1000 }).catch(() => {});
+    }
+
+    await composer.click({ timeout: 20_000 }).catch(async (err) => {
       await captureDebug(page, 'copilot', 'composer-click-timeout');
       throw err;
     });
-    // Dismiss cookie banner which steals focus
-    for (let i = 0; i < 3; i++) {
-      await page.locator('button', { hasText: 'Accept' }).last().click({ timeout: 1000, force: true }).catch(() => {});
-    }
-    await composer.fill('', { force: true }).catch(() => {});
+    await composer.fill('').catch(() => {});
     
-    await page.keyboard.insertText(`Use web search and answer this buyer question with citations:\n\n${prompt}`);
+    await page.keyboard.type(`Use web search and answer this buyer question with citations:\n\n${prompt}`, { delay: 5 });
     
     // Use Enter instead of clicking the submit button (like Claude/Grok) to reduce bot detection
-    await composer.press('Enter');
+    await page.waitForTimeout(500);
+    await composer.press('Enter', { delay: 50 });
 
     let lastLength = 0;
     let stableCount = 0;
@@ -71,16 +73,19 @@ export async function scrapeCopilotPrompt(prompt: string): Promise<{ text: strin
         // Try to click the checkbox directly
         const cb = turnstileFrame.locator('.cb-c, input[type="checkbox"], .mark').first();
         if (await cb.count().catch(() => 0) > 0) {
-          await cb.click({ timeout: 2000, force: true }).catch(() => {});
+          await cb.hover({ timeout: 1000 }).catch(() => {});
+          await cb.click({ timeout: 2000, delay: 50 }).catch(() => {});
         } else {
           // Fallback: click the left side of the iframe where the checkbox usually is
-          await turnstileFrame.locator('body').click({ position: { x: 30, y: 30 }, timeout: 2000, force: true }).catch(() => {});
+          await turnstileFrame.locator('body').hover({ position: { x: 30, y: 30 }, timeout: 1000 }).catch(() => {});
+          await turnstileFrame.locator('body').click({ position: { x: 30, y: 30 }, timeout: 2000, delay: 50 }).catch(() => {});
         }
       } else {
         // If frameLocator fails, try clicking the container div's inner widget area
         const tsWidget = page.locator('#cf-turnstile > div, #cf-turnstile iframe').first();
         if (await tsWidget.isVisible().catch(() => false)) {
-          await tsWidget.click({ position: { x: 30, y: 30 }, timeout: 2000, force: true }).catch(() => {});
+          await tsWidget.hover({ position: { x: 30, y: 30 }, timeout: 1000 }).catch(() => {});
+          await tsWidget.click({ position: { x: 30, y: 30 }, timeout: 2000, delay: 50 }).catch(() => {});
         }
       }
 

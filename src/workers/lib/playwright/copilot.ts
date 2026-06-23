@@ -66,13 +66,22 @@ export async function scrapeCopilotPrompt(prompt: string): Promise<{ text: strin
       await page.waitForTimeout(2000);
 
       // Check and click Cloudflare Turnstile if it appears
-      const turnstileFrame = page.frameLocator('iframe[src*="challenges.cloudflare.com"]');
-      const cb = turnstileFrame.locator('.cb-c, input[type="checkbox"], label').first();
-      if (await cb.count().catch(() => 0) > 0) {
-        await cb.click({ timeout: 2000, force: true }).catch(() => {});
-      } else if (await turnstileFrame.locator('body').count().catch(() => 0) > 0) {
-        // Fallback: click the center of the iframe
-        await turnstileFrame.locator('body').click({ timeout: 2000, force: true }).catch(() => {});
+      const turnstileFrame = page.frameLocator('iframe[src*="cloudflare.com"]');
+      if (await turnstileFrame.locator('body').count().catch(() => 0) > 0) {
+        // Try to click the checkbox directly
+        const cb = turnstileFrame.locator('.cb-c, input[type="checkbox"], .mark').first();
+        if (await cb.count().catch(() => 0) > 0) {
+          await cb.click({ timeout: 2000, force: true }).catch(() => {});
+        } else {
+          // Fallback: click the left side of the iframe where the checkbox usually is
+          await turnstileFrame.locator('body').click({ position: { x: 30, y: 30 }, timeout: 2000, force: true }).catch(() => {});
+        }
+      } else {
+        // If frameLocator fails, try clicking the container div's inner widget area
+        const tsWidget = page.locator('#cf-turnstile > div, #cf-turnstile iframe').first();
+        if (await tsWidget.isVisible().catch(() => false)) {
+          await tsWidget.click({ position: { x: 30, y: 30 }, timeout: 2000, force: true }).catch(() => {});
+        }
       }
 
       const data = await page.evaluate(() => {

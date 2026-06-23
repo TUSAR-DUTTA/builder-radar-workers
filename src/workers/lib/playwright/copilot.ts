@@ -59,19 +59,9 @@ export async function scrapeCopilotPrompt(prompt: string): Promise<{ text: strin
     // Handle possible CAPTCHA popup by trying to click the Turnstile checkbox
     try {
       await page.waitForTimeout(2000);
-      const turnstileBox = page.locator('#cf-turnstile');
-      if (await turnstileBox.isVisible({ timeout: 5000 })) {
-        const box = await turnstileBox.boundingBox();
-        if (box) {
-          // Move mouse slowly to the checkbox (left side of the Turnstile widget)
-          await page.mouse.move(box.x + 30, box.y + box.height / 2, { steps: 10 });
-          await page.waitForTimeout(500);
-          await page.mouse.down();
-          await page.waitForTimeout(100);
-          await page.mouse.up();
-          await page.waitForTimeout(4000);
-        }
-      }
+      const turnstileFrame = page.frameLocator('iframe').first();
+      await turnstileFrame.locator('body').click({ timeout: 5000 });
+      await page.waitForTimeout(4000);
     } catch (e) {}
     
     // Fallback: click the send button if Enter didn't work

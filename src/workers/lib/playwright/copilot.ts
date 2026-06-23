@@ -53,9 +53,7 @@ export async function scrapeCopilotPrompt(prompt: string): Promise<{ text: strin
       throw err;
     });
     await composer.fill('').catch(() => {});
-    
-    await page.keyboard.type(`Use web search and answer this buyer question with citations:\n\n${prompt}`, { delay: 5 });
-    
+    await page.keyboard.insertText(`Use web search and answer this buyer question with citations:\n\n${prompt}`);
     // Use Enter instead of clicking the submit button (like Claude/Grok) to reduce bot detection
     await page.waitForTimeout(500);
     await composer.press('Enter', { delay: 50 });

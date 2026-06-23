@@ -4,7 +4,7 @@ export type Verdict = 'recommended' | 'named' | 'absent';
 // Stored in answer_runs.model. The display label / expected-set / grounded-ness for each lives in
 // the engine registry (src/lib/geo/engines.ts) — add a new engine there. 'google-aio' (Google AI
 // Overviews) is fed by the Playwright worker; the API cron only emits gemini-grounded + openai-search.
-export type AnswerModel = 'gemini-grounded' | 'openai-search' | 'claude' | 'perplexity' | 'google-aio' | 'copilot' | 'deepseek' | 'grok';
+export type AnswerModel = 'gemini-grounded' | 'openai-search' | 'claude' | 'perplexity' | 'google-aio' | 'deepseek' | 'grok';
 export type PromptIntent = 'category' | 'competitor_alt' | 'brand_direct' | 'comparison' | 'other';
 
 export interface UrlExtraction {

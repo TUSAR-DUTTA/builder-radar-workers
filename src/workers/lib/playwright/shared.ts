@@ -39,7 +39,6 @@ export function sessionPathFor(model: AnswerModel): string {
   if (model === 'claude') return path.join(dir, 'claude_auth_state.json');
   if (model === 'perplexity') return path.join(dir, 'perplexity_auth_state.json');
   if (model === 'google-aio') return path.join(dir, 'google_auth_state.json');
-  if (model === 'copilot') return path.join(dir, 'copilot_auth_state.json');
   if (model === 'deepseek') return path.join(dir, 'deepseek_auth_state.json');
   if (model === 'grok') return path.join(dir, 'grok_auth_state.json');
   return path.join(dir, 'chatgpt_auth_state.json');
@@ -79,7 +78,7 @@ export async function launchSeededPersistentContext(model: AnswerModel): Promise
 
   const proxyServer = process.env.PLAYWRIGHT_PROXY_SERVER?.trim();
   // We only route these specific bots through residential IP because their anti-bot blocks datacenter ASNs
-  const useProxy = proxyServer && (model === 'perplexity' || model === 'deepseek' || model === 'grok' || model === 'copilot');
+  const useProxy = proxyServer && (model === 'perplexity' || model === 'deepseek' || model === 'grok');
   const proxy = useProxy ? {
     server: proxyServer,
     username: process.env.PLAYWRIGHT_PROXY_USERNAME?.trim(),
@@ -147,7 +146,7 @@ export async function launchSeededContext(model: AnswerModel): Promise<Playwrigh
   const sessionPath = sessionPathFor(model);
   
   const proxyServer = process.env.PLAYWRIGHT_PROXY_SERVER?.trim();
-  const useProxy = proxyServer && (model === 'perplexity' || model === 'deepseek' || model === 'copilot');
+  const useProxy = proxyServer && (model === 'perplexity' || model === 'deepseek');
   const proxy = useProxy ? {
     server: proxyServer,
     username: process.env.PLAYWRIGHT_PROXY_USERNAME?.trim(),

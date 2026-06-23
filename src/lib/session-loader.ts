@@ -5,7 +5,6 @@ const SESSIONS = [
   { envKey: 'CHATGPT_SESSION_B64', filename: 'chatgpt_auth_state.json', label: 'ChatGPT' },
   { envKey: 'CLAUDE_SESSION_B64', filename: 'claude_auth_state.json', label: 'Claude' },
   { envKey: 'PERPLEXITY_SESSION_B64', filename: 'perplexity_auth_state.json', label: 'Perplexity' },
-  { envKey: 'COPILOT_SESSION_B64', filename: 'copilot_auth_state.json', label: 'Copilot' },
   { envKey: 'DEEPSEEK_SESSION_B64', filename: 'deepseek_auth_state.json', label: 'DeepSeek' },
   { envKey: 'GROK_SESSION_B64', filename: 'grok_auth_state.json', label: 'xAI Grok' },
   // Google AI Overviews (src/workers/lib/geo-playwright.ts → scrapeGoogleAioPrompt). worker.yml also

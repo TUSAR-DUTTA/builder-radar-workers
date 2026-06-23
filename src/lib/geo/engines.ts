@@ -40,7 +40,6 @@ export const ENGINES: EngineDef[] = [
   // Logged-in browser engines (Playwright worker).
   { id: 'perplexity', label: 'Perplexity', transport: 'playwright', grounded: true, expectedFor: 'paid' },
   { id: 'claude', label: 'Claude', transport: 'playwright', grounded: true, expectedFor: 'paid' },
-  { id: 'copilot', label: 'Copilot', transport: 'playwright', grounded: true, expectedFor: 'paid' },
   { id: 'deepseek', label: 'DeepSeek', transport: 'playwright', grounded: true, expectedFor: 'paid' },
   { id: 'grok', label: 'xAI Grok', transport: 'playwright', grounded: true, expectedFor: 'paid' },
   // Google AI Overviews — fed by the Playwright worker (a SERP/AI-Overviews capture). Starts as

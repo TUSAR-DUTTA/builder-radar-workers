@@ -138,33 +138,30 @@ export async function scrapeCopilotPrompt(prompt: string): Promise<{ text: strin
     for (let i = 0; i < 90; i++) {
       await page.waitForTimeout(2000);
 
-      // Handle Turnstile: wait for the iframe CF JS injects inside #cf-turnstile, then click it
+      // Handle Turnstile: the CF challenge iframe lives inside the copilot.fun child frame,
+      // NOT in the main page. Find it directly via page.frames() which includes all frames.
       const hasTurnstile = await page.locator('#cf-turnstile').isVisible().catch(() => false);
       if (hasTurnstile) {
-        // One-time diagnostic on first detection
+        // Log diagnostics on first hit
         if (i === 0) {
           const diag = await page.evaluate(() => ({
             turnstileType: typeof (window as any).turnstile,
-            allIframes: Array.from(document.querySelectorAll('iframe')).map(f => f.src?.slice(0, 100) || f.id),
             cfWidgetValue: (document.querySelector('[id^="cf-chl-widget"]') as HTMLInputElement)?.value?.slice(0, 20) || 'none',
-            cfDivInnerHTML: document.querySelector('#cf-turnstile')?.innerHTML?.slice(0, 200) || 'none',
           }));
           console.log('[copilot] TURNSTILE DIAG:', JSON.stringify(diag));
-          // Also list all frames in the context
-          const frames = page.frames();
-          console.log('[copilot] All page frames:', frames.map(f => f.url().slice(0, 100)));
+          console.log('[copilot] All frames:', page.frames().map(f => f.url().slice(0, 100)));
         }
-        console.log(`[copilot] iter ${i}: Turnstile container visible, waiting for iframe...`);
-        try {
-          // Wait up to 8s for CF to inject the iframe into the container
-          await page.waitForSelector('#cf-turnstile iframe', { timeout: 8000 }).catch(() => {});
-          const tsIframe = page.locator('#cf-turnstile iframe').first();
-          if (await tsIframe.isVisible().catch(() => false)) {
-            console.log('[copilot] Turnstile iframe found, clicking checkbox...');
-            const tsFrame = page.frameLocator('#cf-turnstile iframe').first();
-            const checkbox = tsFrame.locator('input[type="checkbox"], .ctp-checkbox-label, body').first();
+
+        // Find the CF challenge frame directly - it appears in page.frames() even if not in main DOM
+        const cfFrame = page.frames().find(f => f.url().includes('challenges.cloudflare.com'));
+        if (cfFrame) {
+          console.log(`[copilot] iter ${i}: Found CF challenge frame, clicking checkbox...`);
+          try {
+            // Click the checkbox inside the CF frame
+            const checkbox = cfFrame.locator('input[type="checkbox"], .ctp-checkbox-label, body').first();
             await checkbox.click({ force: true, timeout: 5000 });
-            console.log('[copilot] Turnstile clicked, waiting for token...');
+            console.log('[copilot] Turnstile clicked!');
+            // Wait for the token to be written to the hidden input
             await page.waitForFunction(
               () => {
                 const el = document.querySelector<HTMLInputElement>('[id^="cf-chl-widget"][id$="_response"]');
@@ -172,14 +169,15 @@ export async function scrapeCopilotPrompt(prompt: string): Promise<{ text: strin
               },
               { timeout: 15_000 }
             ).catch(() => console.log('[copilot] Turnstile token not received within 15s'));
-          } else {
-            console.log('[copilot] Turnstile iframe not visible after wait');
+          } catch (e) {
+            console.log('[copilot] CF frame click error:', (e as Error).message?.slice(0, 100));
           }
-        } catch (e) {
-          console.log('[copilot] Turnstile handling error:', e);
+          await page.waitForTimeout(2000);
+        } else {
+          console.log(`[copilot] iter ${i}: #cf-turnstile visible but CF frame not loaded yet`);
         }
-        await page.waitForTimeout(2000);
       }
+
 
       // Probe what's in the DOM to find the actual response selector
       const data = await page.evaluate(() => {

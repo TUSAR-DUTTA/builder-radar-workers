@@ -70,13 +70,13 @@ export async function scrapeChatGPTPrompt(prompt: string): Promise<{ text: strin
       await captureDebug(page, 'chatgpt', 'composer-click-timeout');
       throw err;
     });
-    await composer.fill('');
+    await composer.fill('', { force: true }).catch(() => {});
     await page.keyboard.insertText(`Use web search and answer this buyer question with citations:\n\n${prompt}`);
     const submitButton = await firstVisibleLocator(page, '#composer-submit-button, button[aria-label="Send prompt"]');
     if (submitButton) {
       const disabled = await submitButton.isDisabled().catch(() => false);
       if (!disabled) {
-        await submitButton.click({ timeout: 10_000 });
+        await submitButton.click({ force: true, timeout: 10_000 });
       } else {
         await page.keyboard.press('Enter');
       }
@@ -96,7 +96,9 @@ export async function scrapeChatGPTPrompt(prompt: string): Promise<{ text: strin
     await page.waitForTimeout(3000);
 
     const data = await page.evaluate(() => {
-      const assistantTurns = Array.from(document.querySelectorAll<HTMLElement>('section[data-testid^="conversation-turn-"][data-turn="assistant"]'));
+      const assistantTurns = Array.from(document.querySelectorAll<HTMLElement>(
+        'section[data-testid^="conversation-turn-"][data-turn="assistant"], [data-message-author="assistant"], .markdown, .agent-turn, article'
+      ));
       const last = assistantTurns.at(-1);
 
       if (!last) {

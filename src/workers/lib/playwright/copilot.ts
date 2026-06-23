@@ -54,9 +54,20 @@ export async function scrapeCopilotPrompt(prompt: string): Promise<{ text: strin
     });
     await composer.fill('').catch(() => {});
     await page.keyboard.insertText(`Use web search and answer this buyer question with citations:\n\n${prompt}`);
-    // Use Enter instead of clicking the submit button (like Claude/Grok) to reduce bot detection
+    
+    // Use the same tech that chatgpt is using: click the submit button if available
     await page.waitForTimeout(500);
-    await composer.press('Enter', { delay: 50 });
+    const submitButton = await firstVisibleLocator(page, 'button[title="Submit"], button[aria-label*="Submit"], button[aria-label*="Send"]');
+    if (submitButton) {
+      const disabled = await submitButton.isDisabled().catch(() => false);
+      if (!disabled) {
+        await submitButton.click({ force: true, timeout: 10_000 }).catch(() => page.keyboard.press('Enter'));
+      } else {
+        await page.keyboard.press('Enter');
+      }
+    } else {
+      await page.keyboard.press('Enter');
+    }
 
     let lastLength = 0;
     let stableCount = 0;
@@ -64,44 +75,6 @@ export async function scrapeCopilotPrompt(prompt: string): Promise<{ text: strin
 
     for (let i = 0; i < 90; i++) {
       await page.waitForTimeout(2000);
-
-      // Check and click Cloudflare Turnstile if it appears
-      const turnstileFrame = page.frameLocator('iframe[src*="cloudflare.com"]');
-      if (await turnstileFrame.locator('body').count().catch(() => 0) > 0) {
-        // Try to click the checkbox directly
-        const cb = turnstileFrame.locator('.cb-c, input[type="checkbox"], .mark').first();
-        if (await cb.count().catch(() => 0) > 0) {
-          const box = await cb.boundingBox().catch(() => null);
-          if (box) {
-            const targetX = box.x + box.width / 2 + (Math.random() * 4 - 2);
-            const targetY = box.y + box.height / 2 + (Math.random() * 4 - 2);
-            await page.mouse.move(targetX, targetY, { steps: 25 });
-            await page.waitForTimeout(100 + Math.random() * 100);
-            await page.mouse.down();
-            await page.waitForTimeout(30 + Math.random() * 50);
-            await page.mouse.up();
-          }
-        } else {
-          // Fallback: click the left side of the iframe where the checkbox usually is
-          const box = await turnstileFrame.locator('body').boundingBox().catch(() => null);
-          if (box) {
-            await page.mouse.move(box.x + 30, box.y + 30, { steps: 25 });
-            await page.waitForTimeout(100);
-            await page.mouse.click(box.x + 30, box.y + 30, { delay: 50 });
-          }
-        }
-      } else {
-        // If frameLocator fails, try clicking the container div's inner widget area
-        const tsWidget = page.locator('#cf-turnstile > div, #cf-turnstile iframe').first();
-        if (await tsWidget.isVisible().catch(() => false)) {
-          const box = await tsWidget.boundingBox().catch(() => null);
-          if (box) {
-            await page.mouse.move(box.x + 30, box.y + 30, { steps: 25 });
-            await page.waitForTimeout(100);
-            await page.mouse.click(box.x + 30, box.y + 30, { delay: 50 });
-          }
-        }
-      }
 
       const data = await page.evaluate(() => {
         // Check if generation has stopped

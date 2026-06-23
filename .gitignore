@@ -7,3 +7,12 @@ _core/
 playwright_debug*/
 playwright-debug*/
 playwright_screenshots/
+
+# private core — provided at runtime via CORE_REPO_PAT, never commit here
+/src/lib/
+/src/db/
+/src/types/
+# run logs & debug artifacts must not be public
+*_gh_log*.txt
+/debug/
+*.tsbuildinfo

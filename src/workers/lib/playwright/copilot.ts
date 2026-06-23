@@ -53,19 +53,17 @@ export async function scrapeCopilotPrompt(prompt: string): Promise<{ text: strin
     // Use the same tech that ChatGPT is using for Copilot (native insertText to avoid Turnstile detection)
     await page.keyboard.insertText(prompt);
     
-    // Submit using Enter key directly
-    await composer.press('Enter').catch(() => {});
-    
-    // Handle possible CAPTCHA popup by trying to click the Turnstile checkbox
-    try {
-      await page.waitForTimeout(2000);
-      const turnstileFrame = page.frameLocator('iframe').first();
-      await turnstileFrame.locator('body').click({ timeout: 5000 });
-      await page.waitForTimeout(4000);
-    } catch (e) {}
-    
-    // Fallback: click the send button if Enter didn't work
-    await page.locator('button[aria-label="Submit"], button[title="Submit"], button[aria-label="Send"], button[title="Send"]').click({ timeout: 2000 }).catch(() => {});
+    const submitButton = await firstVisibleLocator(page, 'button[aria-label="Submit message"], button[title="Submit message"], button[aria-label="Send"], button[title="Send"]');
+    if (submitButton) {
+      const disabled = await submitButton.isDisabled().catch(() => false);
+      if (!disabled) {
+        await submitButton.click({ force: true, timeout: 10_000 });
+      } else {
+        await page.keyboard.press('Enter');
+      }
+    } else {
+      await page.keyboard.press('Enter');
+    }
 
     // Copilot streams its reply. Poll until a real assistant message appears AND stops growing 
     // (streaming finished), pick the best message-like block, and reject the UI-chrome shell

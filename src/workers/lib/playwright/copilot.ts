@@ -70,48 +70,27 @@ export async function scrapeCopilotPrompt(prompt: string): Promise<{ text: strin
     // so a bad grab fails loudly (captureDebug) instead of silently saving junk.
     const UI_CHROME = /message copilot|what should we dive into/i;
 
-    let answer = '';
-    let stableTicks = 0;
-    for (let i = 0; i < 60; i++) {            // up to ~120s of streaming
-      await page.waitForTimeout(2000);
+    await page.waitForFunction(() => {
+      const stops = Array.from(document.querySelectorAll('button[aria-label="Stop responding"]'));
+      if (stops.length > 0) return false;
 
-      // Fail fast if unauthenticated popup appears
-      if (await page.locator('text="Sign in to ask more questions"').isVisible().catch(() => false) || await page.locator('text="Sign in"').isVisible().catch(() => false)) {
-        await captureDebug(page, 'copilot', 'unauthenticated-during-chat');
-        throw new Error('Copilot session is unauthenticated (redirected to login page).');
-      }
-      const text = await page.evaluate(() => {
-        // Priority 1: Explicitly bot-authored blocks (new and old UI variants)
-        const botBlocks = Array.from(document.querySelectorAll(
-          '[data-content="ai-message"], [data-author="bot"], [data-author="copilot"], '
-          + '[data-message-author="bot"], [data-message-author="copilot"]'
-        ));
-        if (botBlocks.length > 0) {
-          // Get the very last bot block in the page
-          const lastBotBlock = botBlocks[botBlocks.length - 1];
-          return (lastBotBlock.textContent ?? '').replace(/\s+/g, ' ').trim();
-        }
+      const items = Array.from(document.querySelectorAll('[data-content="ai-message"]'));
+      const last = items.at(-1);
+      if (!last) return false;
+      const txt = last.textContent ?? '';
+      // Wait for it to be long enough
+      return txt.length > 40;
+    }, { timeout: 180_000 }).catch(() => {});
+    await page.waitForTimeout(3000);
 
-        // Priority 2: Fallback to generic message containers, explicitly excluding user-prompt echo
-        const candidates = Array.from(document.querySelectorAll(
-          '.response-message, [class*="responseMessage"], [class*="message-body"], '
-          + '[class*="markdown"], .markdown, [role="article"]'
-        ));
-        const texts = candidates
-          .map((n) => (n.textContent ?? '').replace(/\s+/g, ' ').trim())
-          .filter((t) => t.length > 0 && !/^you said/i.test(t) && !/^message copilot/i.test(t));
-        return texts.sort((a, b) => b.length - a.length)[0] ?? '';
-      });
-      if (text && !UI_CHROME.test(text)) {
-        if (text === answer) {
-          stableTicks += 1;
-          if (stableTicks >= 2) break;        // unchanged twice → streaming done
-        } else {
-          answer = text;
-          stableTicks = 0;
-        }
-      }
-    }
+    const answer = await page.evaluate(() => {
+      const candidates = Array.from(document.querySelectorAll(
+        '[data-content="ai-message"], [data-author="bot"], [data-author="copilot"], '
+        + '[data-message-author="bot"], [data-message-author="copilot"]'
+      ));
+      if (candidates.length === 0) return '';
+      return (candidates[candidates.length - 1].textContent ?? '').replace(/\s+/g, ' ').trim();
+    });
 
     // One-time diagnostic: dump the full answer-area DOM so the assistant-message selector can be
     // pinned from real markup instead of guessed.

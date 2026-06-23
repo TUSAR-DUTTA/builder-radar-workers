@@ -64,11 +64,16 @@ export async function scrapeCopilotPrompt(prompt: string): Promise<{ text: strin
     try {
       const turnstileBox = page.locator('#cf-turnstile');
       if (await turnstileBox.isVisible({ timeout: 5000 })) {
-        await turnstileBox.click({ force: true, timeout: 2000 }).catch(() => {});
-        // Also explicitly click inside the iframe if present
-        const turnstileFrame = page.frameLocator('#cf-turnstile iframe').first();
-        await turnstileFrame.locator('body').click({ force: true, timeout: 2000 }).catch(() => {});
-        await page.waitForTimeout(4000);
+        const box = await turnstileBox.boundingBox();
+        if (box) {
+          // Move mouse slowly to the checkbox
+          await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 10 });
+          await page.waitForTimeout(500);
+          await page.mouse.down();
+          await page.waitForTimeout(100);
+          await page.mouse.up();
+          await page.waitForTimeout(4000);
+        }
       }
     } catch (e) {}
 

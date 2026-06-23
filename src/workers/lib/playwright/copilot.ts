@@ -76,6 +76,16 @@ export async function scrapeCopilotPrompt(prompt: string): Promise<{ text: strin
     for (let i = 0; i < 90; i++) {
       await page.waitForTimeout(2000);
 
+      // Check and click Cloudflare Turnstile if it appears
+      const turnstileFrame = page.frameLocator('iframe[src*="cloudflare.com"]');
+      if (await turnstileFrame.locator('body').count().catch(() => 0) > 0) {
+        const tsWidget = turnstileFrame.locator('body');
+        // If we see the red error (Verification failed), reload the page and try again?
+        // But for now, let's just try a simple standard Playwright click which fires trusted events.
+        await tsWidget.click({ delay: Math.random() * 50 + 50, force: true }).catch(() => {});
+        await page.waitForTimeout(2000);
+      }
+
       const data = await page.evaluate(() => {
         // Check if generation has stopped
         const stops = Array.from(document.querySelectorAll('button[aria-label="Stop responding"]'));

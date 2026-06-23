@@ -1,0 +1,9 @@
+node_modules/
+.env*
+/playwright_sessions/
+_core/
+/tmp/
+*.log
+playwright_debug*/
+playwright-debug*/
+playwright_screenshots/

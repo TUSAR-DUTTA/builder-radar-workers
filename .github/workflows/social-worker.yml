@@ -1,0 +1,110 @@
+name: BuilderRadar Social Worker
+
+# Reddit + X social-mention scrape (Playwright). Runs the SAME runner with SOCIAL_SCRAPE=1, which
+# calls runScheduledSocialScrapes / runSocialScrapesForProject. Every scraped row is filtered
+# (src/lib/social/filter.ts) before it lands in social_mentions — same table the API-source cron
+# (/api/cron/social) fills, so both show up together in the Social tab.
+
+on:
+  schedule:
+    - cron: '0 6 * * *'        # daily 06:00 UTC
+  repository_dispatch:
+    types: [run-social]        # optional external trigger (cron-job.org → repository_dispatch)
+  workflow_dispatch:
+    inputs:
+      project_id:
+        description: 'Project ID for a single social scrape (empty = all active projects)'
+        required: false
+        default: ''
+
+# One scheduled social run at a time; per-project manual runs get their own group so they parallelize.
+concurrency:
+  group: ${{ github.event.inputs.project_id && format('builderradar-social-{0}', github.event.inputs.project_id) || 'builderradar-social' }}
+  cancel-in-progress: false
+
+jobs:
+  run-social:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+
+      # API-source half (HN/Bluesky/dev.to/etc.) is triggered via the deployed /api/cron/social
+      # endpoint below, so the whole feature runs on this one daily schedule (no cron-job.org).
+      APP_URL: ${{ secrets.NEXT_PUBLIC_APP_URL }}
+      CRON_SECRET: ${{ secrets.CRON_SECRET }}
+
+      PLAYWRIGHT_BROWSER_CHANNEL: chrome
+      PLAYWRIGHT_HEADLESS: '0'
+      PLAYWRIGHT_SESSIONS_DIR: /tmp/playwright_sessions
+      PLAYWRIGHT_DEBUG_DIR: /tmp/playwright_debug
+
+      # Residential proxy (helps Reddit/X from datacenter IPs). No-op if unset.
+      PLAYWRIGHT_PROXY_SERVER: ${{ secrets.PLAYWRIGHT_PROXY_SERVER }}
+      PLAYWRIGHT_PROXY_USERNAME: ${{ secrets.PLAYWRIGHT_PROXY_USERNAME }}
+      PLAYWRIGHT_PROXY_PASSWORD: ${{ secrets.PLAYWRIGHT_PROXY_PASSWORD }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # API-source half — fetch HN/Bluesky/dev.to/StackExchange/GitHub/Lemmy/YouTube/Medium/News/
+      # Mastodon via the deployed endpoint. Independent of Playwright and failure-tolerant, so a
+      # browser-scrape problem can't stop the API sources (and vice-versa).
+      - name: Trigger API-source social fetch (/api/cron/social)
+        if: ${{ !github.event.inputs.project_id }}
+        run: |
+          if [ -z "$APP_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "APP_URL or CRON_SECRET not set — skipping API-source fetch"; exit 0
+          fi
+          code=$(curl -sS -o /tmp/social_api.json -w "%{http_code}" -X POST "$APP_URL/api/cron/social" -H "Authorization: Bearer $CRON_SECRET" --max-time 300 || echo "000")
+          echo "HTTP $code"; cat /tmp/social_api.json || true
+          if [ "$code" != "200" ]; then echo "::warning::API-source social fetch returned $code"; fi
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Fetch private core (read-only, runtime only)
+        uses: actions/checkout@v4
+        with:
+          repository: TUSAR-DUTTA/Builder-Radar
+          ref: main
+          token: ${{ secrets.CORE_REPO_PAT }}
+          path: _core
+      - name: Stage private core into src/ (never committed)
+        run: |
+          cp -r _core/src/db src/db
+          cp -r _core/src/lib src/lib
+          if [ -d _core/src/types ]; then cp -r _core/src/types src/types; fi
+          rm -rf _core
+      - name: Install Playwright system dependencies
+        run: npx playwright install-deps chromium
+
+      - name: Restore Reddit + X sessions from secrets
+        run: |
+          mkdir -p /tmp/playwright_sessions
+          mkdir -p /tmp/playwright_debug
+          if [ -n "${{ secrets.REDDIT_SESSION_B64 }}" ]; then
+            echo "${{ secrets.REDDIT_SESSION_B64 }}" | base64 -d > /tmp/playwright_sessions/reddit_auth_state.json
+            echo "Reddit session restored"
+          fi
+          if [ -n "${{ secrets.X_SESSION_B64 }}" ]; then
+            echo "${{ secrets.X_SESSION_B64 }}" | base64 -d > /tmp/playwright_sessions/x_auth_state.json
+            echo "X session restored"
+          fi
+
+      - name: Run social scrape
+        env:
+          SOCIAL_SCRAPE: '1'
+          SCRAPE_PROJECT_ID: ${{ github.event.inputs.project_id }}
+        run: xvfb-run -a npx tsx src/workers/runner.ts

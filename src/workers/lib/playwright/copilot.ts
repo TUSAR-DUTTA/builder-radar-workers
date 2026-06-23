@@ -83,13 +83,25 @@ export async function scrapeCopilotPrompt(prompt: string): Promise<{ text: strin
     for (let i = 0; i < 90; i++) {
       await page.waitForTimeout(2000);
 
-      // Check and click Cloudflare Turnstile if it appears
-      const turnstileFrame = page.frameLocator('iframe[src*="cloudflare.com"]');
-      if (await turnstileFrame.locator('body').count().catch(() => 0) > 0) {
-        const tsWidget = turnstileFrame.locator('body');
-        // If we see the red error (Verification failed), reload the page and try again?
-        // But for now, let's just try a simple standard Playwright click which fires trusted events.
-        await tsWidget.click({ delay: Math.random() * 50 + 50, force: true }).catch(() => {});
+      // Cloudflare Turnstile: after the JS loads it injects an <iframe> inside #cf-turnstile.
+      // Wait for that iframe to appear, then click the checkbox inside it.
+      const tsContainer = page.locator('#cf-turnstile iframe').first();
+      if (await tsContainer.isVisible().catch(() => false)) {
+        try {
+          // The checkbox inside the Turnstile iframe
+          const tsFrame = page.frameLocator('#cf-turnstile iframe').first();
+          const checkbox = tsFrame.locator('input[type="checkbox"], .ctp-checkbox-label, body').first();
+          await checkbox.click({ force: true, timeout: 5000 });
+          console.log('[copilot] Clicked Turnstile checkbox, waiting for solve...');
+          // Wait up to 10s for the hidden response input to get a token
+          await page.waitForFunction(
+            () => {
+              const el = document.querySelector<HTMLInputElement>('[id^="cf-chl-widget"][id$="_response"]');
+              return el && el.value.length > 0;
+            },
+            { timeout: 10_000 }
+          ).catch(() => {});
+        } catch (_) {}
         await page.waitForTimeout(2000);
       }
 

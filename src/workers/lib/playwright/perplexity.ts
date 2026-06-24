@@ -25,13 +25,19 @@ export async function scrapePerplexityPrompt(prompt: string): Promise<{ text: st
     await page.goto('https://www.perplexity.ai/', { waitUntil: 'domcontentloaded', timeout: 45_000 });
     await page.waitForTimeout(1000);
 
-    let composer = await firstVisibleLocator(page, '#ask-input, textarea, [contenteditable="true"], [placeholder="Ask anything..."]');
+    let composer = await firstVisibleLocator(page, '#ask-input, textarea, [contenteditable="true"], [placeholder*="Ask"], [aria-label*="Ask"]');
     if (!composer) {
-      // Fallback: just grab the last contenteditable or ask-input
-      const all = await page.locator('#ask-input, [contenteditable="true"]').all();
-      if (all.length > 0) composer = all[all.length - 1];
+      const all = await page.locator('textarea, [contenteditable="true"]').all();
+      for (const el of all) {
+        if (await el.isVisible().catch(() => false)) {
+          composer = el;
+          break;
+        }
+      }
     }
     if (!composer) {
+      const html = await page.evaluate(() => document.body.innerHTML);
+      console.log('[perplexity] Missing composer! Page HTML (first 2000 chars):', html.substring(0, 2000));
       await captureDebug(page, 'perplexity', 'missing-composer');
       throw new Error(`Perplexity composer not found`);
     }

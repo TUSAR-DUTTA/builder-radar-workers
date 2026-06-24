@@ -107,7 +107,7 @@ export async function launchSeededPersistentContext(model: AnswerModel): Promise
 
     context = await chromium.launchPersistentContext(userDataDir, {
       ...stealthLaunchOptions(true, !!useProxy),
-      ...stealthContext(undefined),
+      ...stealthContext(actualVersion),
       proxy,
     });
     await applyStealth(context);

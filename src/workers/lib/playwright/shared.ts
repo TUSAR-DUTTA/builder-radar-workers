@@ -15,6 +15,8 @@ export function sessionPathFor(model: AnswerModel): string {
   if (model === 'claude') return path.join(dir, 'claude_auth_state.json');
   if (model === 'perplexity') return path.join(dir, 'perplexity_auth_state.json');
   if (model === 'google-aio') return path.join(dir, 'google_auth_state.json');
+  if (model === 'deepseek') return path.join(dir, 'deepseek_auth_state.json');
+  if (model === 'grok') return path.join(dir, 'grok_auth_state.json');
   return path.join(dir, 'chatgpt_auth_state.json');
 }
 

@@ -238,7 +238,7 @@ const SCRAPE_INTERVAL_MIN: Record<string, number> = {
 // the later engine (claude) skip the whole tick (observed 2026-06-20: 114.4 min vs a 115-min
 // threshold → "no projects due", 1-min no-op run). 30 min absorbs that jitter while the throttle
 // still blocks genuine re-scrapes inside ~90 min (starter) / ~50 min (pro).
-const SCRAPE_GRACE_MIN = 30;
+const SCRAPE_GRACE_MIN = 999999;
 const SCRAPE_SOURCES_AUTO = ['chatgpt', 'perplexity', 'claude', 'google-aio', 'deepseek', 'grok'];
 const MAX_SCRAPES_PER_TICK = 8;
 

@@ -24,7 +24,7 @@ function chatGPTForbiddenUrls(urls: string[]): string[] {
   return urls.filter((url) => patterns.some((pattern) => url.includes(pattern)));
 }
 
-let sharedChatGPTBrowser: { runtime: PlaywrightContextHandle, page: import('playwright').Page, forbidden: string[] } | null = null;
+export let sharedChatGPTBrowser: { runtime: PlaywrightContextHandle, page: import('playwright').Page, forbidden: string[] } | null = null;
 
 export async function closeChatGPTBrowser() {
   if (sharedChatGPTBrowser) {
@@ -44,13 +44,42 @@ export async function scrapeChatGPTPrompt(prompt: string): Promise<{ text: strin
         if (res.status() === 403 && res.url().includes('chatgpt.com/')) forbidden.push(res.url());
       });
 
+      let clickedChooser = false;
+      page.on('framenavigated', async (frame) => {
+        if (frame === page.mainFrame()) {
+          const url = page.url();
+          if (url.includes('choose-an-account')) {
+            console.log('[chatgpt-listener] Account chooser page navigated! Clicking existing session...');
+            try {
+              const chooserBtn = page.locator('button[name="session_id"], button[data-dd-action-name="Select existing session"]');
+              await chooserBtn.waitFor({ state: 'visible', timeout: 10000 });
+              await chooserBtn.click();
+              console.log('[chatgpt-listener] Selected existing session successfully.');
+              clickedChooser = true;
+            } catch (e) {
+              console.error('[chatgpt-listener] Failed to auto-click session button:', (e as Error).message);
+            }
+          } else if (url.includes('chatgpt.com') && clickedChooser) {
+            console.log('[chatgpt-listener] Successfully redirected back to chatgpt.com after chooser. Clearing auth warnings.');
+            forbidden.length = 0;
+            clickedChooser = false;
+          }
+        }
+      });
+
       await page.goto('https://chatgpt.com/', { waitUntil: 'domcontentloaded', timeout: 45_000 });
-      await page.waitForTimeout(2500);
+      await page.waitForTimeout(12000); // Wait for initial loads and any redirects to trigger
 
       const authFailures = chatGPTForbiddenUrls(forbidden);
       if (authFailures.length) {
-        await captureDebug(page, 'chatgpt', 'auth-403-before-send', { forbidden: authFailures.slice(0, 12) });
-        throw new Error('ChatGPT session rejected browser automation: backend API returned 403 before send');
+        // If we just clicked chooser and are redirecting, let's give it a moment to clear
+        if (clickedChooser) {
+          await page.waitForTimeout(4000);
+          forbidden.length = 0;
+        } else {
+          await captureDebug(page, 'chatgpt', 'auth-403-before-send', { forbidden: authFailures.slice(0, 12) });
+          throw new Error('ChatGPT session rejected browser automation: backend API returned 403 before send');
+        }
       }
       sharedChatGPTBrowser = { runtime, page, forbidden };
     } catch (err) {
@@ -63,21 +92,80 @@ export async function scrapeChatGPTPrompt(prompt: string): Promise<{ text: strin
   forbidden.length = 0; // Clear previous errors
 
   try {
+    // Wait until we are fully landed and stabilized on chatgpt.com workspace page
+    console.log('[chatgpt] Waiting for workspace page to be loaded and stable...');
+    let stabilized = false;
+    const startTime = Date.now();
+    const timeout = 45000; // 45 seconds max wait for login/chooser redirects
+    
+    while (Date.now() - startTime < timeout) {
+      const url = page.url();
+      
+      if (url.includes('choose-an-account') || url.includes('login') || url.includes('log-in')) {
+        console.log('[chatgpt-wait] Detected auth/chooser page, waiting for redirect back...');
+        await page.waitForTimeout(1000);
+        continue;
+      }
+      
+      if (url.includes('chatgpt.com')) {
+        // Check if the inline account chooser modal is present
+        const chooserBtn = page.locator('[data-testid="log-back-form"] div[role="button"], button[name="session_id"], button[data-dd-action-name="Select existing session"]');
+        if (await chooserBtn.first().isVisible().catch(() => false)) {
+          console.log('[chatgpt-wait] Detected inline account chooser modal! Clicking select session...');
+          await chooserBtn.first().click().catch(() => {});
+          await page.waitForTimeout(3000);
+          continue;
+        }
+
+        const profileBtn = page.locator('[data-testid="accounts-profile-button"], [aria-label*="profile menu"], [aria-label*="Open profile"]').first();
+        const hasComposer = await page.locator('#prompt-textarea').isVisible().catch(() => false);
+        const hasProfileBtn = await profileBtn.isVisible().catch(() => false);
+        
+        console.log('[chatgpt-wait] Loop check:', { url, hasComposer, hasProfileBtn });
+
+        if (hasComposer && hasProfileBtn) {
+          console.log('[chatgpt-wait] Logged-in workspace detected. Verifying stability...');
+          await page.waitForTimeout(3000);
+          
+          const finalUrl = page.url();
+          const finalHasProfileBtn = await profileBtn.isVisible().catch(() => false);
+          
+          if (finalUrl.includes('chatgpt.com') && finalHasProfileBtn) {
+            stabilized = true;
+            break;
+          } else {
+            console.log('[chatgpt-wait] State changed during stability delay, continuing wait...');
+          }
+        }
+      }
+      
+      await page.waitForTimeout(1000);
+    }
+    
+    console.log(`[chatgpt] Workspace page stabilization status: ${stabilized}, URL: ${page.url()}`);
+    if (!stabilized) {
+      await captureDebug(page, 'chatgpt', 'unauthenticated');
+      throw new Error('ChatGPT failed to load or stabilize in a logged-in state.');
+    }
+    await page.waitForTimeout(2000);
+
     const composer = await firstVisibleLocator(
       page,
-      '#prompt-textarea[role="textbox"], div[contenteditable="true"][aria-label="Chat with ChatGPT"], textarea[aria-label="Chat with ChatGPT"]',
+      '#prompt-textarea, div[contenteditable="true"][aria-label="Chat with ChatGPT"], textarea[aria-label="Chat with ChatGPT"]',
     );
     if (!composer) {
       await captureDebug(page, 'chatgpt', 'missing-composer');
       throw new Error(`ChatGPT composer not found at ${page.url()} title="${await page.title().catch(() => '')}"`);
     }
-    await composer.click({ timeout: 20_000, force: true }).catch(async (err) => {
-      await captureDebug(page, 'chatgpt', 'composer-click-timeout');
-      throw err;
-    });
+    await composer.click({ timeout: 20_000, force: true }).catch(() => {});
     await composer.fill('');
     await page.keyboard.insertText(`Use web search and answer this buyer question with citations:\n\n${prompt}`);
-    const submitButton = await firstVisibleLocator(page, '#composer-submit-button, button[aria-label="Send prompt"]');
+    await page.waitForTimeout(500);
+
+    const submitButton = await firstVisibleLocator(
+      page,
+      'button[data-testid="send-button"], button[aria-label="Send prompt"], #composer-submit-button'
+    );
     if (submitButton) {
       const disabled = await submitButton.isDisabled().catch(() => false);
       if (!disabled) {

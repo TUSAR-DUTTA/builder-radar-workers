@@ -118,10 +118,10 @@ async function runGeoForProject(projectId: string, sources: string[]): Promise<{
 
   // --- TEST PROMPT INJECTION ---
   console.log('Injecting test prompt...');
-  prompts = [{ id: 'test-prompt-id', projectId: project.id, prompt: 'What are the top 3 best AI sales intelligence tools?', createdAt: new Date() }];
+  const testPrompts = [{ id: 'test-prompt-id', projectId: project.id, prompt: 'What are the top 3 best AI sales intelligence tools?', createdAt: new Date() }];
   // -----------------------------
 
-  for (const p of prompts) {
+  for (const p of testPrompts) {
     let samples;
     try {
       // Playwright code is left untouched (per standing instruction); the accuracy audit

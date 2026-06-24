@@ -90,13 +90,19 @@ function chromeUa(version?: string): string {
 }
 
 export function stealthContext(browserVersion?: string): Parameters<import('playwright').Browser['newContext']>[0] {
-  return {
-    userAgent: chromeUa(browserVersion),
+  const options: any = {
     viewport: { width: 1440, height: 960 },
-    locale: 'en-US',
-    timezoneId: 'America/New_York',
-    extraHTTPHeaders: { 'Accept-Language': 'en-US,en;q=0.9' },
   };
+
+  const hasProxy = !!process.env.PLAYWRIGHT_PROXY_SERVER?.trim();
+  if (hasProxy) {
+    options.userAgent = chromeUa(browserVersion);
+    options.locale = 'en-US';
+    options.timezoneId = 'America/New_York';
+    options.extraHTTPHeaders = { 'Accept-Language': 'en-US,en;q=0.9' };
+  }
+
+  return options;
 }
 
 export async function applyStealth(ctx: BrowserContext): Promise<void> {

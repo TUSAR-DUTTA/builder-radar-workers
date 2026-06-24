@@ -1,6 +1,6 @@
 import { launchSeededPersistentContext, captureDebug, firstVisibleLocator, PlaywrightContextHandle } from './shared';
 
-let sharedPerplexityBrowser: { runtime: PlaywrightContextHandle, page: import('playwright').Page } | null = null;
+export let sharedPerplexityBrowser: { runtime: PlaywrightContextHandle, page: import('playwright').Page } | null = null;
 
 export async function closePerplexityBrowser() {
   if (sharedPerplexityBrowser) {
@@ -25,26 +25,23 @@ export async function scrapePerplexityPrompt(prompt: string): Promise<{ text: st
     await page.goto('https://www.perplexity.ai/', { waitUntil: 'domcontentloaded', timeout: 45_000 });
     await page.waitForTimeout(1000);
 
-    // Detect Cloudflare Turnstile early — proxy IP is being challenged, need new session
+    // Detect Cloudflare Turnstile early — means proxy IP is being challenged
     const bodyText = await page.textContent('body').catch(() => '');
-    if (/Performing security verification|Verifies you are not a bot/i.test(bodyText ?? '')) {
+    if (/Performing security verification|Verifies you are not a bot|cf-turnstile/i.test(bodyText ?? '')) {
       await captureDebug(page, 'perplexity', 'cloudflare-turnstile');
-      throw new Error('Perplexity blocked by Cloudflare Turnstile — session needs refresh from proxy IP');
+      throw new Error('Perplexity blocked by Cloudflare Turnstile — proxy IP is flagged. Session needs refresh from proxy IP.');
     }
 
-    let composer = await firstVisibleLocator(page, '#ask-input, textarea, [contenteditable="true"], [placeholder*="Ask"], [aria-label*="Ask"]');
+    // Perplexity has changed their input selector multiple times — try all known variants
+    let composer = await firstVisibleLocator(page,
+      'textarea[placeholder], textarea, #ask-input, [contenteditable="true"][aria-label], ' +
+      '[contenteditable="true"][placeholder], [placeholder*="Ask"], [placeholder*="Search"]'
+    );
     if (!composer) {
-      const all = await page.locator('textarea, [contenteditable="true"]').all();
-      for (const el of all) {
-        if (await el.isVisible().catch(() => false)) {
-          composer = el;
-          break;
-        }
-      }
+      const all = await page.locator('textarea, #ask-input, [contenteditable="true"]').all();
+      if (all.length > 0) composer = all[all.length - 1];
     }
     if (!composer) {
-      const html = await page.evaluate(() => document.body.innerHTML);
-      console.log('[perplexity] Missing composer! Page HTML (first 2000 chars):', html.substring(0, 2000));
       await captureDebug(page, 'perplexity', 'missing-composer');
       throw new Error(`Perplexity composer not found`);
     }
@@ -54,23 +51,87 @@ export async function scrapePerplexityPrompt(prompt: string): Promise<{ text: st
     await page.keyboard.insertText(`Use web search and answer this buyer question with citations:\n\n${prompt}`);
     await page.keyboard.press('Enter');
 
-    await page.waitForFunction(() => {
-      const answers = document.querySelectorAll('.prose, div[dir="auto"], [data-testid="answer-text"]');
-      if (answers.length === 0) return false;
-      const last = answers[answers.length - 1];
-      const text = (last.textContent || '').replace(/\s+/g, ' ').trim();
-      return text.length > 0;
-    }, { timeout: 180_000 }).catch(() => {});
-    await page.waitForTimeout(6000);
+    console.log('[perplexity] Waiting for answer to complete...');
+    let lastText = '';
+    let stableCount = 0;
+    const maxChecks = 120; // 2 minutes max
+    for (let check = 0; check < maxChecks; check++) {
+      const currentText = await page.evaluate(() => {
+        const answers = Array.from(document.querySelectorAll('.prose, div[dir="auto"], [data-testid="answer-text"], [class*="answer"]'));
+        const last = answers.at(-1);
+        if (!last) return '';
+        return (last.textContent ?? '').replace(/\s+/g, ' ').trim();
+      });
+
+      if (!currentText) {
+        await page.waitForTimeout(1000);
+        continue;
+      }
+
+      // Check if it is only showing search/source status
+      const isOnlySearching = /Searching|Thinking|sources/i.test(currentText) && currentText.length < 150;
+
+      if (currentText === lastText && !isOnlySearching) {
+        stableCount++;
+        if (stableCount >= 4) { // stable for 4 seconds
+          console.log('[perplexity] Text stopped changing and is stable.');
+          break;
+        }
+      } else {
+        stableCount = 0;
+        lastText = currentText;
+      }
+
+      await page.waitForTimeout(1000);
+    }
 
     const data = await page.evaluate(() => {
-      const answers = Array.from(document.querySelectorAll('.prose, div[dir="auto"], [data-testid="answer-text"]'));
+      const answers = Array.from(document.querySelectorAll('.prose, div[dir="auto"], [data-testid="answer-text"], [class*="answer"]'));
       const last = answers.at(-1) || document.body;
       const text = (last.textContent || '').replace(/\s+/g, ' ').trim();
-      const links = Array.from(last.querySelectorAll<HTMLAnchorElement>('a[href]'))
-        .map((a) => ({ url: a.href, title: (a.textContent ?? '').trim() || undefined }))
-        .filter((a) => /^https?:\/\//i.test(a.url) && !a.url.includes('perplexity.ai'))
+      const container = last.closest('[class*="thread"], [class*="group"]') || last.parentElement || document.body;
+      
+      const extracted: Array<{ url: string; title?: string }> = [];
+      
+      // 1. Extract from custom data-pplx-citation-url elements
+      container.querySelectorAll('[data-pplx-citation-url]').forEach((el) => {
+        const url = el.getAttribute('data-pplx-citation-url');
+        if (url) {
+          extracted.push({
+            url,
+            title: el.textContent?.trim() || undefined
+          });
+        }
+      });
+      
+      // 2. Extract from standard anchors (with optional perplexity redirect decoding)
+      container.querySelectorAll('a[href]').forEach((a) => {
+        let href = (a as HTMLAnchorElement).href;
+        if (href.includes('perplexity.ai/search/redirect?url=')) {
+          try {
+            const parsed = new URL(href);
+            const target = parsed.searchParams.get('url');
+            if (target) href = target;
+          } catch (e) {}
+        }
+        extracted.push({
+          url: href,
+          title: a.textContent?.trim() || undefined
+        });
+      });
+      
+      // 3. Filter and de-duplicate
+      const seen = new Set<string>();
+      const links = extracted
+        .filter((a) => {
+          if (!/^https?:\/\//i.test(a.url)) return false;
+          if (a.url.includes('perplexity.ai')) return false;
+          if (seen.has(a.url)) return false;
+          seen.add(a.url);
+          return true;
+        })
         .slice(0, 12);
+        
       return { text, links };
     });
 

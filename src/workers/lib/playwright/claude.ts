@@ -1,6 +1,6 @@
 import { launchSeededPersistentContext, captureDebug, firstVisibleLocator, PlaywrightContextHandle } from './shared';
 
-let sharedClaudeBrowser: { runtime: PlaywrightContextHandle, page: import('playwright').Page } | null = null;
+export let sharedClaudeBrowser: { runtime: PlaywrightContextHandle, page: import('playwright').Page } | null = null;
 
 export async function closeClaudeBrowser() {
   if (sharedClaudeBrowser) {
@@ -25,7 +25,7 @@ export async function scrapeClaudePrompt(prompt: string): Promise<{ text: string
     await page.goto('https://claude.ai/new', { waitUntil: 'domcontentloaded', timeout: 45_000 });
     await page.waitForTimeout(1000);
 
-    // Detect Cloudflare block early — if hit, fail fast
+    // Detect Cloudflare block early before wasting retries
     const earlyBody = await page.textContent('body').catch(() => '');
     if (/Performing security verification|Verifies you are not a bot/i.test(earlyBody ?? '')) {
       await captureDebug(page, 'claude', 'cloudflare-block');
@@ -36,7 +36,7 @@ export async function scrapeClaudePrompt(prompt: string): Promise<{ text: string
     let composer: import('playwright').Locator | null = null;
     for (let i = 0; i < 15; i++) {
       await page.locator('button:has-text("Accept All Cookies")').click({ timeout: 1000 }).catch(() => {});
-      // Claude changes CSS class names regularly — try multiple known selectors
+      // Broaden selector — Claude frequently changes CSS class names
       composer = await firstVisibleLocator(page,
         '[contenteditable="true"][aria-label], [contenteditable="true"].ProseMirror, ' +
         '[contenteditable="true"], textarea, #prompt-textarea'
@@ -55,22 +55,46 @@ export async function scrapeClaudePrompt(prompt: string): Promise<{ text: string
     await page.keyboard.insertText(`Use web search and answer this buyer question with citations:\n\n${prompt}`);
     await composer.press('Enter');
 
-    await page.waitForFunction(() => {
-      // Try multiple selectors — Claude changes class names regularly
-      const selectors = ['.font-claude-response', '.prose', '[data-is-streaming]', '[class*="response"]', '[class*="assistant"]'];
-      for (const sel of selectors) {
-        const els = document.querySelectorAll(sel);
-        if (els.length === 0) continue;
-        const last = els[els.length - 1];
-        if (last.getAttribute('data-is-streaming') === 'true') return false;
-        const text = (last.textContent || '').replace(/\s+/g, ' ').trim();
-        if (text.length > 0) return true;
+    console.log('[claude] Waiting for answer to complete...');
+    let lastText = '';
+    let stableCount = 0;
+    const maxChecks = 120; // 2 minutes max
+    for (let check = 0; check < maxChecks; check++) {
+      const currentText = await page.evaluate(() => {
+        const selectors = ['.font-claude-response', '.prose', '[data-is-streaming]', '[class*="response"]', '[class*="assistant"]'];
+        let last: Element | null = null;
+        for (const sel of selectors) {
+          const els = Array.from(document.querySelectorAll(sel));
+          if (els.length > 0) { last = els[els.length - 1]; break; }
+        }
+        if (!last) return '';
+        return (last.textContent ?? '').replace(/\s+/g, ' ').trim();
+      });
+
+      if (!currentText) {
+        await page.waitForTimeout(1000);
+        continue;
       }
-      return false;
-    }, { timeout: 180_000 }).catch(() => {});
-    await page.waitForTimeout(2000);
+
+      // Check if it is only showing search status
+      const isOnlySearching = /Working|Searching the web/i.test(currentText) && currentText.length < 150;
+
+      if (currentText === lastText && !isOnlySearching) {
+        stableCount++;
+        if (stableCount >= 4) { // stable for 4 seconds
+          console.log('[claude] Text stopped changing and is stable.');
+          break;
+        }
+      } else {
+        stableCount = 0;
+        lastText = currentText;
+      }
+
+      await page.waitForTimeout(1000);
+    }
 
     const data = await page.evaluate(() => {
+      // Try selectors in priority order
       const selectors = ['.font-claude-response', '.prose', '[data-is-streaming]', '[class*="response"]'];
       let last: Element | null = null;
       for (const sel of selectors) {

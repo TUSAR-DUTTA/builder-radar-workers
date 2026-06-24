@@ -56,10 +56,10 @@ type StoredOrigin = {
 let sharedUserDataDir: Record<string, string> = {};
 
 export async function launchSeededPersistentContext(model: AnswerModel): Promise<PlaywrightContextHandle> {
-  const { chromium } = await import('playwright-extra');
-  const stealthPlugin = (await import('puppeteer-extra-plugin-stealth')).default;
-  chromium.use(stealthPlugin());
-  const browserType = chromium;
+  // Use plain playwright (NOT playwright-extra) — the stealth plugin hooks into cookie APIs
+  // and silently breaks addCookies() injection in persistent contexts.
+  // Stealth is applied manually via applyStealth() after launch instead.
+  const { chromium } = await import('playwright');
   const sessionPath = sessionPathFor(model);
   
   if (!sharedUserDataDir[model]) {
@@ -93,16 +93,37 @@ export async function launchSeededPersistentContext(model: AnswerModel): Promise
     console.log(`[stealth] bypassing proxy for ${model} to save bandwidth`);
   }
 
-  const dummyBrowser = await browserType.launch();
-  const actualVersion = dummyBrowser.version();
-  await dummyBrowser.close();
+  const noStealth = process.env.PLAYWRIGHT_NO_STEALTH === '1' || process.env.PLAYWRIGHT_NO_STEALTH === 'true';
+  let context: import('playwright').BrowserContext;
 
-  const context = await browserType.launchPersistentContext(userDataDir, {
-    ...stealthLaunchOptions(true, !!useProxy),
-    ...stealthContext(undefined),
-    proxy,
-  });
-  await applyStealth(context);
+  if (noStealth) {
+    const headless = process.env.PLAYWRIGHT_HEADLESS === '1' || process.env.PLAYWRIGHT_HEADLESS === 'true';
+    context = await chromium.launchPersistentContext(userDataDir, {
+      headless,
+      args: ['--no-sandbox', '--no-first-run'],
+      proxy,
+    });
+  } else {
+    const dummyBrowser = await chromium.launch();
+    const actualVersion = dummyBrowser.version();
+    await dummyBrowser.close();
+
+    context = await chromium.launchPersistentContext(userDataDir, {
+      ...stealthLaunchOptions(true, !!useProxy),
+      ...stealthContext(undefined),
+      proxy,
+    });
+    await applyStealth(context);
+  }
+
+  // addCookies works with plain playwright's persistent context.
+  // NOTE: storageState in launchPersistentContext is silently ignored (0 cookies) — confirmed by diagnostic.
+  if (storageState.cookies?.length) {
+    await context.addCookies(storageState.cookies);
+    // Verify cookies were actually set
+    const allCookies = await context.cookies();
+    console.log(`[session] ${model}: added ${storageState.cookies.length} cookies, verified ${allCookies.length} in context`);
+  }
 
   await context.addInitScript((origins: Record<string, Array<{ name: string; value: string }>>) => {
     const items = origins[window.location.origin];
@@ -130,10 +151,6 @@ export async function launchSeededPersistentContext(model: AnswerModel): Promise
     }
   });
 
-  if (storageState.cookies?.length) {
-    await context.addCookies(storageState.cookies);
-  }
-
   return {
     context,
     close: async () => {
@@ -155,42 +172,42 @@ export async function launchSeededContext(model: AnswerModel): Promise<Playwrigh
     password: process.env.PLAYWRIGHT_PROXY_PASSWORD?.trim(),
   } : undefined;
 
-  const browser = await chromium.launch({
-    ...stealthLaunchOptions(true, !!useProxy),
-    proxy,
-  });
-
-  const actualVersion = browser.version();
+  const noStealth = process.env.PLAYWRIGHT_NO_STEALTH === '1' || process.env.PLAYWRIGHT_NO_STEALTH === 'true';
   const hasSession = isSessionAvailable(model);
+  const headless = process.env.PLAYWRIGHT_HEADLESS === '1' || process.env.PLAYWRIGHT_HEADLESS === 'true';
 
-  console.log(`[stealth] Launching seeded context for ${model}. hasSession: ${hasSession}, path: ${sessionPath}`);
+  let browser: import('playwright').Browser;
+  let context: import('playwright').BrowserContext;
 
-  const context = await browser.newContext({
-    ...stealthContext(actualVersion),
-  });
-
+  const contextOptions: any = {};
   if (hasSession) {
-    const storageState = JSON.parse(await fs.promises.readFile(sessionPath, 'utf8')) as any;
-    if (storageState.cookies && storageState.cookies.length > 0) {
-      await context.addCookies(storageState.cookies);
-    }
-    const localStorageByOrigin = Object.fromEntries(
-      (storageState.origins ?? [])
-        .filter((entry: any) => entry.origin && entry.localStorage?.length)
-        .map((entry: any) => [entry.origin, entry.localStorage ?? []]),
-    );
-    await context.addInitScript((origins: Record<string, Array<{ name: string; value: string }>>) => {
-      const items = origins[window.location.origin];
-      if (!items?.length) return;
-      for (const item of items) {
-        try {
-          window.localStorage.setItem(item.name, item.value);
-        } catch {}
-      }
-    }, localStorageByOrigin);
+    contextOptions.storageState = sessionPath;
   }
 
-  await applyStealth(context);
+  if (noStealth) {
+    browser = await chromium.launch({
+      headless,
+      args: ['--no-sandbox', '--no-first-run'],
+      proxy,
+    });
+    console.log(`[no-stealth] Launching seeded context for ${model}. hasSession: ${hasSession}`);
+    context = await browser.newContext(contextOptions);
+  } else {
+    browser = await chromium.launch({
+      ...stealthLaunchOptions(true, !!useProxy),
+      proxy,
+    });
+    const actualVersion = browser.version();
+    console.log(`[stealth] Launching seeded context for ${model}. hasSession: ${hasSession}, path: ${sessionPath}`);
+    context = await browser.newContext({
+      ...stealthContext(actualVersion),
+      ...contextOptions,
+    });
+  }
+
+  if (!noStealth) {
+    await applyStealth(context);
+  }
 
   return {
     context,

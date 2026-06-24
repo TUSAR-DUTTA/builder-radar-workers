@@ -118,9 +118,14 @@ jobs:
           google-chrome --version
           npx playwright --version
 
+      - name: Restore Grok session from chunked secrets
+        run: |
+          mkdir -p /tmp/playwright_sessions
+          echo "${{ secrets.GROK_SESSION_B64_1 }}${{ secrets.GROK_SESSION_B64_2 }}${{ secrets.GROK_SESSION_B64_3 }}${{ secrets.GROK_SESSION_B64_4 }}${{ secrets.GROK_SESSION_B64_5 }}" | base64 -d > /tmp/playwright_sessions/grok_auth_state.json
+          echo "Grok session restored"
+
       - name: Run workers
         env:
-          GROK_SESSION_B64: ${{ secrets.GROK_SESSION_B64_1 }}${{ secrets.GROK_SESSION_B64_2 }}${{ secrets.GROK_SESSION_B64_3 }}${{ secrets.GROK_SESSION_B64_4 }}${{ secrets.GROK_SESSION_B64_5 }}
           SCRAPE_PROJECT_ID: ${{ github.event.inputs.project_id }}
           SCRAPE_SOURCES: ${{ github.event.inputs.sources || 'grok' }}
         run: xvfb-run -a npx tsx src/workers/runner.ts

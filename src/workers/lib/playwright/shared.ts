@@ -5,30 +5,6 @@ import { getSessionsDir } from '@/lib/session-loader';
 import type { AnswerModel } from '@/lib/geo/types';
 import { stealthContext, stealthLaunchOptions, applyStealth } from '../stealth';
 
-// Third-party analytics / ads / session-replay / error-telemetry hosts. None are required for an
-// answer to render or for us to extract it, so aborting them trims proxy bandwidth on every page
-// load without changing what any engine returns. Kept to DEDICATED tracker domains only (never an
-// engine's own functional domain such as google.com / bing.com / openai.com), matched by exact host
-// or sub-domain suffix, so no engine breaks.
-const BLOCKED_TRACKER_HOSTS = [
-  'google-analytics.com', 'googletagmanager.com', 'analytics.google.com',
-  'doubleclick.net', 'googlesyndication.com', 'googleadservices.com',
-  'segment.io', 'segment.com', 'mixpanel.com', 'amplitude.com',
-  'fullstory.com', 'heap.io', 'heapanalytics.com',
-  'hotjar.com', 'clarity.ms',
-  'sentry.io', 'browser.sentry-cdn.com',
-  'datadoghq.com', 'datadoghq-browser-agent.com',
-  'newrelic.com', 'nr-data.net',
-  'intercom.io', 'intercomcdn.com',
-  'connect.facebook.net', 'analytics.tiktok.com',
-];
-
-function isBlockedTrackerHost(url: string): boolean {
-  let host: string;
-  try { host = new URL(url).hostname; } catch { return false; }
-  return BLOCKED_TRACKER_HOSTS.some((d) => host === d || host.endsWith('.' + d));
-}
-
 export type PlaywrightContextHandle = {
   context: import('playwright').BrowserContext;
   close: () => Promise<void>;
@@ -39,9 +15,6 @@ export function sessionPathFor(model: AnswerModel): string {
   if (model === 'claude') return path.join(dir, 'claude_auth_state.json');
   if (model === 'perplexity') return path.join(dir, 'perplexity_auth_state.json');
   if (model === 'google-aio') return path.join(dir, 'google_auth_state.json');
-  if (model === 'copilot') return path.join(dir, 'copilot_auth_state.json');
-  if (model === 'deepseek') return path.join(dir, 'deepseek_auth_state.json');
-  if (model === 'grok') return path.join(dir, 'grok_auth_state.json');
   return path.join(dir, 'chatgpt_auth_state.json');
 }
 
@@ -79,9 +52,7 @@ export async function launchSeededPersistentContext(model: AnswerModel): Promise
 
   const proxyServer = process.env.PLAYWRIGHT_PROXY_SERVER?.trim();
   // We only route these specific bots through residential IP because their anti-bot blocks datacenter ASNs
-  // openai-search (ChatGPT) needs residential proxy — GitHub datacenter ASNs get blank pages / bot-blocked.
-  // claude and google-aio work fine from datacenter; keep them off-proxy to save bandwidth.
-  const useProxy = proxyServer && (model === 'perplexity' || model === 'deepseek' || model === 'grok' || model === 'copilot' || model === 'openai-search');
+  const useProxy = proxyServer && (model === 'perplexity' || model === 'openai-search');
   const proxy = useProxy ? {
     server: proxyServer,
     username: process.env.PLAYWRIGHT_PROXY_USERNAME?.trim(),
@@ -116,9 +87,8 @@ export async function launchSeededPersistentContext(model: AnswerModel): Promise
   }, localStorageByOrigin);
 
   await context.route('**/*', (route) => {
-    const req = route.request();
-    const type = req.resourceType();
-    if (['image', 'media', 'font'].includes(type) || isBlockedTrackerHost(req.url())) {
+    const type = route.request().resourceType();
+    if (['image', 'media', 'font'].includes(type)) {
       route.abort().catch(() => {});
     } else {
       route.continue().catch(() => {});
@@ -143,7 +113,7 @@ export async function launchSeededContext(model: AnswerModel): Promise<Playwrigh
   const sessionPath = sessionPathFor(model);
   
   const proxyServer = process.env.PLAYWRIGHT_PROXY_SERVER?.trim();
-  const useProxy = proxyServer && (model === 'perplexity' || model === 'deepseek' || model === 'grok' || model === 'copilot' || model === 'openai-search');
+  const useProxy = proxyServer && (model === 'perplexity' || model === 'openai-search');
   const proxy = useProxy ? {
     server: proxyServer,
     username: process.env.PLAYWRIGHT_PROXY_USERNAME?.trim(),

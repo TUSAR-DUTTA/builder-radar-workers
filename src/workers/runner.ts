@@ -128,6 +128,11 @@ async function runGeoForProject(projectId: string, sources: string[]): Promise<{
     }
 
     for (const s of samples) {
+      console.log(`\n================= EXTRACTED ANSWER for ${s.model} =================`);
+      console.log(`Prompt: ${s.prompt}`);
+      console.log(s.answer);
+      console.log(`\nCitations:`, s.citations.length);
+      console.log(`=================================================================\n`);
       // Fact-check the answer against the brand fact sheet (Groq). Best-effort: a failure
       // leaves the sample unaudited rather than dropping it.
       const audit = await auditAnswer(router, s.answer, project.name, facts, competitorEntities).catch(() => null);

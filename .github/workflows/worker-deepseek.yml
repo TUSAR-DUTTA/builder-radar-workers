@@ -120,7 +120,7 @@ jobs:
 
       - name: Run workers
         env:
-          DEEPSEEK_SESSION_B64: ${{ secrets.DEEPSEEK_SESSION_B64 }}
+          DEEPSEEK_SESSION_B64: ${{ secrets.DEEPSEEK_SESSION_B64_1 }}${{ secrets.DEEPSEEK_SESSION_B64_2 }}
           SCRAPE_PROJECT_ID: ${{ github.event.inputs.project_id }}
           SCRAPE_SOURCES: ${{ github.event.inputs.sources || 'deepseek' }}
         run: xvfb-run -a npx tsx src/workers/runner.ts

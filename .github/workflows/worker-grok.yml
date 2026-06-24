@@ -120,7 +120,7 @@ jobs:
 
       - name: Run workers
         env:
-          GROK_SESSION_B64: ${{ secrets.GROK_SESSION_B64 }}
+          GROK_SESSION_B64: ${{ secrets.GROK_SESSION_B64_1 }}${{ secrets.GROK_SESSION_B64_2 }}${{ secrets.GROK_SESSION_B64_3 }}${{ secrets.GROK_SESSION_B64_4 }}${{ secrets.GROK_SESSION_B64_5 }}
           SCRAPE_PROJECT_ID: ${{ github.event.inputs.project_id }}
           SCRAPE_SOURCES: ${{ github.event.inputs.sources || 'grok' }}
         run: xvfb-run -a npx tsx src/workers/runner.ts

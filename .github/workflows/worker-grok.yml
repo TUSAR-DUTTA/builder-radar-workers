@@ -123,7 +123,7 @@ jobs:
           GROK_SESSION_B64: ${{ secrets.GROK_SESSION_B64 }}
           SCRAPE_PROJECT_ID: ${{ github.event.inputs.project_id }}
           SCRAPE_SOURCES: ${{ github.event.inputs.sources || 'grok' }}
-        run: xvfb-run -a npx tsx try-grok.ts
+        run: xvfb-run -a npx tsx src/workers/runner.ts
 
       - name: Upload Debug Artifacts
         if: always()

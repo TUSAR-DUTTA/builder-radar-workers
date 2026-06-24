@@ -123,4 +123,4 @@ jobs:
           DEEPSEEK_SESSION_B64: ${{ secrets.DEEPSEEK_SESSION_B64 }}
           SCRAPE_PROJECT_ID: ${{ github.event.inputs.project_id }}
           SCRAPE_SOURCES: ${{ github.event.inputs.sources || 'deepseek' }}
-        run: xvfb-run -a npx tsx try-deepseek.ts
+        run: xvfb-run -a npx tsx src/workers/runner.ts

@@ -8,8 +8,8 @@
  * in the GEO pivot.
  *
  * Usage:
- *   SCRAPE_PROJECT_ID=<id> npx tsx src/workers/runner.ts   — scrape one project
- *   npx tsx src/workers/runner.ts                          — run the scheduled scrape tick
+ *   SCRAPE_PROJECT_ID=<id> npx tsx src/workers/runner.ts   ΓÇö scrape one project
+ *   npx tsx src/workers/runner.ts                          ΓÇö run the scheduled scrape tick
  */
 
 import { db } from '@/db';
@@ -18,13 +18,13 @@ import { loadSessionsFromEnv } from '@/lib/session-loader';
 import { getAIRouter } from '@/lib/ai-router';
 import { eq, and, isNotNull, sql } from 'drizzle-orm';
 
-import { citedSourceRows, auditAnswer, accuracyFlag, accuracyAlertRows, resolveBrandConfusion, gateConfusion, extractWinnerReasons } from '@/lib/geo/engine';
+import { citedSourceRows, auditAnswer, accuracyFlag, accuracyAlertRows, resolveBrandConfusion } from '@/lib/geo/engine';
 import { finalizeAccuracyLoop } from '@/lib/geo/accuracy-loop';
 import type { AnswerModel, BrandFact, AnswerSample, Verdict } from '@/lib/geo/types';
 import { runPromptViaPlaywright, closeSharedBrowser } from './lib/geo-playwright';
 import { runSocialScrapesForProject, runScheduledSocialScrapes } from './social';
 
-// ── Transient DB-connect retry ───────────────────────────────────────────────
+// ΓöÇΓöÇ Transient DB-connect retry ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 // The Supabase pooler occasionally drops/blackholes a fresh connection from a cloud
 // runner (CONNECT_TIMEOUT on aws-*.pooler.supabase.com). postgres.js surfaces that as a
 // failed query with the socket error in `cause`. These hiccups clear in seconds, so retry
@@ -48,7 +48,7 @@ async function withDbRetry<T>(label: string, fn: () => Promise<T>, attempts = 3)
     } catch (err) {
       if (attempt >= attempts || !isTransientDbError(err)) throw err;
       const delayMs = 15_000 * attempt;
-      console.warn(`[runner] ${label}: transient DB connect failure (attempt ${attempt}/${attempts}), retrying in ${delayMs / 1000}s…`);
+      console.warn(`[runner] ${label}: transient DB connect failure (attempt ${attempt}/${attempts}), retrying in ${delayMs / 1000}sΓÇª`);
       await new Promise((resolve) => setTimeout(resolve, delayMs));
     }
   }
@@ -116,12 +116,7 @@ async function runGeoForProject(projectId: string, sources: string[]): Promise<{
 
   const competitorEntities = entities.filter((e) => e !== project.name);
 
-  // --- TEST PROMPT INJECTION ---
-  console.log('Injecting test prompt...');
-  const testPrompts = [{ id: 'test-prompt-id', projectId: project.id, prompt: 'What are the top 3 best AI sales intelligence tools?', createdAt: new Date() }];
-  // -----------------------------
-
-  for (const p of testPrompts) {
+  for (const p of prompts) {
     let samples;
     try {
       // Playwright code is left untouched (per standing instruction); the accuracy audit
@@ -133,39 +128,17 @@ async function runGeoForProject(projectId: string, sources: string[]): Promise<{
     }
 
     for (const s of samples) {
-      console.log(`\n================= EXTRACTED ANSWER for ${s.model} =================`);
-      console.log(`Prompt: ${s.prompt}`);
-      console.log(s.answer);
-      console.log(`\nCitations:`, s.citations.length);
-      console.log(`=================================================================\n`);
       // Fact-check the answer against the brand fact sheet (Groq). Best-effort: a failure
       // leaves the sample unaudited rather than dropping it.
       const audit = await auditAnswer(router, s.answer, project.name, facts, competitorEntities).catch(() => null);
       const audited: AnswerSample = { ...s, audit, brandRank: audit?.brandRank ?? null, sentiment: audit?.sentiment ?? null };
 
       // Guard against the judge fuzzy-matching a different, similarly-named product as the brand
-      // (e.g. "Building Radar" → "BuilderRadar"): a confused mention is scored absent + flagged as
+      // (e.g. "Building Radar" ΓåÆ "BuilderRadar"): a confused mention is scored absent + flagged as
       // confusion (an alert), never as visibility. Fix BOTH the brand_verdict column and the
       // verdicts JSON, since the dashboard reads the column (trend/per-engine) and the JSON (share).
       const { verdict: brandVerdict, confused } = resolveBrandConfusion(audited.answer, project.name, s.verdicts[project.name], audit);
       const verdicts = confused ? { ...audited.verdicts, [project.name]: 'absent' as Verdict } : audited.verdicts;
-
-      // Drop unverifiable "entity confusion" on answers where the brand is simply absent (see
-      // gateConfusion) so we never cry "AI confused you with another company" on a category answer
-      // that never mentioned us.
-      const effectiveAudit = gateConfusion(audit, audited.answer, project.name, confused);
-
-      // Why each recommended rival won — a dedicated extraction (the brand audit goes empty when the
-      // brand is absent, which is the usual case here). Only runs when a competitor is actually
-      // recommended, so most answers cost nothing extra.
-      const recommendedComps = competitorEntities.filter((c) => verdicts[c] === 'recommended');
-      const winnerReasons = await extractWinnerReasons(router, audited.answer, recommendedComps);
-
-      if (p.id === 'test-prompt-id') {
-        console.log('Skipping DB insert for test prompt.');
-        continue;
-      }
-
       await db.insert(answerRuns).values({
         promptId: p.id,
         projectId: project.id,
@@ -177,15 +150,14 @@ async function runGeoForProject(projectId: string, sources: string[]): Promise<{
         sentiment: confused ? null : audited.sentiment,
         citations: audited.citations,
         claims: audit?.claims ?? [],
-        accuracyFlag: confused ? 'confusion' : accuracyFlag(effectiveAudit),
-        winnerReasons,
+        accuracyFlag: confused ? 'confusion' : accuracyFlag(audit),
       }).onConflictDoNothing();
       runCount++;
       for (const c of audited.citations) if (c.url) projectCitations.add(c.url);
 
-      // Upsert deduped accuracy alerts — occurrences/lastSeen build the trend across runs.
+      // Upsert deduped accuracy alerts ΓÇö occurrences/lastSeen build the trend across runs.
       // Re-seeing an alert resets missedRuns (still wrong) and keeps it open.
-      for (const row of accuracyAlertRows({ ...audited, audit: effectiveAudit }, facts)) {
+      for (const row of accuracyAlertRows(audited, facts)) {
         await db.insert(accuracyAlerts).values({
           projectId: project.id,
           promptId: p.id,
@@ -241,15 +213,8 @@ const SCRAPE_INTERVAL_MIN: Record<string, number> = {
   starter: 120,
   pro: 80,
 };
-// Scheduler-jitter tolerance for the shared lastScrapeAt gate. Each engine runs as its own
-// workflow but reads/stamps ONE shared projects.lastScrapeAt, and the chatgpt→claude crons sit
-// exactly one starter interval apart (120 min). GitHub delays scheduled runs by a variable few
-// hours, which can compress the effective chatgpt→claude gap to just under the interval and make
-// the later engine (claude) skip the whole tick (observed 2026-06-20: 114.4 min vs a 115-min
-// threshold → "no projects due", 1-min no-op run). 30 min absorbs that jitter while the throttle
-// still blocks genuine re-scrapes inside ~90 min (starter) / ~50 min (pro).
-const SCRAPE_GRACE_MIN = 999999;
-const SCRAPE_SOURCES_AUTO = ['chatgpt', 'perplexity', 'claude', 'google-aio', 'deepseek', 'grok'];
+const SCRAPE_GRACE_MIN = 5;
+const SCRAPE_SOURCES_AUTO = ['chatgpt', 'perplexity', 'claude', 'google-aio'];
 const MAX_SCRAPES_PER_TICK = 8;
 
 async function runScheduledScrapes(): Promise<void> {
@@ -298,7 +263,7 @@ async function runScheduledScrapes(): Promise<void> {
   }
 }
 
-// ── Entry point ──────────────────────────────────────────────────────────────
+// ΓöÇΓöÇ Entry point ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 export { runGeoForProject, runScheduledScrapes };
 
 async function main() {

@@ -5,30 +5,6 @@ import { getSessionsDir } from '@/lib/session-loader';
 import type { AnswerModel } from '@/lib/geo/types';
 import { stealthContext, stealthLaunchOptions, applyStealth } from '../stealth';
 
-// Third-party analytics / ads / session-replay / error-telemetry hosts. None are required for an
-// answer to render or for us to extract it, so aborting them trims proxy bandwidth on every page
-// load without changing what any engine returns. Kept to DEDICATED tracker domains only (never an
-// engine's own functional domain such as google.com / bing.com / openai.com), matched by exact host
-// or sub-domain suffix, so no engine breaks.
-const BLOCKED_TRACKER_HOSTS = [
-  'google-analytics.com', 'googletagmanager.com', 'analytics.google.com',
-  'doubleclick.net', 'googlesyndication.com', 'googleadservices.com',
-  'segment.io', 'segment.com', 'mixpanel.com', 'amplitude.com',
-  'fullstory.com', 'heap.io', 'heapanalytics.com',
-  'hotjar.com', 'clarity.ms',
-  'sentry.io', 'browser.sentry-cdn.com',
-  'datadoghq.com', 'datadoghq-browser-agent.com',
-  'newrelic.com', 'nr-data.net',
-  'intercom.io', 'intercomcdn.com',
-  'connect.facebook.net', 'analytics.tiktok.com',
-];
-
-function isBlockedTrackerHost(url: string): boolean {
-  let host: string;
-  try { host = new URL(url).hostname; } catch { return false; }
-  return BLOCKED_TRACKER_HOSTS.some((d) => host === d || host.endsWith('.' + d));
-}
-
 export type PlaywrightContextHandle = {
   context: import('playwright').BrowserContext;
   close: () => Promise<void>;
@@ -39,8 +15,6 @@ export function sessionPathFor(model: AnswerModel): string {
   if (model === 'claude') return path.join(dir, 'claude_auth_state.json');
   if (model === 'perplexity') return path.join(dir, 'perplexity_auth_state.json');
   if (model === 'google-aio') return path.join(dir, 'google_auth_state.json');
-  if (model === 'deepseek') return path.join(dir, 'deepseek_auth_state.json');
-  if (model === 'grok') return path.join(dir, 'grok_auth_state.json');
   return path.join(dir, 'chatgpt_auth_state.json');
 }
 
@@ -56,10 +30,10 @@ type StoredOrigin = {
 let sharedUserDataDir: Record<string, string> = {};
 
 export async function launchSeededPersistentContext(model: AnswerModel): Promise<PlaywrightContextHandle> {
-  // Use plain playwright (NOT playwright-extra) — the stealth plugin hooks into cookie APIs
-  // and silently breaks addCookies() injection in persistent contexts.
-  // Stealth is applied manually via applyStealth() after launch instead.
-  const { chromium } = await import('playwright');
+  const { chromium } = await import('playwright-extra');
+  const stealthPlugin = (await import('puppeteer-extra-plugin-stealth')).default;
+  chromium.use(stealthPlugin());
+  const browserType = chromium;
   const sessionPath = sessionPathFor(model);
   
   if (!sharedUserDataDir[model]) {
@@ -77,7 +51,8 @@ export async function launchSeededPersistentContext(model: AnswerModel): Promise
   );
 
   const proxyServer = process.env.PLAYWRIGHT_PROXY_SERVER?.trim();
-  const useProxy = !!proxyServer;
+  // We only route these specific bots through residential IP because their anti-bot blocks datacenter ASNs
+  const useProxy = proxyServer && (model === 'perplexity' || model === 'openai-search');
   const proxy = useProxy ? {
     server: proxyServer,
     username: process.env.PLAYWRIGHT_PROXY_USERNAME?.trim(),
@@ -90,37 +65,16 @@ export async function launchSeededPersistentContext(model: AnswerModel): Promise
     console.log(`[stealth] bypassing proxy for ${model} to save bandwidth`);
   }
 
-  const noStealth = process.env.PLAYWRIGHT_NO_STEALTH === '1' || process.env.PLAYWRIGHT_NO_STEALTH === 'true';
-  let context: import('playwright').BrowserContext;
+  const dummyBrowser = await browserType.launch();
+  const actualVersion = dummyBrowser.version();
+  await dummyBrowser.close();
 
-  if (noStealth) {
-    const headless = process.env.PLAYWRIGHT_HEADLESS === '1' || process.env.PLAYWRIGHT_HEADLESS === 'true';
-    context = await chromium.launchPersistentContext(userDataDir, {
-      headless,
-      args: ['--no-sandbox', '--no-first-run'],
-      proxy,
-    });
-  } else {
-    const dummyBrowser = await chromium.launch();
-    const actualVersion = dummyBrowser.version();
-    await dummyBrowser.close();
-
-    context = await chromium.launchPersistentContext(userDataDir, {
-      ...stealthLaunchOptions(true, !!useProxy),
-      ...stealthContext(actualVersion),
-      proxy,
-    });
-    await applyStealth(context);
-  }
-
-  // addCookies works with plain playwright's persistent context.
-  // NOTE: storageState in launchPersistentContext is silently ignored (0 cookies) — confirmed by diagnostic.
-  if (storageState.cookies?.length) {
-    await context.addCookies(storageState.cookies);
-    // Verify cookies were actually set
-    const allCookies = await context.cookies();
-    console.log(`[session] ${model}: added ${storageState.cookies.length} cookies, verified ${allCookies.length} in context`);
-  }
+  const context = await browserType.launchPersistentContext(userDataDir, {
+    ...stealthLaunchOptions(true, !!useProxy),
+    ...stealthContext(undefined),
+    proxy,
+  });
+  // await applyStealth(context);
 
   await context.addInitScript((origins: Record<string, Array<{ name: string; value: string }>>) => {
     const items = origins[window.location.origin];
@@ -133,20 +87,17 @@ export async function launchSeededPersistentContext(model: AnswerModel): Promise
   }, localStorageByOrigin);
 
   await context.route('**/*', (route) => {
-    const req = route.request();
-    const type = req.resourceType();
-    const url = req.url();
-    // Never block anything from Cloudflare challenge domains — Turnstile needs images/fonts to render
-    if (url.includes('challenges.cloudflare.com') || url.includes('cf-turnstile')) {
-      route.continue().catch(() => {});
-      return;
-    }
-    if (['image', 'media', 'font'].includes(type) || isBlockedTrackerHost(url)) {
+    const type = route.request().resourceType();
+    if (['image', 'media', 'font'].includes(type)) {
       route.abort().catch(() => {});
     } else {
       route.continue().catch(() => {});
     }
   });
+
+  if (storageState.cookies?.length) {
+    await context.addCookies(storageState.cookies);
+  }
 
   return {
     context,
@@ -162,49 +113,49 @@ export async function launchSeededContext(model: AnswerModel): Promise<Playwrigh
   const sessionPath = sessionPathFor(model);
   
   const proxyServer = process.env.PLAYWRIGHT_PROXY_SERVER?.trim();
-  const useProxy = !!proxyServer;
+  const useProxy = proxyServer && (model === 'perplexity' || model === 'openai-search');
   const proxy = useProxy ? {
     server: proxyServer,
     username: process.env.PLAYWRIGHT_PROXY_USERNAME?.trim(),
     password: process.env.PLAYWRIGHT_PROXY_PASSWORD?.trim(),
   } : undefined;
 
-  const noStealth = process.env.PLAYWRIGHT_NO_STEALTH === '1' || process.env.PLAYWRIGHT_NO_STEALTH === 'true';
+  const browser = await chromium.launch({
+    ...stealthLaunchOptions(true, !!useProxy),
+    proxy,
+  });
+
+  const actualVersion = browser.version();
   const hasSession = isSessionAvailable(model);
-  const headless = process.env.PLAYWRIGHT_HEADLESS === '1' || process.env.PLAYWRIGHT_HEADLESS === 'true';
 
-  let browser: import('playwright').Browser;
-  let context: import('playwright').BrowserContext;
+  console.log(`[stealth] Launching seeded context for ${model}. hasSession: ${hasSession}, path: ${sessionPath}`);
 
-  const contextOptions: any = {};
+  const context = await browser.newContext({
+    ...stealthContext(actualVersion),
+  });
+
   if (hasSession) {
-    contextOptions.storageState = sessionPath;
+    const storageState = JSON.parse(await fs.promises.readFile(sessionPath, 'utf8')) as any;
+    if (storageState.cookies && storageState.cookies.length > 0) {
+      await context.addCookies(storageState.cookies);
+    }
+    const localStorageByOrigin = Object.fromEntries(
+      (storageState.origins ?? [])
+        .filter((entry: any) => entry.origin && entry.localStorage?.length)
+        .map((entry: any) => [entry.origin, entry.localStorage ?? []]),
+    );
+    await context.addInitScript((origins: Record<string, Array<{ name: string; value: string }>>) => {
+      const items = origins[window.location.origin];
+      if (!items?.length) return;
+      for (const item of items) {
+        try {
+          window.localStorage.setItem(item.name, item.value);
+        } catch {}
+      }
+    }, localStorageByOrigin);
   }
 
-  if (noStealth) {
-    browser = await chromium.launch({
-      headless,
-      args: ['--no-sandbox', '--no-first-run'],
-      proxy,
-    });
-    console.log(`[no-stealth] Launching seeded context for ${model}. hasSession: ${hasSession}`);
-    context = await browser.newContext(contextOptions);
-  } else {
-    browser = await chromium.launch({
-      ...stealthLaunchOptions(true, !!useProxy),
-      proxy,
-    });
-    const actualVersion = browser.version();
-    console.log(`[stealth] Launching seeded context for ${model}. hasSession: ${hasSession}, path: ${sessionPath}`);
-    context = await browser.newContext({
-      ...stealthContext(actualVersion),
-      ...contextOptions,
-    });
-  }
-
-  if (!noStealth) {
-    await applyStealth(context);
-  }
+  await applyStealth(context);
 
   return {
     context,

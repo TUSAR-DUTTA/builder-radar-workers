@@ -1,0 +1,1082 @@
+run-workers	Set up job	﻿2026-06-24T04:35:54.5861758Z Current runner version: '2.335.1'
+run-workers	Set up job	2026-06-24T04:35:54.5892360Z ##[group]Runner Image Provisioner
+run-workers	Set up job	2026-06-24T04:35:54.5893959Z Hosted Compute Agent
+run-workers	Set up job	2026-06-24T04:35:54.5895201Z Version: 20260611.554
+run-workers	Set up job	2026-06-24T04:35:54.5896565Z Commit: 5e0782fdc9014723d3be820dd114dd31555c2bd1
+run-workers	Set up job	2026-06-24T04:35:54.5898079Z Build Date: 2026-06-11T21:40:46Z
+run-workers	Set up job	2026-06-24T04:35:54.5899530Z Worker ID: {b3cf796f-7ba1-4493-81a6-de47d53e45a6}
+run-workers	Set up job	2026-06-24T04:35:54.5901483Z Azure Region: eastus
+run-workers	Set up job	2026-06-24T04:35:54.5902799Z ##[endgroup]
+run-workers	Set up job	2026-06-24T04:35:54.5904856Z ##[group]Operating System
+run-workers	Set up job	2026-06-24T04:35:54.5906270Z Ubuntu
+run-workers	Set up job	2026-06-24T04:35:54.5907353Z 24.04.4
+run-workers	Set up job	2026-06-24T04:35:54.5908533Z LTS
+run-workers	Set up job	2026-06-24T04:35:54.5909613Z ##[endgroup]
+run-workers	Set up job	2026-06-24T04:35:54.5911134Z ##[group]Runner Image
+run-workers	Set up job	2026-06-24T04:35:54.5912524Z Image: ubuntu-24.04
+run-workers	Set up job	2026-06-24T04:35:54.5913749Z Version: 20260615.205.1
+run-workers	Set up job	2026-06-24T04:35:54.5915908Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20260615.205/images/ubuntu/Ubuntu2404-Readme.md
+run-workers	Set up job	2026-06-24T04:35:54.5918989Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20260615.205
+run-workers	Set up job	2026-06-24T04:35:54.5921387Z ##[endgroup]
+run-workers	Set up job	2026-06-24T04:35:54.5923800Z ##[group]GITHUB_TOKEN Permissions
+run-workers	Set up job	2026-06-24T04:35:54.5926523Z Contents: read
+run-workers	Set up job	2026-06-24T04:35:54.5927765Z Metadata: read
+run-workers	Set up job	2026-06-24T04:35:54.5928945Z Packages: read
+run-workers	Set up job	2026-06-24T04:35:54.5930088Z ##[endgroup]
+run-workers	Set up job	2026-06-24T04:35:54.5933465Z Secret source: Actions
+run-workers	Set up job	2026-06-24T04:35:54.5934964Z Prepare workflow directory
+run-workers	Set up job	2026-06-24T04:35:54.6477556Z Prepare all required actions
+run-workers	Set up job	2026-06-24T04:35:54.6515187Z Getting action download info
+run-workers	Set up job	2026-06-24T04:35:54.8099519Z Download action repository 'actions/checkout@v4' (SHA:34e114876b0b11c390a56381ad16ebd13914f8d5)
+run-workers	Set up job	2026-06-24T04:35:54.9019699Z Download action repository 'actions/setup-node@v4' (SHA:49933ea5288caeca8642d1e84afbd3f7d6820020)
+run-workers	Set up job	2026-06-24T04:35:55.0937278Z Complete job name: run-workers
+run-workers	Checkout	﻿2026-06-24T04:35:55.1825714Z Node 20 is being deprecated. This workflow is running with Node 24 by default. If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+run-workers	Checkout	2026-06-24T04:35:55.1836792Z ##[group]Run actions/checkout@v4
+run-workers	Checkout	2026-06-24T04:35:55.1838215Z with:
+run-workers	Checkout	2026-06-24T04:35:55.1839182Z   repository: TUSAR-DUTTA/builder-radar-workers
+run-workers	Checkout	2026-06-24T04:35:55.1848313Z   token: ***
+run-workers	Checkout	2026-06-24T04:35:55.1849167Z   ssh-strict: true
+run-workers	Checkout	2026-06-24T04:35:55.1850025Z   ssh-user: git
+run-workers	Checkout	2026-06-24T04:35:55.1851062Z   persist-credentials: true
+run-workers	Checkout	2026-06-24T04:35:55.1852023Z   clean: true
+run-workers	Checkout	2026-06-24T04:35:55.1852911Z   sparse-checkout-cone-mode: true
+run-workers	Checkout	2026-06-24T04:35:55.1853935Z   fetch-depth: 1
+run-workers	Checkout	2026-06-24T04:35:55.1854803Z   fetch-tags: false
+run-workers	Checkout	2026-06-24T04:35:55.1855689Z   show-progress: true
+run-workers	Checkout	2026-06-24T04:35:55.1856585Z   lfs: false
+run-workers	Checkout	2026-06-24T04:35:55.1857421Z   submodules: false
+run-workers	Checkout	2026-06-24T04:35:55.1858369Z   set-safe-directory: true
+run-workers	Checkout	2026-06-24T04:35:55.1859635Z env:
+run-workers	Checkout	2026-06-24T04:35:55.1862018Z   DATABASE_URL: ***
+run-workers	Checkout	2026-06-24T04:35:55.1863281Z   NEXT_PUBLIC_SUPABASE_URL: ***
+run-workers	Checkout	2026-06-24T04:35:55.1867435Z   NEXT_PUBLIC_SUPABASE_ANON_KEY: ***
+run-workers	Checkout	2026-06-24T04:35:55.1872474Z   SUPABASE_SERVICE_ROLE_KEY: ***
+run-workers	Checkout	2026-06-24T04:35:55.1873659Z   NEXT_PUBLIC_APP_URL: ***
+run-workers	Checkout	2026-06-24T04:35:55.1875069Z   WORKER_SECRET: ***
+run-workers	Checkout	2026-06-24T04:35:55.1876002Z   PLAYWRIGHT_BROWSER_CHANNEL: chrome
+run-workers	Checkout	2026-06-24T04:35:55.1877059Z   PLAYWRIGHT_HEADLESS: 0
+run-workers	Checkout	2026-06-24T04:35:55.1878113Z   PLAYWRIGHT_DEBUG_DIR: /tmp/playwright_debug
+run-workers	Checkout	2026-06-24T04:35:55.1879451Z   RESEND_API_KEY: ***
+run-workers	Checkout	2026-06-24T04:35:55.1880751Z   RESEND_FROM_EMAIL: ***
+run-workers	Checkout	2026-06-24T04:35:55.1881759Z   ADMIN_ALERT_EMAIL: ***
+run-workers	Checkout	2026-06-24T04:35:55.1883065Z   GROQ_8B_KEY_1: ***
+run-workers	Checkout	2026-06-24T04:35:55.1884328Z   GROQ_8B_KEY_2: ***
+run-workers	Checkout	2026-06-24T04:35:55.1885568Z   GROQ_8B_KEY_3: ***
+run-workers	Checkout	2026-06-24T04:35:55.1886964Z   GROQ_8B_KEY_4: ***
+run-workers	Checkout	2026-06-24T04:35:55.1888235Z   GROQ_70B_KEY_1: ***
+run-workers	Checkout	2026-06-24T04:35:55.1889533Z   GROQ_70B_KEY_2: ***
+run-workers	Checkout	2026-06-24T04:35:55.1891245Z   GROQ_70B_KEY_3: ***
+run-workers	Checkout	2026-06-24T04:35:55.1892470Z   GEMINI_KEY_1: ***
+run-workers	Checkout	2026-06-24T04:35:55.1893646Z   GEMINI_KEY_2: ***
+run-workers	Checkout	2026-06-24T04:35:55.1894810Z   GEMINI_KEY_3: ***
+run-workers	Checkout	2026-06-24T04:35:55.1895998Z   GEMINI_KEY_4: ***
+run-workers	Checkout	2026-06-24T04:35:55.1897176Z   GEMINI_KEY_5: ***
+run-workers	Checkout	2026-06-24T04:35:55.1898338Z   GEMINI_KEY_6: ***
+run-workers	Checkout	2026-06-24T04:35:55.1899410Z   COHERE_KEY_1: ***
+run-workers	Checkout	2026-06-24T04:35:55.1900574Z   COHERE_KEY_2: ***
+run-workers	Checkout	2026-06-24T04:35:55.1901664Z   COHERE_KEY_3: ***
+run-workers	Checkout	2026-06-24T04:35:55.1902728Z   COHERE_KEY_4: ***
+run-workers	Checkout	2026-06-24T04:35:55.1903805Z   COHERE_KEY_5: ***
+run-workers	Checkout	2026-06-24T04:35:55.1904890Z   COHERE_KEY_6: ***
+run-workers	Checkout	2026-06-24T04:35:55.1905969Z   COHERE_KEY_7: ***
+run-workers	Checkout	2026-06-24T04:35:55.1907425Z   OPENROUTER_KEY_1: ***
+run-workers	Checkout	2026-06-24T04:35:55.1908943Z   OPENROUTER_KEY_2: ***
+run-workers	Checkout	2026-06-24T04:35:55.1910802Z   OPENROUTER_KEY_3: ***
+run-workers	Checkout	2026-06-24T04:35:55.1912356Z   OPENROUTER_KEY_4: ***
+run-workers	Checkout	2026-06-24T04:35:55.1913860Z   OPENROUTER_KEY_5: ***
+run-workers	Checkout	2026-06-24T04:35:55.1915355Z   OPENROUTER_KEY_6: ***
+run-workers	Checkout	2026-06-24T04:35:55.1916873Z   OPENROUTER_KEY_7: ***
+run-workers	Checkout	2026-06-24T04:35:55.1917943Z   HF_KEY_1: ***
+run-workers	Checkout	2026-06-24T04:35:55.1918931Z   HF_KEY_2: ***
+run-workers	Checkout	2026-06-24T04:35:55.1919908Z   HF_KEY_3: ***
+run-workers	Checkout	2026-06-24T04:35:55.1921072Z   HF_KEY_4: ***
+run-workers	Checkout	2026-06-24T04:35:55.1922166Z   GITHUB_TOKEN: ***
+run-workers	Checkout	2026-06-24T04:35:55.1923174Z   STACKEXCHANGE_KEY: ***
+run-workers	Checkout	2026-06-24T04:35:55.1924212Z   DEVTO_API_KEY: ***
+run-workers	Checkout	2026-06-24T04:35:55.1925424Z   PRODUCTHUNT_TOKEN: ***
+run-workers	Checkout	2026-06-24T04:35:55.1926582Z   YOUTUBE_API_KEY: ***
+run-workers	Checkout	2026-06-24T04:35:55.1927712Z   GOOGLE_CSE_KEY: ***
+run-workers	Checkout	2026-06-24T04:35:55.1928636Z   GOOGLE_CSE_ID: ***
+run-workers	Checkout	2026-06-24T04:35:55.1929917Z   SOCIALDATA_KEY:  ***
+run-workers	Checkout	2026-06-24T04:35:55.1930968Z   REDDIT_CLIENT_ID: 
+run-workers	Checkout	2026-06-24T04:35:55.1931907Z   REDDIT_CLIENT_SECRET: 
+run-workers	Checkout	2026-06-24T04:35:55.1933007Z   PLAYWRIGHT_PROXY_SERVER: ***
+run-workers	Checkout	2026-06-24T04:35:55.1934064Z   PLAYWRIGHT_PROXY_USERNAME: ***
+run-workers	Checkout	2026-06-24T04:35:55.1935147Z   PLAYWRIGHT_PROXY_PASSWORD: ***
+run-workers	Checkout	2026-06-24T04:35:55.1936282Z   PLAYWRIGHT_SESSIONS_DIR: /tmp/playwright_sessions
+run-workers	Checkout	2026-06-24T04:35:55.1937677Z ##[endgroup]
+run-workers	Checkout	2026-06-24T04:35:55.2904866Z Syncing repository: TUSAR-DUTTA/builder-radar-workers
+run-workers	Checkout	2026-06-24T04:35:55.2907858Z ##[group]Getting Git version info
+run-workers	Checkout	2026-06-24T04:35:55.2909509Z Working directory is '/home/runner/work/builder-radar-workers/builder-radar-workers'
+run-workers	Checkout	2026-06-24T04:35:55.2912177Z [command]/usr/bin/git version
+run-workers	Checkout	2026-06-24T04:35:55.2954132Z git version 2.54.0
+run-workers	Checkout	2026-06-24T04:35:55.3009406Z ##[endgroup]
+run-workers	Checkout	2026-06-24T04:35:55.3021513Z Temporarily overriding HOME='/home/runner/work/_temp/66609d10-865c-4aba-95f3-57fd556bdc9f' before making global git config changes
+run-workers	Checkout	2026-06-24T04:35:55.3025076Z Adding repository directory to the temporary git global config as a safe directory
+run-workers	Checkout	2026-06-24T04:35:55.3028171Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/builder-radar-workers/builder-radar-workers
+run-workers	Checkout	2026-06-24T04:35:55.3075968Z Deleting the contents of '/home/runner/work/builder-radar-workers/builder-radar-workers'
+run-workers	Checkout	2026-06-24T04:35:55.3079953Z ##[group]Initializing the repository
+run-workers	Checkout	2026-06-24T04:35:55.3085000Z [command]/usr/bin/git init /home/runner/work/builder-radar-workers/builder-radar-workers
+run-workers	Checkout	2026-06-24T04:35:55.3173162Z hint: Using 'master' as the name for the initial branch. This default branch name
+run-workers	Checkout	2026-06-24T04:35:55.3176095Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+run-workers	Checkout	2026-06-24T04:35:55.3179286Z hint: to use in all of your new repositories, which will suppress this warning,
+run-workers	Checkout	2026-06-24T04:35:55.3181576Z hint: call:
+run-workers	Checkout	2026-06-24T04:35:55.3183004Z hint:
+run-workers	Checkout	2026-06-24T04:35:55.3184674Z hint: 	git config --global init.defaultBranch <name>
+run-workers	Checkout	2026-06-24T04:35:55.3185914Z hint:
+run-workers	Checkout	2026-06-24T04:35:55.3187051Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+run-workers	Checkout	2026-06-24T04:35:55.3189750Z hint: 'development'. The just-created branch can be renamed via this command:
+run-workers	Checkout	2026-06-24T04:35:55.3191580Z hint:
+run-workers	Checkout	2026-06-24T04:35:55.3192439Z hint: 	git branch -m <name>
+run-workers	Checkout	2026-06-24T04:35:55.3193416Z hint:
+run-workers	Checkout	2026-06-24T04:35:55.3194831Z hint: Disable this message with "git config set advice.defaultBranchName false"
+run-workers	Checkout	2026-06-24T04:35:55.3197241Z Initialized empty Git repository in /home/runner/work/builder-radar-workers/builder-radar-workers/.git/
+run-workers	Checkout	2026-06-24T04:35:55.3200938Z [command]/usr/bin/git remote add origin https://github.com/TUSAR-DUTTA/builder-radar-workers
+run-workers	Checkout	2026-06-24T04:35:55.3232604Z ##[endgroup]
+run-workers	Checkout	2026-06-24T04:35:55.3234955Z ##[group]Disabling automatic garbage collection
+run-workers	Checkout	2026-06-24T04:35:55.3236841Z [command]/usr/bin/git config --local gc.auto 0
+run-workers	Checkout	2026-06-24T04:35:55.3265261Z ##[endgroup]
+run-workers	Checkout	2026-06-24T04:35:55.3266799Z ##[group]Setting up auth
+run-workers	Checkout	2026-06-24T04:35:55.3271708Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+run-workers	Checkout	2026-06-24T04:35:55.3304736Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+run-workers	Checkout	2026-06-24T04:35:55.3612297Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+run-workers	Checkout	2026-06-24T04:35:55.3643978Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+run-workers	Checkout	2026-06-24T04:35:55.3860737Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+run-workers	Checkout	2026-06-24T04:35:55.3891787Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+run-workers	Checkout	2026-06-24T04:35:55.4107840Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+run-workers	Checkout	2026-06-24T04:35:55.4141596Z ##[endgroup]
+run-workers	Checkout	2026-06-24T04:35:55.4143279Z ##[group]Fetching the repository
+run-workers	Checkout	2026-06-24T04:35:55.4152026Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +dde005e997f6a6a6cc24a6cd203674292eab6de7:refs/remotes/origin/main
+run-workers	Checkout	2026-06-24T04:35:55.6107776Z From https://github.com/TUSAR-DUTTA/builder-radar-workers
+run-workers	Checkout	2026-06-24T04:35:55.6111469Z  * [new ref]         dde005e997f6a6a6cc24a6cd203674292eab6de7 -> origin/main
+run-workers	Checkout	2026-06-24T04:35:55.6146513Z ##[endgroup]
+run-workers	Checkout	2026-06-24T04:35:55.6151924Z ##[group]Determining the checkout info
+run-workers	Checkout	2026-06-24T04:35:55.6159096Z ##[endgroup]
+run-workers	Checkout	2026-06-24T04:35:55.6164444Z [command]/usr/bin/git sparse-checkout disable
+run-workers	Checkout	2026-06-24T04:35:55.6211722Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+run-workers	Checkout	2026-06-24T04:35:55.6242574Z ##[group]Checking out the ref
+run-workers	Checkout	2026-06-24T04:35:55.6246270Z [command]/usr/bin/git checkout --progress --force -B main refs/remotes/origin/main
+run-workers	Checkout	2026-06-24T04:35:55.6318053Z Switched to a new branch 'main'
+run-workers	Checkout	2026-06-24T04:35:55.6323426Z branch 'main' set up to track 'origin/main'.
+run-workers	Checkout	2026-06-24T04:35:55.6332758Z ##[endgroup]
+run-workers	Checkout	2026-06-24T04:35:55.6399991Z [command]/usr/bin/git log -1 --format=%H
+run-workers	Checkout	2026-06-24T04:35:55.6403863Z dde005e997f6a6a6cc24a6cd203674292eab6de7
+run-workers	Setup Node.js	﻿2026-06-24T04:35:55.6775587Z Node 20 is being deprecated. This workflow is running with Node 24 by default. If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+run-workers	Setup Node.js	2026-06-24T04:35:55.6780705Z ##[group]Run actions/setup-node@v4
+run-workers	Setup Node.js	2026-06-24T04:35:55.6782350Z with:
+run-workers	Setup Node.js	2026-06-24T04:35:55.6783749Z   node-version: 20
+run-workers	Setup Node.js	2026-06-24T04:35:55.6785185Z   cache: npm
+run-workers	Setup Node.js	2026-06-24T04:35:55.6786621Z   always-auth: false
+run-workers	Setup Node.js	2026-06-24T04:35:55.6788112Z   check-latest: false
+run-workers	Setup Node.js	2026-06-24T04:35:55.6794631Z   token: ***
+run-workers	Setup Node.js	2026-06-24T04:35:55.6796050Z env:
+run-workers	Setup Node.js	2026-06-24T04:35:55.6798426Z   DATABASE_URL: ***
+run-workers	Setup Node.js	2026-06-24T04:35:55.6800192Z   NEXT_PUBLIC_SUPABASE_URL: ***
+run-workers	Setup Node.js	2026-06-24T04:35:55.6804216Z   NEXT_PUBLIC_SUPABASE_ANON_KEY: ***
+run-workers	Setup Node.js	2026-06-24T04:35:55.6808160Z   SUPABASE_SERVICE_ROLE_KEY: ***
+run-workers	Setup Node.js	2026-06-24T04:35:55.6809885Z   NEXT_PUBLIC_APP_URL: ***
+run-workers	Setup Node.js	2026-06-24T04:35:55.6812046Z   WORKER_SECRET: ***
+run-workers	Setup Node.js	2026-06-24T04:35:55.6813969Z   PLAYWRIGHT_BROWSER_CHANNEL: chrome
+run-workers	Setup Node.js	2026-06-24T04:35:55.6815636Z   PLAYWRIGHT_HEADLESS: 0
+run-workers	Setup Node.js	2026-06-24T04:35:55.6817283Z   PLAYWRIGHT_DEBUG_DIR: /tmp/playwright_debug
+run-workers	Setup Node.js	2026-06-24T04:35:55.6819176Z   RESEND_API_KEY: ***
+run-workers	Setup Node.js	2026-06-24T04:35:55.6821050Z   RESEND_FROM_EMAIL: ***
+run-workers	Setup Node.js	2026-06-24T04:35:55.6822662Z   ADMIN_ALERT_EMAIL: ***
+run-workers	Setup Node.js	2026-06-24T04:35:55.6824487Z   GROQ_8B_KEY_1: ***
+run-workers	Setup Node.js	2026-06-24T04:35:55.6826315Z   GROQ_8B_KEY_2: ***
+run-workers	Setup Node.js	2026-06-24T04:35:55.6828125Z   GROQ_8B_KEY_3: ***
+run-workers	Setup Node.js	2026-06-24T04:35:55.6829936Z   GROQ_8B_KEY_4: ***
+run-workers	Setup Node.js	2026-06-24T04:35:55.6831933Z   GROQ_70B_KEY_1: ***
+run-workers	Setup Node.js	2026-06-24T04:35:55.6833824Z   GROQ_70B_KEY_2: ***
+run-workers	Setup Node.js	2026-06-24T04:35:55.6836020Z   GROQ_70B_KEY_3: ***
+run-workers	Setup Node.js	2026-06-24T04:35:55.6837808Z   GEMINI_KEY_1: ***
+run-workers	Setup Node.js	2026-06-24T04:35:55.6839557Z   GEMINI_KEY_2: ***
+run-workers	Setup Node.js	2026-06-24T04:35:55.6841470Z   GEMINI_KEY_3: ***
+run-workers	Setup Node.js	2026-06-24T04:35:55.6843243Z   GEMINI_KEY_4: ***
+run-workers	Setup Node.js	2026-06-24T04:35:55.6844980Z   GEMINI_KEY_5: ***
+run-workers	Setup Node.js	2026-06-24T04:35:55.6846714Z   GEMINI_KEY_6: ***
+run-workers	Setup Node.js	2026-06-24T04:35:55.6848397Z   COHERE_KEY_1: ***
+run-workers	Setup Node.js	2026-06-24T04:35:55.6850037Z   COHERE_KEY_2: ***
+run-workers	Setup Node.js	2026-06-24T04:35:55.6851889Z   COHERE_KEY_3: ***
+run-workers	Setup Node.js	2026-06-24T04:35:55.6853534Z   COHERE_KEY_4: ***
+run-workers	Setup Node.js	2026-06-24T04:35:55.6855223Z   COHERE_KEY_5: ***
+run-workers	Setup Node.js	2026-06-24T04:35:55.6856926Z   COHERE_KEY_6: ***
+run-workers	Setup Node.js	2026-06-24T04:35:55.6858621Z   COHERE_KEY_7: ***
+run-workers	Setup Node.js	2026-06-24T04:35:55.6860728Z   OPENROUTER_KEY_1: ***
+run-workers	Setup Node.js	2026-06-24T04:35:55.6862736Z   OPENROUTER_KEY_2: ***
+run-workers	Setup Node.js	2026-06-24T04:35:55.6864731Z   OPENROUTER_KEY_3: ***
+run-workers	Setup Node.js	2026-06-24T04:35:55.6866713Z   OPENROUTER_KEY_4: ***
+run-workers	Setup Node.js	2026-06-24T04:35:55.6868698Z   OPENROUTER_KEY_5: ***
+run-workers	Setup Node.js	2026-06-24T04:35:55.6870833Z   OPENROUTER_KEY_6: ***
+run-workers	Setup Node.js	2026-06-24T04:35:55.6872846Z   OPENROUTER_KEY_7: ***
+run-workers	Setup Node.js	2026-06-24T04:35:55.6874549Z   HF_KEY_1: ***
+run-workers	Setup Node.js	2026-06-24T04:35:55.6876107Z   HF_KEY_2: ***
+run-workers	Setup Node.js	2026-06-24T04:35:55.6877672Z   HF_KEY_3: ***
+run-workers	Setup Node.js	2026-06-24T04:35:55.6879302Z   HF_KEY_4: ***
+run-workers	Setup Node.js	2026-06-24T04:35:55.6881161Z   GITHUB_TOKEN: ***
+run-workers	Setup Node.js	2026-06-24T04:35:55.6882772Z   STACKEXCHANGE_KEY: ***
+run-workers	Setup Node.js	2026-06-24T04:35:55.6884409Z   DEVTO_API_KEY: ***
+run-workers	Setup Node.js	2026-06-24T04:35:55.6886196Z   PRODUCTHUNT_TOKEN: ***
+run-workers	Setup Node.js	2026-06-24T04:35:55.6888015Z   YOUTUBE_API_KEY: ***
+run-workers	Setup Node.js	2026-06-24T04:35:55.6889794Z   GOOGLE_CSE_KEY: ***
+run-workers	Setup Node.js	2026-06-24T04:35:55.6891561Z   GOOGLE_CSE_ID: ***
+run-workers	Setup Node.js	2026-06-24T04:35:55.6893406Z   SOCIALDATA_KEY:  ***
+run-workers	Setup Node.js	2026-06-24T04:35:55.6894949Z   REDDIT_CLIENT_ID: 
+run-workers	Setup Node.js	2026-06-24T04:35:55.6896460Z   REDDIT_CLIENT_SECRET: 
+run-workers	Setup Node.js	2026-06-24T04:35:55.6898177Z   PLAYWRIGHT_PROXY_SERVER: ***
+run-workers	Setup Node.js	2026-06-24T04:35:55.6899859Z   PLAYWRIGHT_PROXY_USERNAME: ***
+run-workers	Setup Node.js	2026-06-24T04:35:55.6901690Z   PLAYWRIGHT_PROXY_PASSWORD: ***
+run-workers	Setup Node.js	2026-06-24T04:35:55.6903400Z   PLAYWRIGHT_SESSIONS_DIR: /tmp/playwright_sessions
+run-workers	Setup Node.js	2026-06-24T04:35:55.6905106Z ##[endgroup]
+run-workers	Setup Node.js	2026-06-24T04:35:55.8287498Z Attempting to download 20...
+run-workers	Setup Node.js	2026-06-24T04:35:55.8388564Z (node:2281) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+run-workers	Setup Node.js	2026-06-24T04:35:55.8391840Z (Use `node --trace-deprecation ...` to show where the warning was created)
+run-workers	Setup Node.js	2026-06-24T04:35:56.1511279Z Acquiring 20.20.2 - x64 from https://github.com/actions/node-versions/releases/download/20.20.2-23521894959/node-20.20.2-linux-x64.tar.gz
+run-workers	Setup Node.js	2026-06-24T04:35:56.4192487Z Extracting ...
+run-workers	Setup Node.js	2026-06-24T04:35:56.4323377Z [command]/usr/bin/tar xz --strip 1 --warning=no-unknown-keyword --overwrite -C /home/runner/work/_temp/6d2aaf4f-a557-4c85-a338-21ce7dd02c62 -f /home/runner/work/_temp/432075da-9ced-4691-bc9a-204f2f0f6cb4
+run-workers	Setup Node.js	2026-06-24T04:35:57.4293595Z Adding to the cache ...
+run-workers	Setup Node.js	2026-06-24T04:35:59.2214221Z ##[group]Environment details
+run-workers	Setup Node.js	2026-06-24T04:35:59.4346351Z node: v20.20.2
+run-workers	Setup Node.js	2026-06-24T04:35:59.4347025Z npm: 10.8.2
+run-workers	Setup Node.js	2026-06-24T04:35:59.4347419Z yarn: 1.22.22
+run-workers	Setup Node.js	2026-06-24T04:35:59.4348231Z ##[endgroup]
+run-workers	Setup Node.js	2026-06-24T04:35:59.4368099Z [command]/opt/hostedtoolcache/node/20.20.2/x64/bin/npm config get cache
+run-workers	Setup Node.js	2026-06-24T04:35:59.5399187Z /home/runner/.npm
+run-workers	Setup Node.js	2026-06-24T04:35:59.6007827Z Cache hit for: node-cache-Linux-x64-npm-665e5d979480c70a99ab87bc27b54bbbacd98f10a9f4f95ee864b4d9cff05dad
+run-workers	Setup Node.js	2026-06-24T04:35:59.6109332Z (node:2281) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+run-workers	Setup Node.js	2026-06-24T04:36:00.6085486Z Received 206736201 of 206736201 (100.0%), 205.4 MBs/sec
+run-workers	Setup Node.js	2026-06-24T04:36:00.6086561Z Cache Size: ~197 MB (206736201 B)
+run-workers	Setup Node.js	2026-06-24T04:36:00.6212045Z [command]/usr/bin/tar -xf /home/runner/work/_temp/753dbc69-545e-400a-b02e-ec9dc7addd61/cache.tzst -P -C /home/runner/work/builder-radar-workers/builder-radar-workers --use-compress-program unzstd
+run-workers	Setup Node.js	2026-06-24T04:36:00.9761826Z Cache restored successfully
+run-workers	Setup Node.js	2026-06-24T04:36:00.9860012Z Cache restored from key: node-cache-Linux-x64-npm-665e5d979480c70a99ab87bc27b54bbbacd98f10a9f4f95ee864b4d9cff05dad
+run-workers	Install dependencies	﻿2026-06-24T04:36:01.0077221Z ##[group]Run npm ci
+run-workers	Install dependencies	2026-06-24T04:36:01.0077709Z ^[[36;1mnpm ci^[[0m
+run-workers	Install dependencies	2026-06-24T04:36:01.0223734Z shell: /usr/bin/bash -e {0}
+run-workers	Install dependencies	2026-06-24T04:36:01.0224188Z env:
+run-workers	Install dependencies	2026-06-24T04:36:01.0225234Z   DATABASE_URL: ***
+run-workers	Install dependencies	2026-06-24T04:36:01.0225808Z   NEXT_PUBLIC_SUPABASE_URL: ***
+run-workers	Install dependencies	2026-06-24T04:36:01.0227358Z   NEXT_PUBLIC_SUPABASE_ANON_KEY: ***
+run-workers	Install dependencies	2026-06-24T04:36:01.0229022Z   SUPABASE_SERVICE_ROLE_KEY: ***
+run-workers	Install dependencies	2026-06-24T04:36:01.0229524Z   NEXT_PUBLIC_APP_URL: ***
+run-workers	Install dependencies	2026-06-24T04:36:01.0230117Z   WORKER_SECRET: ***
+run-workers	Install dependencies	2026-06-24T04:36:01.0230904Z   PLAYWRIGHT_BROWSER_CHANNEL: chrome
+run-workers	Install dependencies	2026-06-24T04:36:01.0231390Z   PLAYWRIGHT_HEADLESS: 0
+run-workers	Install dependencies	2026-06-24T04:36:01.0231851Z   PLAYWRIGHT_DEBUG_DIR: /tmp/playwright_debug
+run-workers	Install dependencies	2026-06-24T04:36:01.0232409Z   RESEND_API_KEY: ***
+run-workers	Install dependencies	2026-06-24T04:36:01.0232919Z   RESEND_FROM_EMAIL: ***
+run-workers	Install dependencies	2026-06-24T04:36:01.0233387Z   ADMIN_ALERT_EMAIL: ***
+run-workers	Install dependencies	2026-06-24T04:36:01.0233959Z   GROQ_8B_KEY_1: ***
+run-workers	Install dependencies	2026-06-24T04:36:01.0234494Z   GROQ_8B_KEY_2: ***
+run-workers	Install dependencies	2026-06-24T04:36:01.0235003Z   GROQ_8B_KEY_3: ***
+run-workers	Install dependencies	2026-06-24T04:36:01.0235547Z   GROQ_8B_KEY_4: ***
+run-workers	Install dependencies	2026-06-24T04:36:01.0236059Z   GROQ_70B_KEY_1: ***
+run-workers	Install dependencies	2026-06-24T04:36:01.0236574Z   GROQ_70B_KEY_2: ***
+run-workers	Install dependencies	2026-06-24T04:36:01.0237077Z   GROQ_70B_KEY_3: ***
+run-workers	Install dependencies	2026-06-24T04:36:01.0237591Z   GEMINI_KEY_1: ***
+run-workers	Install dependencies	2026-06-24T04:36:01.0238096Z   GEMINI_KEY_2: ***
+run-workers	Install dependencies	2026-06-24T04:36:01.0238568Z   GEMINI_KEY_3: ***
+run-workers	Install dependencies	2026-06-24T04:36:01.0239049Z   GEMINI_KEY_4: ***
+run-workers	Install dependencies	2026-06-24T04:36:01.0239526Z   GEMINI_KEY_5: ***
+run-workers	Install dependencies	2026-06-24T04:36:01.0239994Z   GEMINI_KEY_6: ***
+run-workers	Install dependencies	2026-06-24T04:36:01.0240612Z   COHERE_KEY_1: ***
+run-workers	Install dependencies	2026-06-24T04:36:01.0241076Z   COHERE_KEY_2: ***
+run-workers	Install dependencies	2026-06-24T04:36:01.0241523Z   COHERE_KEY_3: ***
+run-workers	Install dependencies	2026-06-24T04:36:01.0241964Z   COHERE_KEY_4: ***
+run-workers	Install dependencies	2026-06-24T04:36:01.0242410Z   COHERE_KEY_5: ***
+run-workers	Install dependencies	2026-06-24T04:36:01.0242858Z   COHERE_KEY_6: ***
+run-workers	Install dependencies	2026-06-24T04:36:01.0243311Z   COHERE_KEY_7: ***
+run-workers	Install dependencies	2026-06-24T04:36:01.0243935Z   OPENROUTER_KEY_1: ***
+run-workers	Install dependencies	2026-06-24T04:36:01.0244534Z   OPENROUTER_KEY_2: ***
+run-workers	Install dependencies	2026-06-24T04:36:01.0245126Z   OPENROUTER_KEY_3: ***
+run-workers	Install dependencies	2026-06-24T04:36:01.0245700Z   OPENROUTER_KEY_4: ***
+run-workers	Install dependencies	2026-06-24T04:36:01.0246321Z   OPENROUTER_KEY_5: ***
+run-workers	Install dependencies	2026-06-24T04:36:01.0246889Z   OPENROUTER_KEY_6: ***
+run-workers	Install dependencies	2026-06-24T04:36:01.0247459Z   OPENROUTER_KEY_7: ***
+run-workers	Install dependencies	2026-06-24T04:36:01.0247909Z   HF_KEY_1: ***
+run-workers	Install dependencies	2026-06-24T04:36:01.0248337Z   HF_KEY_2: ***
+run-workers	Install dependencies	2026-06-24T04:36:01.0248738Z   HF_KEY_3: ***
+run-workers	Install dependencies	2026-06-24T04:36:01.0249147Z   HF_KEY_4: ***
+run-workers	Install dependencies	2026-06-24T04:36:01.0249610Z   GITHUB_TOKEN: ***
+run-workers	Install dependencies	2026-06-24T04:36:01.0250028Z   STACKEXCHANGE_KEY: ***
+run-workers	Install dependencies	2026-06-24T04:36:01.0250597Z   DEVTO_API_KEY: ***
+run-workers	Install dependencies	2026-06-24T04:36:01.0251103Z   PRODUCTHUNT_TOKEN: ***
+run-workers	Install dependencies	2026-06-24T04:36:01.0251596Z   YOUTUBE_API_KEY: ***
+run-workers	Install dependencies	2026-06-24T04:36:01.0252069Z   GOOGLE_CSE_KEY: ***
+run-workers	Install dependencies	2026-06-24T04:36:01.0252472Z   GOOGLE_CSE_ID: ***
+run-workers	Install dependencies	2026-06-24T04:36:01.0252989Z   SOCIALDATA_KEY:  ***
+run-workers	Install dependencies	2026-06-24T04:36:01.0253378Z   REDDIT_CLIENT_ID: 
+run-workers	Install dependencies	2026-06-24T04:36:01.0253762Z   REDDIT_CLIENT_SECRET: 
+run-workers	Install dependencies	2026-06-24T04:36:01.0254221Z   PLAYWRIGHT_PROXY_SERVER: ***
+run-workers	Install dependencies	2026-06-24T04:36:01.0254666Z   PLAYWRIGHT_PROXY_USERNAME: ***
+run-workers	Install dependencies	2026-06-24T04:36:01.0255121Z   PLAYWRIGHT_PROXY_PASSWORD: ***
+run-workers	Install dependencies	2026-06-24T04:36:01.0255591Z   PLAYWRIGHT_SESSIONS_DIR: /tmp/playwright_sessions
+run-workers	Install dependencies	2026-06-24T04:36:01.0256073Z ##[endgroup]
+run-workers	Install dependencies	2026-06-24T04:36:01.5349374Z npm warn EBADENGINE Unsupported engine {
+run-workers	Install dependencies	2026-06-24T04:36:01.5351751Z npm warn EBADENGINE   package: '@atproto/api@0.20.5',
+run-workers	Install dependencies	2026-06-24T04:36:01.5353064Z npm warn EBADENGINE   required: { node: '>=22' },
+run-workers	Install dependencies	2026-06-24T04:36:01.5354075Z npm warn EBADENGINE   current: { node: 'v20.20.2', npm: '10.8.2' }
+run-workers	Install dependencies	2026-06-24T04:36:01.5355072Z npm warn EBADENGINE }
+run-workers	Install dependencies	2026-06-24T04:36:01.5355907Z npm warn EBADENGINE Unsupported engine {
+run-workers	Install dependencies	2026-06-24T04:36:01.5356969Z npm warn EBADENGINE   package: '@atproto/common-web@0.5.0',
+run-workers	Install dependencies	2026-06-24T04:36:01.5358027Z npm warn EBADENGINE   required: { node: '>=22' },
+run-workers	Install dependencies	2026-06-24T04:36:01.5359149Z npm warn EBADENGINE   current: { node: 'v20.20.2', npm: '10.8.2' }
+run-workers	Install dependencies	2026-06-24T04:36:01.5360093Z npm warn EBADENGINE }
+run-workers	Install dependencies	2026-06-24T04:36:01.5361133Z npm warn EBADENGINE Unsupported engine {
+run-workers	Install dependencies	2026-06-24T04:36:01.5362171Z npm warn EBADENGINE   package: '@atproto/lex-data@0.1.1',
+run-workers	Install dependencies	2026-06-24T04:36:01.5363591Z npm warn EBADENGINE   required: { node: '>=22' },
+run-workers	Install dependencies	2026-06-24T04:36:01.5364679Z npm warn EBADENGINE   current: { node: 'v20.20.2', npm: '10.8.2' }
+run-workers	Install dependencies	2026-06-24T04:36:01.5365276Z npm warn EBADENGINE }
+run-workers	Install dependencies	2026-06-24T04:36:01.5365779Z npm warn EBADENGINE Unsupported engine {
+run-workers	Install dependencies	2026-06-24T04:36:01.5366401Z npm warn EBADENGINE   package: '@atproto/lex-json@0.1.0',
+run-workers	Install dependencies	2026-06-24T04:36:01.5367031Z npm warn EBADENGINE   required: { node: '>=22' },
+run-workers	Install dependencies	2026-06-24T04:36:01.5367699Z npm warn EBADENGINE   current: { node: 'v20.20.2', npm: '10.8.2' }
+run-workers	Install dependencies	2026-06-24T04:36:01.5368274Z npm warn EBADENGINE }
+run-workers	Install dependencies	2026-06-24T04:36:01.5368749Z npm warn EBADENGINE Unsupported engine {
+run-workers	Install dependencies	2026-06-24T04:36:01.5369357Z npm warn EBADENGINE   package: '@atproto/lexicon@0.7.1',
+run-workers	Install dependencies	2026-06-24T04:36:01.5369970Z npm warn EBADENGINE   required: { node: '>=22' },
+run-workers	Install dependencies	2026-06-24T04:36:01.5370901Z npm warn EBADENGINE   current: { node: 'v20.20.2', npm: '10.8.2' }
+run-workers	Install dependencies	2026-06-24T04:36:01.5371485Z npm warn EBADENGINE }
+run-workers	Install dependencies	2026-06-24T04:36:01.5371966Z npm warn EBADENGINE Unsupported engine {
+run-workers	Install dependencies	2026-06-24T04:36:01.5372592Z npm warn EBADENGINE   package: '@atproto/syntax@0.6.1',
+run-workers	Install dependencies	2026-06-24T04:36:01.5373195Z npm warn EBADENGINE   required: { node: '>=22' },
+run-workers	Install dependencies	2026-06-24T04:36:01.5373855Z npm warn EBADENGINE   current: { node: 'v20.20.2', npm: '10.8.2' }
+run-workers	Install dependencies	2026-06-24T04:36:01.5374416Z npm warn EBADENGINE }
+run-workers	Install dependencies	2026-06-24T04:36:01.5374885Z npm warn EBADENGINE Unsupported engine {
+run-workers	Install dependencies	2026-06-24T04:36:01.5375468Z npm warn EBADENGINE   package: '@atproto/xrpc@0.8.0',
+run-workers	Install dependencies	2026-06-24T04:36:01.5376064Z npm warn EBADENGINE   required: { node: '>=22' },
+run-workers	Install dependencies	2026-06-24T04:36:01.5376720Z npm warn EBADENGINE   current: { node: 'v20.20.2', npm: '10.8.2' }
+run-workers	Install dependencies	2026-06-24T04:36:01.5377279Z npm warn EBADENGINE }
+run-workers	Install dependencies	2026-06-24T04:36:05.2203406Z npm warn deprecated inflight@1.0.6: This module is not supported, and leaks memory. Do not use it. Check out lru-cache if you want a good and tested way to coalesce async requests by a key value, which is much more comprehensive and powerful.
+run-workers	Install dependencies	2026-06-24T04:36:05.2666225Z npm warn deprecated @esbuild-kit/esm-loader@2.6.5: Merged into tsx: https://tsx.is
+run-workers	Install dependencies	2026-06-24T04:36:05.3375465Z npm warn deprecated rimraf@3.0.2: Rimraf versions prior to v4 are no longer supported
+run-workers	Install dependencies	2026-06-24T04:36:05.4165350Z npm warn deprecated @esbuild-kit/core-utils@3.3.2: Merged into tsx: https://tsx.is
+run-workers	Install dependencies	2026-06-24T04:36:05.4438039Z npm warn deprecated glob@7.2.3: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
+run-workers	Install dependencies	2026-06-24T04:36:05.8574445Z npm warn deprecated node-domexception@1.0.0: Use your platform's native DOMException instead
+run-workers	Install dependencies	2026-06-24T04:36:13.7007881Z 
+run-workers	Install dependencies	2026-06-24T04:36:13.7009042Z added 501 packages, and audited 502 packages in 13s
+run-workers	Install dependencies	2026-06-24T04:36:13.7009705Z 
+run-workers	Install dependencies	2026-06-24T04:36:13.7010138Z 160 packages are looking for funding
+run-workers	Install dependencies	2026-06-24T04:36:13.7011166Z   run `npm fund` for details
+run-workers	Install dependencies	2026-06-24T04:36:13.7661404Z 
+run-workers	Install dependencies	2026-06-24T04:36:13.7683518Z 12 vulnerabilities (1 low, 8 moderate, 3 high)
+run-workers	Install dependencies	2026-06-24T04:36:13.7684256Z 
+run-workers	Install dependencies	2026-06-24T04:36:13.7684896Z To address issues that do not require attention, run:
+run-workers	Install dependencies	2026-06-24T04:36:13.7686290Z   npm audit fix
+run-workers	Install dependencies	2026-06-24T04:36:13.7687310Z 
+run-workers	Install dependencies	2026-06-24T04:36:13.7688249Z To address all issues possible (including breaking changes), run:
+run-workers	Install dependencies	2026-06-24T04:36:13.7689735Z   npm audit fix --force
+run-workers	Install dependencies	2026-06-24T04:36:13.7690247Z 
+run-workers	Install dependencies	2026-06-24T04:36:13.7691058Z Some issues need review, and may require choosing
+run-workers	Install dependencies	2026-06-24T04:36:13.7692369Z a different dependency.
+run-workers	Install dependencies	2026-06-24T04:36:13.7692832Z 
+run-workers	Install dependencies	2026-06-24T04:36:13.7693270Z Run `npm audit` for details.
+run-workers	Fetch private core (read-only, runtime only)	﻿2026-06-24T04:36:13.8548108Z Node 20 is being deprecated. This workflow is running with Node 24 by default. If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8549621Z ##[group]Run actions/checkout@v4
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8550050Z with:
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8550701Z   repository: TUSAR-DUTTA/Builder-Radar
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8551182Z   ref: main
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8551666Z   token: ***
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8552039Z   path: _core
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8552408Z   ssh-strict: true
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8552785Z   ssh-user: git
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8553165Z   persist-credentials: true
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8553576Z   clean: true
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8553965Z   sparse-checkout-cone-mode: true
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8554390Z   fetch-depth: 1
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8554758Z   fetch-tags: false
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8555137Z   show-progress: true
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8555563Z   lfs: false
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8555917Z   submodules: false
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8556289Z   set-safe-directory: true
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8556688Z env:
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8557463Z   DATABASE_URL: ***
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8557975Z   NEXT_PUBLIC_SUPABASE_URL: ***
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8559482Z   NEXT_PUBLIC_SUPABASE_ANON_KEY: ***
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8561333Z   SUPABASE_SERVICE_ROLE_KEY: ***
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8561820Z   NEXT_PUBLIC_APP_URL: ***
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8562397Z   WORKER_SECRET: ***
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8562806Z   PLAYWRIGHT_BROWSER_CHANNEL: chrome
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8563242Z   PLAYWRIGHT_HEADLESS: 0
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8563688Z   PLAYWRIGHT_DEBUG_DIR: /tmp/playwright_debug
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8564216Z   RESEND_API_KEY: ***
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8564692Z   RESEND_FROM_EMAIL: ***
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8565108Z   ADMIN_ALERT_EMAIL: ***
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8565633Z   GROQ_8B_KEY_1: ***
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8566139Z   GROQ_8B_KEY_2: ***
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8566631Z   GROQ_8B_KEY_3: ***
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8567160Z   GROQ_8B_KEY_4: ***
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8567671Z   GROQ_70B_KEY_1: ***
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8568190Z   GROQ_70B_KEY_2: ***
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8568698Z   GROQ_70B_KEY_3: ***
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8569186Z   GEMINI_KEY_1: ***
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8569672Z   GEMINI_KEY_2: ***
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8570150Z   GEMINI_KEY_3: ***
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8570849Z   GEMINI_KEY_4: ***
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8571349Z   GEMINI_KEY_5: ***
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8571830Z   GEMINI_KEY_6: ***
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8572296Z   COHERE_KEY_1: ***
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8572748Z   COHERE_KEY_2: ***
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8573206Z   COHERE_KEY_3: ***
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8573642Z   COHERE_KEY_4: ***
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8574074Z   COHERE_KEY_5: ***
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8574515Z   COHERE_KEY_6: ***
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8574947Z   COHERE_KEY_7: ***
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8575527Z   OPENROUTER_KEY_1: ***
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8576115Z   OPENROUTER_KEY_2: ***
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8576698Z   OPENROUTER_KEY_3: ***
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8577268Z   OPENROUTER_KEY_4: ***
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8577836Z   OPENROUTER_KEY_5: ***
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8578397Z   OPENROUTER_KEY_6: ***
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8578969Z   OPENROUTER_KEY_7: ***
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8579418Z   HF_KEY_1: ***
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8579841Z   HF_KEY_2: ***
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8580248Z   HF_KEY_3: ***
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8580940Z   HF_KEY_4: ***
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8581405Z   GITHUB_TOKEN: ***
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8581822Z   STACKEXCHANGE_KEY: ***
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8582258Z   DEVTO_API_KEY: ***
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8583019Z   PRODUCTHUNT_TOKEN: ***
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8583804Z   YOUTUBE_API_KEY: ***
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8598875Z   GOOGLE_CSE_KEY: ***
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8599379Z   GOOGLE_CSE_ID: ***
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8600014Z   SOCIALDATA_KEY:  ***
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8600709Z   REDDIT_CLIENT_ID: 
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8601152Z   REDDIT_CLIENT_SECRET: 
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8601643Z   PLAYWRIGHT_PROXY_SERVER: ***
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8602129Z   PLAYWRIGHT_PROXY_USERNAME: ***
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8602846Z   PLAYWRIGHT_PROXY_PASSWORD: ***
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8603382Z   PLAYWRIGHT_SESSIONS_DIR: /tmp/playwright_sessions
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.8603896Z ##[endgroup]
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.9424028Z Syncing repository: TUSAR-DUTTA/Builder-Radar
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.9426495Z ##[group]Getting Git version info
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.9427334Z Working directory is '/home/runner/work/builder-radar-workers/builder-radar-workers/_core'
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.9463242Z [command]/usr/bin/git version
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.9499874Z git version 2.54.0
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.9519887Z ##[endgroup]
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.9532628Z Temporarily overriding HOME='/home/runner/work/_temp/e5b1421e-2238-49de-9b29-c9829a1c4047' before making global git config changes
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.9533761Z Adding repository directory to the temporary git global config as a safe directory
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.9538470Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/builder-radar-workers/builder-radar-workers/_core
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.9568531Z ##[group]Initializing the repository
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.9573474Z [command]/usr/bin/git init /home/runner/work/builder-radar-workers/builder-radar-workers/_core
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.9610311Z hint: Using 'master' as the name for the initial branch. This default branch name
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.9612072Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.9613552Z hint: to use in all of your new repositories, which will suppress this warning,
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.9614516Z hint: call:
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.9615187Z hint:
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.9616174Z hint: 	git config --global init.defaultBranch <name>
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.9616821Z hint:
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.9618612Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.9619567Z hint: 'development'. The just-created branch can be renamed via this command:
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.9620161Z hint:
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.9620924Z hint: 	git branch -m <name>
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.9621620Z hint:
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.9622262Z hint: Disable this message with "git config set advice.defaultBranchName false"
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.9623434Z Initialized empty Git repository in /home/runner/work/builder-radar-workers/builder-radar-workers/_core/.git/
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.9625384Z [command]/usr/bin/git remote add origin https://github.com/TUSAR-DUTTA/Builder-Radar
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.9654962Z ##[endgroup]
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.9655647Z ##[group]Disabling automatic garbage collection
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.9659144Z [command]/usr/bin/git config --local gc.auto 0
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.9687141Z ##[endgroup]
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.9687794Z ##[group]Setting up auth
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.9694277Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.9724463Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.9942345Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:13.9975055Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:14.0194341Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:14.0225544Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:14.0443752Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:14.0480919Z ##[endgroup]
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:14.0481914Z ##[group]Fetching the repository
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:14.0495669Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +refs/heads/main*:refs/remotes/origin/main* +refs/tags/main*:refs/tags/main*
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:15.1132149Z From https://github.com/TUSAR-DUTTA/Builder-Radar
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:15.1133722Z  * [new branch]      main       -> origin/main
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:15.1158222Z ##[endgroup]
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:15.1159322Z ##[group]Determining the checkout info
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:15.1168161Z [command]/usr/bin/git branch --list --remote origin/main
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:15.1203769Z   origin/main
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:15.1209203Z ##[endgroup]
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:15.1214333Z [command]/usr/bin/git sparse-checkout disable
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:15.1253164Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:15.1280613Z ##[group]Checking out the ref
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:15.1285300Z [command]/usr/bin/git checkout --progress --force -B main refs/remotes/origin/main
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:15.2826695Z Switched to a new branch 'main'
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:15.2828364Z branch 'main' set up to track 'origin/main'.
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:15.2853623Z ##[endgroup]
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:15.2894753Z [command]/usr/bin/git log -1 --format=%H
+run-workers	Fetch private core (read-only, runtime only)	2026-06-24T04:36:15.2918341Z d01825061c4b04239e8475b9a694bce3a83442c4
+run-workers	Stage private core into src/ (never committed)	﻿2026-06-24T04:36:15.3054084Z ##[group]Run cp -r _core/src/db src/db
+run-workers	Stage private core into src/ (never committed)	2026-06-24T04:36:15.3054632Z ^[[36;1mcp -r _core/src/db src/db^[[0m
+run-workers	Stage private core into src/ (never committed)	2026-06-24T04:36:15.3055096Z ^[[36;1mcp -r _core/src/lib src/lib^[[0m
+run-workers	Stage private core into src/ (never committed)	2026-06-24T04:36:15.3055672Z ^[[36;1mif [ -d _core/src/types ]; then cp -r _core/src/types src/types; fi^[[0m
+run-workers	Stage private core into src/ (never committed)	2026-06-24T04:36:15.3056250Z ^[[36;1mrm -rf _core^[[0m
+run-workers	Stage private core into src/ (never committed)	2026-06-24T04:36:15.3088504Z shell: /usr/bin/bash -e {0}
+run-workers	Stage private core into src/ (never committed)	2026-06-24T04:36:15.3088960Z env:
+run-workers	Stage private core into src/ (never committed)	2026-06-24T04:36:15.3089831Z   DATABASE_URL: ***
+run-workers	Stage private core into src/ (never committed)	2026-06-24T04:36:15.3090629Z   NEXT_PUBLIC_SUPABASE_URL: ***
+run-workers	Stage private core into src/ (never committed)	2026-06-24T04:36:15.3092298Z   NEXT_PUBLIC_SUPABASE_ANON_KEY: ***
+run-workers	Stage private core into src/ (never committed)	2026-06-24T04:36:15.3093994Z   SUPABASE_SERVICE_ROLE_KEY: ***
+run-workers	Stage private core into src/ (never committed)	2026-06-24T04:36:15.3094491Z   NEXT_PUBLIC_APP_URL: ***
+run-workers	Stage private core into src/ (never committed)	2026-06-24T04:36:15.3095071Z   WORKER_SECRET: ***
+run-workers	Stage private core into src/ (never committed)	2026-06-24T04:36:15.3095479Z   PLAYWRIGHT_BROWSER_CHANNEL: chrome
+run-workers	Stage private core into src/ (never committed)	2026-06-24T04:36:15.3095924Z   PLAYWRIGHT_HEADLESS: 0
+run-workers	Stage private core into src/ (never committed)	2026-06-24T04:36:15.3096360Z   PLAYWRIGHT_DEBUG_DIR: /tmp/playwright_debug
+run-workers	Stage private core into src/ (never committed)	2026-06-24T04:36:15.3096908Z   RESEND_API_KEY: ***
+run-workers	Stage private core into src/ (never committed)	2026-06-24T04:36:15.3097422Z   RESEND_FROM_EMAIL: ***
+run-workers	Stage private core into src/ (never committed)	2026-06-24T04:36:15.3097835Z   ADMIN_ALERT_EMAIL: ***
+run-workers	Stage private core into src/ (never committed)	2026-06-24T04:36:15.3098366Z   GROQ_8B_KEY_1: ***
+run-workers	Stage private core into src/ (never committed)	2026-06-24T04:36:15.3098875Z   GROQ_8B_KEY_2: ***
+run-workers	Stage private core into src/ (never committed)	2026-06-24T04:36:15.3099374Z   GROQ_8B_KEY_3: ***
+run-workers	Stage private core into src/ (never committed)	2026-06-24T04:36:15.3099866Z   GROQ_8B_KEY_4: ***
+run-workers	Stage private core into src/ (never committed)	2026-06-24T04:36:15.3100613Z   GROQ_70B_KEY_1: ***
+run-workers	Stage private core into src/ (never committed)	2026-06-24T04:36:15.3101168Z   GROQ_70B_KEY_2: ***
+run-workers	Stage private core into src/ (never committed)	2026-06-24T04:36:15.3101678Z   GROQ_70B_KEY_3: ***
+run-workers	Stage private core into src/ (never committed)	2026-06-24T04:36:15.3102197Z   GEMINI_KEY_1: ***
+run-workers	Stage private core into src/ (never committed)	2026-06-24T04:36:15.3102679Z   GEMINI_KEY_2: ***
+run-workers	Stage private core into src/ (never committed)	2026-06-24T04:36:15.3103167Z   GEMINI_KEY_3: ***
+run-workers	Stage private core into src/ (never committed)	2026-06-24T04:36:15.3103650Z   GEMINI_KEY_4: ***
+run-workers	Stage private core into src/ (never committed)	2026-06-24T04:36:15.3104140Z   GEMINI_KEY_5: ***
+run-workers	Stage private core into src/ (never committed)	2026-06-24T04:36:15.3104608Z   GEMINI_KEY_6: ***
+run-workers	Stage private core into src/ (never committed)	2026-06-24T04:36:15.3105052Z   COHERE_KEY_1: ***
+run-workers	Stage private core into src/ (never committed)	2026-06-24T04:36:15.3105495Z   COHERE_KEY_2: ***
+run-workers	Stage private core into src/ (never committed)	2026-06-24T04:36:15.3105938Z   COHERE_KEY_3: ***
+run-workers	Stage private core into src/ (never committed)	2026-06-24T04:36:15.3106396Z   COHERE_KEY_4: ***
+run-workers	Stage private core into src/ (never committed)	2026-06-24T04:36:15.3106833Z   COHERE_KEY_5: ***
+run-workers	Stage private core into src/ (never committed)	2026-06-24T04:36:15.3107278Z   COHERE_KEY_6: ***
+run-workers	Stage private core into src/ (never committed)	2026-06-24T04:36:15.3107724Z   COHERE_KEY_7: ***
+run-workers	Stage private core into src/ (never committed)	2026-06-24T04:36:15.3108310Z   OPENROUTER_KEY_1: ***
+run-workers	Stage private core into src/ (never committed)	2026-06-24T04:36:15.3108910Z   OPENROUTER_KEY_2: ***
+run-workers	Stage private core into src/ (never committed)	2026-06-24T04:36:15.3109498Z   OPENROUTER_KEY_3: ***
+run-workers	Stage private core into src/ (never committed)	2026-06-24T04:36:15.3110078Z   OPENROUTER_KEY_4: ***
+run-workers	Stage private core into src/ (never committed)	2026-06-24T04:36:15.3110778Z   OPENROUTER_KEY_5: ***
+run-workers	Stage private core into src/ (never committed)	2026-06-24T04:36:15.3111357Z   OPENROUTER_KEY_6: ***
+run-workers	Stage private core into src/ (never committed)	2026-06-24T04:36:15.3112127Z   OPENROUTER_KEY_7: ***
+run-workers	Stage private core into src/ (never committed)	2026-06-24T04:36:15.3112566Z   HF_KEY_1: ***
+run-workers	Stage private core into src/ (never committed)	2026-06-24T04:36:15.3112982Z   HF_KEY_2: ***
+run-workers	Stage private core into src/ (never committed)	2026-06-24T04:36:15.3113389Z   HF_KEY_3: ***
+run-workers	Stage private core into src/ (never committed)	2026-06-24T04:36:15.3113795Z   HF_KEY_4: ***
+run-workers	Stage private core into src/ (never committed)	2026-06-24T04:36:15.3114245Z   GITHUB_TOKEN: ***
+run-workers	Stage private core into src/ (never committed)	2026-06-24T04:36:15.3114667Z   STACKEXCHANGE_KEY: ***
+run-workers	Stage private core into src/ (never committed)	2026-06-24T04:36:15.3115103Z   DEVTO_API_KEY: ***
+run-workers	Stage private core into src/ (never committed)	2026-06-24T04:36:15.3115608Z   PRODUCTHUNT_TOKEN: ***
+run-workers	Stage private core into src/ (never committed)	2026-06-24T04:36:15.3116090Z   YOUTUBE_API_KEY: ***
+run-workers	Stage private core into src/ (never committed)	2026-06-24T04:36:15.3116570Z   GOOGLE_CSE_KEY: ***
+run-workers	Stage private core into src/ (never committed)	2026-06-24T04:36:15.3116971Z   GOOGLE_CSE_ID: ***
+run-workers	Stage private core into src/ (never committed)	2026-06-24T04:36:15.3117499Z   SOCIALDATA_KEY:  ***
+run-workers	Stage private core into src/ (never committed)	2026-06-24T04:36:15.3117892Z   REDDIT_CLIENT_ID: 
+run-workers	Stage private core into src/ (never committed)	2026-06-24T04:36:15.3118271Z   REDDIT_CLIENT_SECRET: 
+run-workers	Stage private core into src/ (never committed)	2026-06-24T04:36:15.3118726Z   PLAYWRIGHT_PROXY_SERVER: ***
+run-workers	Stage private core into src/ (never committed)	2026-06-24T04:36:15.3119171Z   PLAYWRIGHT_PROXY_USERNAME: ***
+run-workers	Stage private core into src/ (never committed)	2026-06-24T04:36:15.3119611Z   PLAYWRIGHT_PROXY_PASSWORD: ***
+run-workers	Stage private core into src/ (never committed)	2026-06-24T04:36:15.3120073Z   PLAYWRIGHT_SESSIONS_DIR: /tmp/playwright_sessions
+run-workers	Stage private core into src/ (never committed)	2026-06-24T04:36:15.3120696Z ##[endgroup]
+run-workers	Install Playwright browsers and dependencies	﻿2026-06-24T04:36:15.3535094Z ##[group]Run npx playwright install --with-deps chromium
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:15.3535735Z ^[[36;1mnpx playwright install --with-deps chromium^[[0m
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:15.3565099Z shell: /usr/bin/bash -e {0}
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:15.3565848Z env:
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:15.3581181Z   DATABASE_URL: ***
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:15.3582007Z   NEXT_PUBLIC_SUPABASE_URL: ***
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:15.3583572Z   NEXT_PUBLIC_SUPABASE_ANON_KEY: ***
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:15.3585225Z   SUPABASE_SERVICE_ROLE_KEY: ***
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:15.3585718Z   NEXT_PUBLIC_APP_URL: ***
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:15.3586316Z   WORKER_SECRET: ***
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:15.3586738Z   PLAYWRIGHT_BROWSER_CHANNEL: chrome
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:15.3587194Z   PLAYWRIGHT_HEADLESS: 0
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:15.3587641Z   PLAYWRIGHT_DEBUG_DIR: /tmp/playwright_debug
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:15.3588195Z   RESEND_API_KEY: ***
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:15.3588688Z   RESEND_FROM_EMAIL: ***
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:15.3589117Z   ADMIN_ALERT_EMAIL: ***
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:15.3589672Z   GROQ_8B_KEY_1: ***
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:15.3590198Z   GROQ_8B_KEY_2: ***
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:15.3591044Z   GROQ_8B_KEY_3: ***
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:15.3591585Z   GROQ_8B_KEY_4: ***
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:15.3592122Z   GROQ_70B_KEY_1: ***
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:15.3592660Z   GROQ_70B_KEY_2: ***
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:15.3593177Z   GROQ_70B_KEY_3: ***
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:15.3593674Z   GEMINI_KEY_1: ***
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:15.3594171Z   GEMINI_KEY_2: ***
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:15.3594657Z   GEMINI_KEY_3: ***
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:15.3595161Z   GEMINI_KEY_4: ***
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:15.3595650Z   GEMINI_KEY_5: ***
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:15.3596127Z   GEMINI_KEY_6: ***
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:15.3596586Z   COHERE_KEY_1: ***
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:15.3597040Z   COHERE_KEY_2: ***
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:15.3597491Z   COHERE_KEY_3: ***
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:15.3597933Z   COHERE_KEY_4: ***
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:15.3598386Z   COHERE_KEY_5: ***
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:15.3598842Z   COHERE_KEY_6: ***
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:15.3599296Z   COHERE_KEY_7: ***
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:15.3599897Z   OPENROUTER_KEY_1: ***
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:15.3600726Z   OPENROUTER_KEY_2: ***
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:15.3601358Z   OPENROUTER_KEY_3: ***
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:15.3601947Z   OPENROUTER_KEY_4: ***
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:15.3602530Z   OPENROUTER_KEY_5: ***
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:15.3603098Z   OPENROUTER_KEY_6: ***
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:15.3603689Z   OPENROUTER_KEY_7: ***
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:15.3604145Z   HF_KEY_1: ***
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:15.3604572Z   HF_KEY_2: ***
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:15.3604991Z   HF_KEY_3: ***
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:15.3605404Z   HF_KEY_4: ***
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:15.3605875Z   GITHUB_TOKEN: ***
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:15.3606313Z   STACKEXCHANGE_KEY: ***
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:15.3606760Z   DEVTO_API_KEY: ***
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:15.3607266Z   PRODUCTHUNT_TOKEN: ***
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:15.3607771Z   YOUTUBE_API_KEY: ***
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:15.3608261Z   GOOGLE_CSE_KEY: ***
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:15.3608672Z   GOOGLE_CSE_ID: ***
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:15.3609198Z   SOCIALDATA_KEY:  ***
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:15.3609589Z   REDDIT_CLIENT_ID: 
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:15.3609980Z   REDDIT_CLIENT_SECRET: 
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:15.3610893Z   PLAYWRIGHT_PROXY_SERVER: ***
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:15.3611378Z   PLAYWRIGHT_PROXY_USERNAME: ***
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:15.3611854Z   PLAYWRIGHT_PROXY_PASSWORD: ***
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:15.3612341Z   PLAYWRIGHT_SESSIONS_DIR: /tmp/playwright_sessions
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:15.3612837Z ##[endgroup]
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:16.1423787Z Installing dependencies...
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:16.1490841Z Switching to root user to install dependencies...
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:16.2335533Z Get:1 file:/etc/apt/apt-mirrors.txt Mirrorlist [144 B]
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:16.3055912Z Hit:6 https://packages.microsoft.com/repos/azure-cli noble InRelease
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:16.3057859Z Get:7 https://packages.microsoft.com/ubuntu/24.04/prod noble InRelease [3600 B]
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:16.3095306Z Get:8 https://dl.google.com/linux/chrome-stable/deb stable InRelease [1825 B]
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:16.3588595Z Hit:2 http://azure.archive.ubuntu.com/ubuntu noble InRelease
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:16.3601750Z Get:3 http://azure.archive.ubuntu.com/ubuntu noble-updates InRelease [126 kB]
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:16.3687691Z Get:4 http://azure.archive.ubuntu.com/ubuntu noble-backports InRelease [126 kB]
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:16.3733576Z Get:5 http://azure.archive.ubuntu.com/ubuntu noble-security InRelease [126 kB]
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:16.4547351Z Get:9 https://packages.microsoft.com/ubuntu/24.04/prod noble/main armhf Packages [11.6 kB]
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:16.4653456Z Get:10 https://packages.microsoft.com/ubuntu/24.04/prod noble/main amd64 Packages [185 kB]
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:16.4721717Z Get:11 https://packages.microsoft.com/ubuntu/24.04/prod noble/main arm64 Packages [154 kB]
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:16.5257305Z Get:12 https://dl.google.com/linux/chrome-stable/deb stable/main amd64 Packages [1215 B]
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:16.6002096Z Get:13 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 Packages [1032 kB]
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:16.6060011Z Get:14 http://azure.archive.ubuntu.com/ubuntu noble-updates/main Translation-en [259 kB]
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:16.6086706Z Get:15 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 Components [180 kB]
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:16.6096785Z Get:16 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 c-n-f Metadata [17.4 kB]
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:16.6107407Z Get:17 http://azure.archive.ubuntu.com/ubuntu noble-updates/universe amd64 Packages [1656 kB]
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:16.6205047Z Get:18 http://azure.archive.ubuntu.com/ubuntu noble-updates/universe Translation-en [326 kB]
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:16.6217967Z Get:19 http://azure.archive.ubuntu.com/ubuntu noble-updates/universe amd64 Components [388 kB]
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:16.6250852Z Get:20 http://azure.archive.ubuntu.com/ubuntu noble-updates/universe amd64 c-n-f Metadata [34.8 kB]
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:16.6263511Z Get:21 http://azure.archive.ubuntu.com/ubuntu noble-updates/multiverse amd64 Components [940 B]
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:16.6551588Z Get:22 http://azure.archive.ubuntu.com/ubuntu noble-backports/main amd64 Components [5744 B]
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:16.7027860Z Get:23 http://azure.archive.ubuntu.com/ubuntu noble-backports/universe amd64 Components [10.5 kB]
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:16.7052113Z Get:24 http://azure.archive.ubuntu.com/ubuntu noble-security/main amd64 Packages [780 kB]
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:16.7091613Z Get:25 http://azure.archive.ubuntu.com/ubuntu noble-security/main Translation-en [178 kB]
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:16.7106969Z Get:26 http://azure.archive.ubuntu.com/ubuntu noble-security/main amd64 Components [44.8 kB]
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:16.7123538Z Get:27 http://azure.archive.ubuntu.com/ubuntu noble-security/main amd64 c-n-f Metadata [11.5 kB]
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:16.7133285Z Get:28 http://azure.archive.ubuntu.com/ubuntu noble-security/universe amd64 Packages [1170 kB]
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:16.7195282Z Get:29 http://azure.archive.ubuntu.com/ubuntu noble-security/universe Translation-en [229 kB]
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:16.7213817Z Get:30 http://azure.archive.ubuntu.com/ubuntu noble-security/universe amd64 Components [76.2 kB]
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:16.7224949Z Get:31 http://azure.archive.ubuntu.com/ubuntu noble-security/universe amd64 c-n-f Metadata [24.1 kB]
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:21.5517570Z Fetched 7161 kB in 1s (6800 kB/s)
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.1652870Z Reading package lists...
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.1886203Z Reading package lists...
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.3177081Z Building dependency tree...
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.3184227Z Reading state information...
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.4418409Z libasound2t64 is already the newest version (1.2.11-1ubuntu0.2).
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.4419377Z libasound2t64 set to manually installed.
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.4420293Z libatk-bridge2.0-0t64 is already the newest version (2.52.0-1build1).
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.4421690Z libatk-bridge2.0-0t64 set to manually installed.
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.4422899Z libatk1.0-0t64 is already the newest version (2.52.0-1build1).
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.4423768Z libatk1.0-0t64 set to manually installed.
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.4424639Z libatspi2.0-0t64 is already the newest version (2.52.0-1build1).
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.4425492Z libatspi2.0-0t64 set to manually installed.
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.4426326Z libcairo2 is already the newest version (1.18.0-3build1).
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.4427134Z libcairo2 set to manually installed.
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.4428379Z libcups2t64 is already the newest version (2.4.7-1.2ubuntu7.14).
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.4429204Z libcups2t64 set to manually installed.
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.4429894Z libdbus-1-3 is already the newest version (1.14.10-4ubuntu4.1).
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.4430713Z libdbus-1-3 set to manually installed.
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.4431410Z libdrm2 is already the newest version (2.4.125-1ubuntu0.1~24.04.2).
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.4432072Z libdrm2 set to manually installed.
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.4432729Z libgbm1 is already the newest version (25.2.8-0ubuntu0.24.04.2).
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.4433368Z libgbm1 set to manually installed.
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.4434032Z libglib2.0-0t64 is already the newest version (2.80.0-6ubuntu3.8).
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.4434709Z libglib2.0-0t64 set to manually installed.
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.4435389Z libnspr4 is already the newest version (2:4.35-1.1build1).
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.4436021Z libnspr4 set to manually installed.
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.4436664Z libnss3 is already the newest version (2:3.98-1ubuntu0.1).
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.4437299Z libnss3 set to manually installed.
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.4437984Z libpango-1.0-0 is already the newest version (1.52.1+ds-1build1).
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.4438671Z libpango-1.0-0 set to manually installed.
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.4439345Z libx11-6 is already the newest version (2:1.8.7-1build1).
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.4439969Z libx11-6 set to manually installed.
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.4440688Z libxcb1 is already the newest version (1.15-1ubuntu2).
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.4441232Z libxcb1 set to manually installed.
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.4441815Z libxcomposite1 is already the newest version (1:0.4.5-1build3).
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.4442404Z libxcomposite1 set to manually installed.
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.4443007Z libxdamage1 is already the newest version (1:1.1.6-1build1).
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.4443578Z libxdamage1 set to manually installed.
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.4444144Z libxext6 is already the newest version (2:1.3.4-1build2).
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.4444700Z libxext6 set to manually installed.
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.4445288Z libxfixes3 is already the newest version (1:6.0.0-2build1).
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.4445857Z libxfixes3 set to manually installed.
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.4446437Z libxkbcommon0 is already the newest version (1.6.0-1build1).
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.4447005Z libxkbcommon0 set to manually installed.
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.4447594Z libxrandr2 is already the newest version (2:1.5.2-2build1).
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.4448153Z libxrandr2 set to manually installed.
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.4448726Z xvfb is already the newest version (2:21.1.12-1ubuntu1.6).
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.4449458Z fonts-noto-color-emoji is already the newest version (2.047-0ubuntu0.24.04.1).
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.4450216Z libfontconfig1 is already the newest version (2.15.0-1.1ubuntu2).
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.4450942Z libfontconfig1 set to manually installed.
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.4451580Z libfreetype6 is already the newest version (2.13.2+dfsg-1ubuntu0.1).
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.4452191Z libfreetype6 set to manually installed.
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.4453563Z fonts-liberation is already the newest version (1:2.1.5-3).
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.4454538Z fonts-liberation set to manually installed.
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.4455450Z The following additional packages will be installed:
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.4456179Z   xfonts-encodings xfonts-utils
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.4456650Z Recommended packages:
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.4457105Z   fonts-ipafont-mincho fonts-tlwg-loma
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.4591117Z The following NEW packages will be installed:
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.4592444Z   fonts-freefont-ttf fonts-ipafont-gothic fonts-tlwg-loma-otf fonts-unifont
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.4596972Z   fonts-wqy-zenhei xfonts-cyrillic xfonts-encodings xfonts-scalable
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.4598060Z   xfonts-utils
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.4758355Z 0 upgraded, 9 newly installed, 0 to remove and 27 not upgraded.
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.4759290Z Need to get 21.1 MB of archives.
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.4760653Z After this operation, 79.5 MB of additional disk space will be used.
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.4761872Z Get:1 file:/etc/apt/apt-mirrors.txt Mirrorlist [144 B]
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.5001587Z Get:2 http://azure.archive.ubuntu.com/ubuntu noble/universe amd64 fonts-ipafont-gothic all 00303-21ubuntu1 [3513 kB]
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.5425044Z Get:3 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 fonts-freefont-ttf all 20211204+svn4273-2 [5641 kB]
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.5953489Z Get:4 http://azure.archive.ubuntu.com/ubuntu noble/universe amd64 fonts-tlwg-loma-otf all 1:0.7.3-1 [107 kB]
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.6036951Z Get:5 http://azure.archive.ubuntu.com/ubuntu noble/universe amd64 fonts-unifont all 1:15.1.01-1build1 [2993 kB]
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.6353655Z Get:6 http://azure.archive.ubuntu.com/ubuntu noble/universe amd64 fonts-wqy-zenhei all 0.9.45-8 [7472 kB]
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.7123752Z Get:7 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 xfonts-encodings all 1:1.0.5-0ubuntu2 [578 kB]
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.7242374Z Get:8 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 xfonts-utils amd64 1:7.7+6build3 [94.4 kB]
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.7322171Z Get:9 http://azure.archive.ubuntu.com/ubuntu noble/universe amd64 xfonts-cyrillic all 1:1.0.5+nmu1 [384 kB]
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.7457084Z Get:10 http://azure.archive.ubuntu.com/ubuntu noble/main amd64 xfonts-scalable all 1:1.0.3-1.3 [304 kB]
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:22.9872728Z Fetched 21.1 MB in 0s (74.6 MB/s)
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:23.0095561Z Selecting previously unselected package fonts-ipafont-gothic.
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:23.0336894Z (Reading database ... 
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:23.0337696Z (Reading database ... 5%
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:23.0338170Z (Reading database ... 10%
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:23.0338631Z (Reading database ... 15%
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:23.0339056Z (Reading database ... 20%
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:23.0339488Z (Reading database ... 25%
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:23.0340821Z (Reading database ... 30%
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:23.0341651Z (Reading database ... 35%
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:23.0342458Z (Reading database ... 40%
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:23.0343260Z (Reading database ... 45%
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:23.0344088Z (Reading database ... 50%
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:23.0386964Z (Reading database ... 55%
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:23.1132543Z (Reading database ... 60%
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:23.3010069Z (Reading database ... 65%
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:23.6507996Z (Reading database ... 70%
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:24.0145645Z (Reading database ... 75%
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:24.0757131Z (Reading database ... 80%
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:24.2706107Z (Reading database ... 85%
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:24.5013853Z (Reading database ... 90%
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:24.6767528Z (Reading database ... 95%
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:24.6768516Z (Reading database ... 100%
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:24.6769476Z (Reading database ... 202324 files and directories currently installed.)
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:24.6830319Z Preparing to unpack .../0-fonts-ipafont-gothic_00303-21ubuntu1_all.deb ...
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:24.7104212Z Unpacking fonts-ipafont-gothic (00303-21ubuntu1) ...
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:25.1524008Z Selecting previously unselected package fonts-freefont-ttf.
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:25.1649549Z Preparing to unpack .../1-fonts-freefont-ttf_20211204+svn4273-2_all.deb ...
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:25.2148423Z Unpacking fonts-freefont-ttf (20211204+svn4273-2) ...
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:25.6309613Z Selecting previously unselected package fonts-tlwg-loma-otf.
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:25.6435112Z Preparing to unpack .../2-fonts-tlwg-loma-otf_1%3a0.7.3-1_all.deb ...
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:25.6442962Z Unpacking fonts-tlwg-loma-otf (1:0.7.3-1) ...
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:25.6652598Z Selecting previously unselected package fonts-unifont.
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:25.6776453Z Preparing to unpack .../3-fonts-unifont_1%3a15.1.01-1build1_all.deb ...
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:25.6784361Z Unpacking fonts-unifont (1:15.1.01-1build1) ...
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:25.7877678Z Selecting previously unselected package fonts-wqy-zenhei.
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:25.8002314Z Preparing to unpack .../4-fonts-wqy-zenhei_0.9.45-8_all.deb ...
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:25.8130484Z Unpacking fonts-wqy-zenhei (0.9.45-8) ...
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:26.2705931Z Selecting previously unselected package xfonts-encodings.
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:26.2829957Z Preparing to unpack .../5-xfonts-encodings_1%3a1.0.5-0ubuntu2_all.deb ...
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:26.2837487Z Unpacking xfonts-encodings (1:1.0.5-0ubuntu2) ...
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:26.3113644Z Selecting previously unselected package xfonts-utils.
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:26.3233316Z Preparing to unpack .../6-xfonts-utils_1%3a7.7+6build3_amd64.deb ...
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:26.3241384Z Unpacking xfonts-utils (1:7.7+6build3) ...
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:26.3976208Z Selecting previously unselected package xfonts-cyrillic.
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:26.4096155Z Preparing to unpack .../7-xfonts-cyrillic_1%3a1.0.5+nmu1_all.deb ...
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:26.4105298Z Unpacking xfonts-cyrillic (1:1.0.5+nmu1) ...
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:26.4439916Z Selecting previously unselected package xfonts-scalable.
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:26.4561963Z Preparing to unpack .../8-xfonts-scalable_1%3a1.0.3-1.3_all.deb ...
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:26.4569385Z Unpacking xfonts-scalable (1:1.0.3-1.3) ...
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:26.4965599Z Setting up fonts-wqy-zenhei (0.9.45-8) ...
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:26.5083032Z Setting up fonts-freefont-ttf (20211204+svn4273-2) ...
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:26.5102989Z Setting up fonts-tlwg-loma-otf (1:0.7.3-1) ...
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:26.5123667Z Setting up xfonts-encodings (1:1.0.5-0ubuntu2) ...
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:26.5143611Z Setting up fonts-ipafont-gothic (00303-21ubuntu1) ...
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:26.5209485Z update-alternatives: using /usr/share/fonts/opentype/ipafont-gothic/ipag.ttf to provide /usr/share/fonts/truetype/fonts-japanese-gothic.ttf (fonts-japanese-gothic.ttf) in auto mode
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:26.5225870Z Setting up fonts-unifont (1:15.1.01-1build1) ...
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:26.5245625Z Setting up xfonts-utils (1:7.7+6build3) ...
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:26.5286196Z Setting up xfonts-cyrillic (1:1.0.5+nmu1) ...
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:26.5567018Z Setting up xfonts-scalable (1:1.0.3-1.3) ...
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:26.5826762Z Processing triggers for man-db (2.12.0-4build2) ...
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:26.5850089Z Not building database; man-db/auto-update is not 'true'.
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:26.5862764Z Processing triggers for fontconfig (2.15.0-1.1ubuntu2) ...
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:27.2784667Z 
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:27.2785673Z Running kernel seems to be up-to-date.
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:27.2786259Z 
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:27.2786681Z No services need to be restarted.
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:27.2787165Z 
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:27.2787587Z No containers need to be restarted.
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:27.2788050Z 
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:27.2788382Z No user sessions are running outdated binaries.
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:27.2788775Z 
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:27.2789245Z No VM guests are running outdated hypervisor (qemu) binaries on this host.
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:27.9849296Z Downloading Chrome for Testing 148.0.7778.96 (playwright chromium v1223) from https://cdn.playwright.dev/builds/cft/148.0.7778.96/linux64/chrome-linux64.zip
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:28.9980247Z |                                                                                |   0% of 175.4 MiB
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:29.2047553Z |■■■■■■■■                                                                        |  10% of 175.4 MiB
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:29.3005712Z |■■■■■■■■■■■■■■■■                                                                |  20% of 175.4 MiB
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:29.3904837Z |■■■■■■■■■■■■■■■■■■■■■■■■                                                        |  30% of 175.4 MiB
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:29.4743538Z |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■                                                |  40% of 175.4 MiB
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:29.5580240Z |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■                                        |  50% of 175.4 MiB
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:29.6352745Z |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■                                |  60% of 175.4 MiB
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:29.7152169Z |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■                        |  70% of 175.4 MiB
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:29.7962712Z |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■                |  80% of 175.4 MiB
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:29.8757150Z |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■        |  90% of 175.4 MiB
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:29.9636397Z |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■| 100% of 175.4 MiB
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:33.4414480Z Chrome for Testing 148.0.7778.96 (playwright chromium v1223) downloaded to /home/runner/.cache/ms-playwright/chromium-1223
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:33.4418481Z Downloading FFmpeg (playwright ffmpeg v1011) from https://cdn.playwright.dev/dbazure/download/playwright/builds/ffmpeg/1011/ffmpeg-linux.zip
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:34.4415774Z |                                                                                |   0% of 2.3 MiB
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:34.4465763Z |■■■■■■■■                                                                        |  10% of 2.3 MiB
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:34.4498986Z |■■■■■■■■■■■■■■■■                                                                |  20% of 2.3 MiB
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:34.4524562Z |■■■■■■■■■■■■■■■■■■■■■■■■                                                        |  30% of 2.3 MiB
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:34.4550707Z |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■                                                |  40% of 2.3 MiB
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:34.4576445Z |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■                                        |  50% of 2.3 MiB
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:34.4598266Z |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■                                |  60% of 2.3 MiB
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:34.4625226Z |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■                        |  70% of 2.3 MiB
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:34.4651826Z |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■                |  80% of 2.3 MiB
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:34.4676359Z |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■        |  90% of 2.3 MiB
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:34.4698749Z |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■| 100% of 2.3 MiB
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:34.5466529Z FFmpeg (playwright ffmpeg v1011) downloaded to /home/runner/.cache/ms-playwright/ffmpeg-1011
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:34.5471151Z Downloading Chrome Headless Shell 148.0.7778.96 (playwright chromium-headless-shell v1223) from https://cdn.playwright.dev/builds/cft/148.0.7778.96/linux64/chrome-headless-shell-linux64.zip
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:35.5386601Z |                                                                                |   0% of 113.2 MiB
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:35.7094820Z |■■■■■■■■                                                                        |  10% of 113.2 MiB
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:35.8185310Z |■■■■■■■■■■■■■■■■                                                                |  20% of 113.2 MiB
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:35.9397422Z |■■■■■■■■■■■■■■■■■■■■■■■■                                                        |  30% of 113.2 MiB
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:36.0212296Z |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■                                                |  40% of 113.2 MiB
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:36.0727887Z |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■                                        |  50% of 113.2 MiB
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:36.1248844Z |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■                                |  60% of 113.2 MiB
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:36.1795920Z |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■                        |  70% of 113.2 MiB
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:36.2636324Z |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■                |  80% of 113.2 MiB
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:36.3845416Z |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■        |  90% of 113.2 MiB
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:36.5014224Z |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■| 100% of 113.2 MiB
+run-workers	Install Playwright browsers and dependencies	2026-06-24T04:36:38.9609425Z Chrome Headless Shell 148.0.7778.96 (playwright chromium-headless-shell v1223) downloaded to /home/runner/.cache/ms-playwright/chromium_headless_shell-1223
+run-workers	Log browser runtime	﻿2026-06-24T04:36:38.9803285Z ##[group]Run google-chrome --version
+run-workers	Log browser runtime	2026-06-24T04:36:38.9803835Z ^[[36;1mgoogle-chrome --version^[[0m
+run-workers	Log browser runtime	2026-06-24T04:36:38.9804291Z ^[[36;1mnpx playwright --version^[[0m
+run-workers	Log browser runtime	2026-06-24T04:36:38.9835885Z shell: /usr/bin/bash -e {0}
+run-workers	Log browser runtime	2026-06-24T04:36:38.9836338Z env:
+run-workers	Log browser runtime	2026-06-24T04:36:38.9837177Z   DATABASE_URL: ***
+run-workers	Log browser runtime	2026-06-24T04:36:38.9837697Z   NEXT_PUBLIC_SUPABASE_URL: ***
+run-workers	Log browser runtime	2026-06-24T04:36:38.9839242Z   NEXT_PUBLIC_SUPABASE_ANON_KEY: ***
+run-workers	Log browser runtime	2026-06-24T04:36:38.9841248Z   SUPABASE_SERVICE_ROLE_KEY: ***
+run-workers	Log browser runtime	2026-06-24T04:36:38.9841762Z   NEXT_PUBLIC_APP_URL: ***
+run-workers	Log browser runtime	2026-06-24T04:36:38.9842348Z   WORKER_SECRET: ***
+run-workers	Log browser runtime	2026-06-24T04:36:38.9842748Z   PLAYWRIGHT_BROWSER_CHANNEL: chrome
+run-workers	Log browser runtime	2026-06-24T04:36:38.9843194Z   PLAYWRIGHT_HEADLESS: 0
+run-workers	Log browser runtime	2026-06-24T04:36:38.9843636Z   PLAYWRIGHT_DEBUG_DIR: /tmp/playwright_debug
+run-workers	Log browser runtime	2026-06-24T04:36:38.9844171Z   RESEND_API_KEY: ***
+run-workers	Log browser runtime	2026-06-24T04:36:38.9844640Z   RESEND_FROM_EMAIL: ***
+run-workers	Log browser runtime	2026-06-24T04:36:38.9845053Z   ADMIN_ALERT_EMAIL: ***
+run-workers	Log browser runtime	2026-06-24T04:36:38.9845576Z   GROQ_8B_KEY_1: ***
+run-workers	Log browser runtime	2026-06-24T04:36:38.9846121Z   GROQ_8B_KEY_2: ***
+run-workers	Log browser runtime	2026-06-24T04:36:38.9846613Z   GROQ_8B_KEY_3: ***
+run-workers	Log browser runtime	2026-06-24T04:36:38.9847111Z   GROQ_8B_KEY_4: ***
+run-workers	Log browser runtime	2026-06-24T04:36:38.9847612Z   GROQ_70B_KEY_1: ***
+run-workers	Log browser runtime	2026-06-24T04:36:38.9848122Z   GROQ_70B_KEY_2: ***
+run-workers	Log browser runtime	2026-06-24T04:36:38.9848824Z   GROQ_70B_KEY_3: ***
+run-workers	Log browser runtime	2026-06-24T04:36:38.9849317Z   GEMINI_KEY_1: ***
+run-workers	Log browser runtime	2026-06-24T04:36:38.9849793Z   GEMINI_KEY_2: ***
+run-workers	Log browser runtime	2026-06-24T04:36:38.9850260Z   GEMINI_KEY_3: ***
+run-workers	Log browser runtime	2026-06-24T04:36:38.9851054Z   GEMINI_KEY_4: ***
+run-workers	Log browser runtime	2026-06-24T04:36:38.9851532Z   GEMINI_KEY_5: ***
+run-workers	Log browser runtime	2026-06-24T04:36:38.9852031Z   GEMINI_KEY_6: ***
+run-workers	Log browser runtime	2026-06-24T04:36:38.9852471Z   COHERE_KEY_1: ***
+run-workers	Log browser runtime	2026-06-24T04:36:38.9852903Z   COHERE_KEY_2: ***
+run-workers	Log browser runtime	2026-06-24T04:36:38.9853344Z   COHERE_KEY_3: ***
+run-workers	Log browser runtime	2026-06-24T04:36:38.9853792Z   COHERE_KEY_4: ***
+run-workers	Log browser runtime	2026-06-24T04:36:38.9854233Z   COHERE_KEY_5: ***
+run-workers	Log browser runtime	2026-06-24T04:36:38.9854673Z   COHERE_KEY_6: ***
+run-workers	Log browser runtime	2026-06-24T04:36:38.9855104Z   COHERE_KEY_7: ***
+run-workers	Log browser runtime	2026-06-24T04:36:38.9855682Z   OPENROUTER_KEY_1: ***
+run-workers	Log browser runtime	2026-06-24T04:36:38.9856280Z   OPENROUTER_KEY_2: ***
+run-workers	Log browser runtime	2026-06-24T04:36:38.9856875Z   OPENROUTER_KEY_3: ***
+run-workers	Log browser runtime	2026-06-24T04:36:38.9857443Z   OPENROUTER_KEY_4: ***
+run-workers	Log browser runtime	2026-06-24T04:36:38.9858004Z   OPENROUTER_KEY_5: ***
+run-workers	Log browser runtime	2026-06-24T04:36:38.9858564Z   OPENROUTER_KEY_6: ***
+run-workers	Log browser runtime	2026-06-24T04:36:38.9859142Z   OPENROUTER_KEY_7: ***
+run-workers	Log browser runtime	2026-06-24T04:36:38.9859598Z   HF_KEY_1: ***
+run-workers	Log browser runtime	2026-06-24T04:36:38.9860012Z   HF_KEY_2: ***
+run-workers	Log browser runtime	2026-06-24T04:36:38.9860622Z   HF_KEY_3: ***
+run-workers	Log browser runtime	2026-06-24T04:36:38.9861042Z   HF_KEY_4: ***
+run-workers	Log browser runtime	2026-06-24T04:36:38.9861506Z   GITHUB_TOKEN: ***
+run-workers	Log browser runtime	2026-06-24T04:36:38.9861921Z   STACKEXCHANGE_KEY: ***
+run-workers	Log browser runtime	2026-06-24T04:36:38.9862346Z   DEVTO_API_KEY: ***
+run-workers	Log browser runtime	2026-06-24T04:36:38.9862845Z   PRODUCTHUNT_TOKEN: ***
+run-workers	Log browser runtime	2026-06-24T04:36:38.9863326Z   YOUTUBE_API_KEY: ***
+run-workers	Log browser runtime	2026-06-24T04:36:38.9863797Z   GOOGLE_CSE_KEY: ***
+run-workers	Log browser runtime	2026-06-24T04:36:38.9864197Z   GOOGLE_CSE_ID: ***
+run-workers	Log browser runtime	2026-06-24T04:36:38.9864706Z   SOCIALDATA_KEY:  ***
+run-workers	Log browser runtime	2026-06-24T04:36:38.9865094Z   REDDIT_CLIENT_ID: 
+run-workers	Log browser runtime	2026-06-24T04:36:38.9865472Z   REDDIT_CLIENT_SECRET: 
+run-workers	Log browser runtime	2026-06-24T04:36:38.9865919Z   PLAYWRIGHT_PROXY_SERVER: ***
+run-workers	Log browser runtime	2026-06-24T04:36:38.9866368Z   PLAYWRIGHT_PROXY_USERNAME: ***
+run-workers	Log browser runtime	2026-06-24T04:36:38.9866818Z   PLAYWRIGHT_PROXY_PASSWORD: ***
+run-workers	Log browser runtime	2026-06-24T04:36:38.9867279Z   PLAYWRIGHT_SESSIONS_DIR: /tmp/playwright_sessions
+run-workers	Log browser runtime	2026-06-24T04:36:38.9867755Z ##[endgroup]
+run-workers	Log browser runtime	2026-06-24T04:36:40.4359118Z Google Chrome 149.0.7827.114 
+run-workers	Log browser runtime	2026-06-24T04:36:41.2192424Z Version 1.60.0
+run-workers	Restore sessions from secrets	﻿2026-06-24T04:36:41.2402437Z ##[group]Run mkdir -p /tmp/playwright_sessions
+run-workers	Restore sessions from secrets	2026-06-24T04:36:41.2403719Z ^[[36;1mmkdir -p /tmp/playwright_sessions^[[0m
+run-workers	Restore sessions from secrets	2026-06-24T04:36:41.2404219Z ^[[36;1mmkdir -p /tmp/playwright_debug^[[0m
+run-workers	Restore sessions from secrets	2026-06-24T04:36:41.4590651Z ^[[36;1mif [ -n "***" ]; then^[[0m
+run-workers	Restore sessions from secrets	2026-06-24T04:36:41.6773040Z ^[[36;1m  echo "***" | base64 -d > /tmp/playwright_sessions/google_auth_state.json^[[0m
+run-workers	Restore sessions from secrets	2026-06-24T04:36:41.6773693Z ^[[36;1m  echo "Google AIO session restored"^[[0m
+run-workers	Restore sessions from secrets	2026-06-24T04:36:41.6774149Z ^[[36;1mfi^[[0m
+run-workers	Restore sessions from secrets	2026-06-24T04:36:41.6805638Z shell: /usr/bin/bash -e {0}
+run-workers	Restore sessions from secrets	2026-06-24T04:36:41.6806071Z env:
+run-workers	Restore sessions from secrets	2026-06-24T04:36:41.6806937Z   DATABASE_URL: ***
+run-workers	Restore sessions from secrets	2026-06-24T04:36:41.6807485Z   NEXT_PUBLIC_SUPABASE_URL: ***
+run-workers	Restore sessions from secrets	2026-06-24T04:36:41.6809124Z   NEXT_PUBLIC_SUPABASE_ANON_KEY: ***
+run-workers	Restore sessions from secrets	2026-06-24T04:36:41.6811021Z   SUPABASE_SERVICE_ROLE_KEY: ***
+run-workers	Restore sessions from secrets	2026-06-24T04:36:41.6811532Z   NEXT_PUBLIC_APP_URL: ***
+run-workers	Restore sessions from secrets	2026-06-24T04:36:41.6812148Z   WORKER_SECRET: ***
+run-workers	Restore sessions from secrets	2026-06-24T04:36:41.6812563Z   PLAYWRIGHT_BROWSER_CHANNEL: chrome
+run-workers	Restore sessions from secrets	2026-06-24T04:36:41.6813017Z   PLAYWRIGHT_HEADLESS: 0
+run-workers	Restore sessions from secrets	2026-06-24T04:36:41.6813496Z   PLAYWRIGHT_DEBUG_DIR: /tmp/playwright_debug
+run-workers	Restore sessions from secrets	2026-06-24T04:36:41.6814054Z   RESEND_API_KEY: ***
+run-workers	Restore sessions from secrets	2026-06-24T04:36:41.6814547Z   RESEND_FROM_EMAIL: ***
+run-workers	Restore sessions from secrets	2026-06-24T04:36:41.6814980Z   ADMIN_ALERT_EMAIL: ***
+run-workers	Restore sessions from secrets	2026-06-24T04:36:41.6815518Z   GROQ_8B_KEY_1: ***
+run-workers	Restore sessions from secrets	2026-06-24T04:36:41.6816048Z   GROQ_8B_KEY_2: ***
+run-workers	Restore sessions from secrets	2026-06-24T04:36:41.6816563Z   GROQ_8B_KEY_3: ***
+run-workers	Restore sessions from secrets	2026-06-24T04:36:41.6817090Z   GROQ_8B_KEY_4: ***
+run-workers	Restore sessions from secrets	2026-06-24T04:36:41.6817612Z   GROQ_70B_KEY_1: ***
+run-workers	Restore sessions from secrets	2026-06-24T04:36:41.6818138Z   GROQ_70B_KEY_2: ***
+run-workers	Restore sessions from secrets	2026-06-24T04:36:41.6818664Z   GROQ_70B_KEY_3: ***
+run-workers	Restore sessions from secrets	2026-06-24T04:36:41.6819176Z   GEMINI_KEY_1: ***
+run-workers	Restore sessions from secrets	2026-06-24T04:36:41.6819673Z   GEMINI_KEY_2: ***
+run-workers	Restore sessions from secrets	2026-06-24T04:36:41.6820151Z   GEMINI_KEY_3: ***
+run-workers	Restore sessions from secrets	2026-06-24T04:36:41.6820769Z   GEMINI_KEY_4: ***
+run-workers	Restore sessions from secrets	2026-06-24T04:36:41.6821263Z   GEMINI_KEY_5: ***
+run-workers	Restore sessions from secrets	2026-06-24T04:36:41.6821747Z   GEMINI_KEY_6: ***
+run-workers	Restore sessions from secrets	2026-06-24T04:36:41.6822435Z   COHERE_KEY_1: ***
+run-workers	Restore sessions from secrets	2026-06-24T04:36:41.6822881Z   COHERE_KEY_2: ***
+run-workers	Restore sessions from secrets	2026-06-24T04:36:41.6823329Z   COHERE_KEY_3: ***
+run-workers	Restore sessions from secrets	2026-06-24T04:36:41.6823773Z   COHERE_KEY_4: ***
+run-workers	Restore sessions from secrets	2026-06-24T04:36:41.6824218Z   COHERE_KEY_5: ***
+run-workers	Restore sessions from secrets	2026-06-24T04:36:41.6824670Z   COHERE_KEY_6: ***
+run-workers	Restore sessions from secrets	2026-06-24T04:36:41.6825135Z   COHERE_KEY_7: ***
+run-workers	Restore sessions from secrets	2026-06-24T04:36:41.6825747Z   OPENROUTER_KEY_1: ***
+run-workers	Restore sessions from secrets	2026-06-24T04:36:41.6826369Z   OPENROUTER_KEY_2: ***
+run-workers	Restore sessions from secrets	2026-06-24T04:36:41.6826985Z   OPENROUTER_KEY_3: ***
+run-workers	Restore sessions from secrets	2026-06-24T04:36:41.6827582Z   OPENROUTER_KEY_4: ***
+run-workers	Restore sessions from secrets	2026-06-24T04:36:41.6828181Z   OPENROUTER_KEY_5: ***
+run-workers	Restore sessions from secrets	2026-06-24T04:36:41.6828774Z   OPENROUTER_KEY_6: ***
+run-workers	Restore sessions from secrets	2026-06-24T04:36:41.6829375Z   OPENROUTER_KEY_7: ***
+run-workers	Restore sessions from secrets	2026-06-24T04:36:41.6829821Z   HF_KEY_1: ***
+run-workers	Restore sessions from secrets	2026-06-24T04:36:41.6830242Z   HF_KEY_2: ***
+run-workers	Restore sessions from secrets	2026-06-24T04:36:41.6830787Z   HF_KEY_3: ***
+run-workers	Restore sessions from secrets	2026-06-24T04:36:41.6831200Z   HF_KEY_4: ***
+run-workers	Restore sessions from secrets	2026-06-24T04:36:41.6831674Z   GITHUB_TOKEN: ***
+run-workers	Restore sessions from secrets	2026-06-24T04:36:41.6832110Z   STACKEXCHANGE_KEY: ***
+run-workers	Restore sessions from secrets	2026-06-24T04:36:41.6832557Z   DEVTO_API_KEY: ***
+run-workers	Restore sessions from secrets	2026-06-24T04:36:41.6833073Z   PRODUCTHUNT_TOKEN: ***
+run-workers	Restore sessions from secrets	2026-06-24T04:36:41.6833567Z   YOUTUBE_API_KEY: ***
+run-workers	Restore sessions from secrets	2026-06-24T04:36:41.6834049Z   GOOGLE_CSE_KEY: ***
+run-workers	Restore sessions from secrets	2026-06-24T04:36:41.6834452Z   GOOGLE_CSE_ID: ***
+run-workers	Restore sessions from secrets	2026-06-24T04:36:41.6834987Z   SOCIALDATA_KEY:  ***
+run-workers	Restore sessions from secrets	2026-06-24T04:36:41.6835376Z   REDDIT_CLIENT_ID: 
+run-workers	Restore sessions from secrets	2026-06-24T04:36:41.6835755Z   REDDIT_CLIENT_SECRET: 
+run-workers	Restore sessions from secrets	2026-06-24T04:36:41.6836217Z   PLAYWRIGHT_PROXY_SERVER: ***
+run-workers	Restore sessions from secrets	2026-06-24T04:36:41.6836669Z   PLAYWRIGHT_PROXY_USERNAME: ***
+run-workers	Restore sessions from secrets	2026-06-24T04:36:41.6837121Z   PLAYWRIGHT_PROXY_PASSWORD: ***
+run-workers	Restore sessions from secrets	2026-06-24T04:36:41.6837592Z   PLAYWRIGHT_SESSIONS_DIR: /tmp/playwright_sessions
+run-workers	Restore sessions from secrets	2026-06-24T04:36:41.6838103Z ##[endgroup]
+run-workers	Restore sessions from secrets	2026-06-24T04:36:41.6956847Z Google AIO session restored
+run-workers	Run workers	﻿2026-06-24T04:36:41.6990933Z ##[group]Run xvfb-run -a npx tsx src/workers/runner.ts
+run-workers	Run workers	2026-06-24T04:36:41.6991633Z ^[[36;1mxvfb-run -a npx tsx src/workers/runner.ts^[[0m
+run-workers	Run workers	2026-06-24T04:36:41.7019664Z shell: /usr/bin/bash -e {0}
+run-workers	Run workers	2026-06-24T04:36:41.7020093Z env:
+run-workers	Run workers	2026-06-24T04:36:41.7021054Z   DATABASE_URL: ***
+run-workers	Run workers	2026-06-24T04:36:41.7021584Z   NEXT_PUBLIC_SUPABASE_URL: ***
+run-workers	Run workers	2026-06-24T04:36:41.7023124Z   NEXT_PUBLIC_SUPABASE_ANON_KEY: ***
+run-workers	Run workers	2026-06-24T04:36:41.7024761Z   SUPABASE_SERVICE_ROLE_KEY: ***
+run-workers	Run workers	2026-06-24T04:36:41.7025249Z   NEXT_PUBLIC_APP_URL: ***
+run-workers	Run workers	2026-06-24T04:36:41.7025820Z   WORKER_SECRET: ***
+run-workers	Run workers	2026-06-24T04:36:41.7026230Z   PLAYWRIGHT_BROWSER_CHANNEL: chrome
+run-workers	Run workers	2026-06-24T04:36:41.7026682Z   PLAYWRIGHT_HEADLESS: 0
+run-workers	Run workers	2026-06-24T04:36:41.7027123Z   PLAYWRIGHT_DEBUG_DIR: /tmp/playwright_debug
+run-workers	Run workers	2026-06-24T04:36:41.7027661Z   RESEND_API_KEY: ***
+run-workers	Run workers	2026-06-24T04:36:41.7028139Z   RESEND_FROM_EMAIL: ***
+run-workers	Run workers	2026-06-24T04:36:41.7028558Z   ADMIN_ALERT_EMAIL: ***
+run-workers	Run workers	2026-06-24T04:36:41.7029081Z   GROQ_8B_KEY_1: ***
+run-workers	Run workers	2026-06-24T04:36:41.7029584Z   GROQ_8B_KEY_2: ***
+run-workers	Run workers	2026-06-24T04:36:41.7030106Z   GROQ_8B_KEY_3: ***
+run-workers	Run workers	2026-06-24T04:36:41.7030953Z   GROQ_8B_KEY_4: ***
+run-workers	Run workers	2026-06-24T04:36:41.7031493Z   GROQ_70B_KEY_1: ***
+run-workers	Run workers	2026-06-24T04:36:41.7032022Z   GROQ_70B_KEY_2: ***
+run-workers	Run workers	2026-06-24T04:36:41.7032584Z   GROQ_70B_KEY_3: ***
+run-workers	Run workers	2026-06-24T04:36:41.7033103Z   GEMINI_KEY_1: ***
+run-workers	Run workers	2026-06-24T04:36:41.7033572Z   GEMINI_KEY_2: ***
+run-workers	Run workers	2026-06-24T04:36:41.7034036Z   GEMINI_KEY_3: ***
+run-workers	Run workers	2026-06-24T04:36:41.7034505Z   GEMINI_KEY_4: ***
+run-workers	Run workers	2026-06-24T04:36:41.7034964Z   GEMINI_KEY_5: ***
+run-workers	Run workers	2026-06-24T04:36:41.7035421Z   GEMINI_KEY_6: ***
+run-workers	Run workers	2026-06-24T04:36:41.7035854Z   COHERE_KEY_1: ***
+run-workers	Run workers	2026-06-24T04:36:41.7036285Z   COHERE_KEY_2: ***
+run-workers	Run workers	2026-06-24T04:36:41.7036717Z   COHERE_KEY_3: ***
+run-workers	Run workers	2026-06-24T04:36:41.7037146Z   COHERE_KEY_4: ***
+run-workers	Run workers	2026-06-24T04:36:41.7037570Z   COHERE_KEY_5: ***
+run-workers	Run workers	2026-06-24T04:36:41.7038002Z   COHERE_KEY_6: ***
+run-workers	Run workers	2026-06-24T04:36:41.7038436Z   COHERE_KEY_7: ***
+run-workers	Run workers	2026-06-24T04:36:41.7039009Z   OPENROUTER_KEY_1: ***
+run-workers	Run workers	2026-06-24T04:36:41.7039600Z   OPENROUTER_KEY_2: ***
+run-workers	Run workers	2026-06-24T04:36:41.7040191Z   OPENROUTER_KEY_3: ***
+run-workers	Run workers	2026-06-24T04:36:41.7040915Z   OPENROUTER_KEY_4: ***
+run-workers	Run workers	2026-06-24T04:36:41.7041482Z   OPENROUTER_KEY_5: ***
+run-workers	Run workers	2026-06-24T04:36:41.7042042Z   OPENROUTER_KEY_6: ***
+run-workers	Run workers	2026-06-24T04:36:41.7042607Z   OPENROUTER_KEY_7: ***
+run-workers	Run workers	2026-06-24T04:36:41.7043233Z   HF_KEY_1: ***
+run-workers	Run workers	2026-06-24T04:36:41.7043646Z   HF_KEY_2: ***
+run-workers	Run workers	2026-06-24T04:36:41.7044048Z   HF_KEY_3: ***
+run-workers	Run workers	2026-06-24T04:36:41.7044449Z   HF_KEY_4: ***
+run-workers	Run workers	2026-06-24T04:36:41.7044914Z   GITHUB_TOKEN: ***
+run-workers	Run workers	2026-06-24T04:36:41.7045329Z   STACKEXCHANGE_KEY: ***
+run-workers	Run workers	2026-06-24T04:36:41.7045760Z   DEVTO_API_KEY: ***
+run-workers	Run workers	2026-06-24T04:36:41.7046254Z   PRODUCTHUNT_TOKEN: ***
+run-workers	Run workers	2026-06-24T04:36:41.7046728Z   YOUTUBE_API_KEY: ***
+run-workers	Run workers	2026-06-24T04:36:41.7047192Z   GOOGLE_CSE_KEY: ***
+run-workers	Run workers	2026-06-24T04:36:41.7047583Z   GOOGLE_CSE_ID: ***
+run-workers	Run workers	2026-06-24T04:36:41.7048100Z   SOCIALDATA_KEY:  ***
+run-workers	Run workers	2026-06-24T04:36:41.7048478Z   REDDIT_CLIENT_ID: 
+run-workers	Run workers	2026-06-24T04:36:41.7048852Z   REDDIT_CLIENT_SECRET: 
+run-workers	Run workers	2026-06-24T04:36:41.7049300Z   PLAYWRIGHT_PROXY_SERVER: ***
+run-workers	Run workers	2026-06-24T04:36:41.7049735Z   PLAYWRIGHT_PROXY_USERNAME: ***
+run-workers	Run workers	2026-06-24T04:36:41.7050177Z   PLAYWRIGHT_PROXY_PASSWORD: ***
+run-workers	Run workers	2026-06-24T04:36:41.7050760Z   PLAYWRIGHT_SESSIONS_DIR: /tmp/playwright_sessions
+run-workers	Run workers	2026-06-24T04:36:41.7051249Z   SCRAPE_PROJECT_ID: 
+run-workers	Run workers	2026-06-24T04:36:41.7051644Z   SCRAPE_SOURCES: google-aio
+run-workers	Run workers	2026-06-24T04:36:41.7052042Z ##[endgroup]
+run-workers	Run workers	2026-06-24T04:36:43.4837620Z [session-loader] Using existing Google AIO session file at /tmp/playwright_sessions/google_auth_state.json
+run-workers	Run workers	2026-06-24T04:36:46.5643046Z Injecting test prompt...
+run-workers	Run workers	2026-06-24T04:36:46.5679287Z [scrape-cron] project "BuilderRadar" failed: TypeError: Assignment to constant variable.
+run-workers	Run workers	2026-06-24T04:36:46.5681887Z     at runGeoForProject (/home/runner/work/builder-radar-workers/builder-radar-workers/src/workers/runner.ts:121:3)
+run-workers	Run workers	2026-06-24T04:36:46.5683996Z     at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+run-workers	Run workers	2026-06-24T04:36:46.5685760Z     at async runScheduledScrapes (/home/runner/work/builder-radar-workers/builder-radar-workers/src/workers/runner.ts:292:7)
+run-workers	Run workers	2026-06-24T04:36:46.5687756Z     at async main (/home/runner/work/builder-radar-workers/builder-radar-workers/src/workers/runner.ts:329:3)
+run-workers	Post Fetch private core (read-only, runtime only)	﻿2026-06-24T04:36:47.0559717Z Node 20 is being deprecated. This workflow is running with Node 24 by default. If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+run-workers	Post Fetch private core (read-only, runtime only)	2026-06-24T04:36:47.0561728Z Post job cleanup.
+run-workers	Post Setup Node.js	﻿2026-06-24T04:36:47.1449821Z Node 20 is being deprecated. This workflow is running with Node 24 by default. If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+run-workers	Post Setup Node.js	2026-06-24T04:36:47.1451596Z Post job cleanup.
+run-workers	Post Setup Node.js	2026-06-24T04:36:47.2619185Z (node:3335) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+run-workers	Post Setup Node.js	2026-06-24T04:36:47.2621301Z (Use `node --trace-deprecation ...` to show where the warning was created)
+run-workers	Post Setup Node.js	2026-06-24T04:36:47.2623760Z Cache hit occurred on the primary key node-cache-Linux-x64-npm-665e5d979480c70a99ab87bc27b54bbbacd98f10a9f4f95ee864b4d9cff05dad, not saving cache.
+run-workers	Post Checkout	﻿2026-06-24T04:36:47.2780839Z Node 20 is being deprecated. This workflow is running with Node 24 by default. If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+run-workers	Post Checkout	2026-06-24T04:36:47.2782312Z Post job cleanup.
+run-workers	Post Checkout	2026-06-24T04:36:47.3606161Z [command]/usr/bin/git version
+run-workers	Post Checkout	2026-06-24T04:36:47.3641981Z git version 2.54.0
+run-workers	Post Checkout	2026-06-24T04:36:47.3680652Z Temporarily overriding HOME='/home/runner/work/_temp/96bf36f6-aaea-4121-b53e-ad2553ba677c' before making global git config changes
+run-workers	Post Checkout	2026-06-24T04:36:47.3682433Z Adding repository directory to the temporary git global config as a safe directory
+run-workers	Post Checkout	2026-06-24T04:36:47.3687310Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/builder-radar-workers/builder-radar-workers
+run-workers	Post Checkout	2026-06-24T04:36:47.3723489Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+run-workers	Post Checkout	2026-06-24T04:36:47.3756204Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+run-workers	Post Checkout	2026-06-24T04:36:47.3984061Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+run-workers	Post Checkout	2026-06-24T04:36:47.4012015Z http.https://github.com/.extraheader
+run-workers	Post Checkout	2026-06-24T04:36:47.4024979Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+run-workers	Post Checkout	2026-06-24T04:36:47.4056274Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+run-workers	Post Checkout	2026-06-24T04:36:47.4307031Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+run-workers	Post Checkout	2026-06-24T04:36:47.4352327Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+run-workers	Complete job	﻿2026-06-24T04:36:47.4692242Z Cleaning up orphan processes
+run-workers	Complete job	2026-06-24T04:36:47.5021089Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, actions/setup-node@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/

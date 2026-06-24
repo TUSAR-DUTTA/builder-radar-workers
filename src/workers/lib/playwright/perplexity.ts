@@ -12,11 +12,16 @@ export async function closePerplexityBrowser() {
 export async function scrapePerplexityPrompt(prompt: string): Promise<{ text: string; citations: { url: string; title?: string }[] }> {
   if (!sharedPerplexityBrowser) {
     const runtime = await launchSeededPersistentContext('perplexity');
-    const ctx = runtime.context;
-    const page = await ctx.newPage();
-    await page.goto('https://www.perplexity.ai/', { waitUntil: 'domcontentloaded', timeout: 45_000 });
-    await page.waitForTimeout(2500);
-    sharedPerplexityBrowser = { runtime, page };
+    try {
+      const ctx = runtime.context;
+      const page = await ctx.newPage();
+      await page.goto('https://www.perplexity.ai/', { waitUntil: 'domcontentloaded', timeout: 45_000 });
+      await page.waitForTimeout(2500);
+      sharedPerplexityBrowser = { runtime, page };
+    } catch (err) {
+      await runtime.close().catch(() => {});
+      throw err;
+    }
   }
 
   const { page } = sharedPerplexityBrowser;

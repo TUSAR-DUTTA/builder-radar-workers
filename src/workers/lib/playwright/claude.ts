@@ -12,11 +12,16 @@ export async function closeClaudeBrowser() {
 export async function scrapeClaudePrompt(prompt: string): Promise<{ text: string; citations: { url: string; title?: string }[] }> {
   if (!sharedClaudeBrowser) {
     const runtime = await launchSeededPersistentContext('claude');
-    const ctx = runtime.context;
-    const page = await ctx.newPage();
-    await page.goto('https://claude.ai/new', { waitUntil: 'domcontentloaded', timeout: 45_000 });
-    await page.waitForTimeout(2500);
-    sharedClaudeBrowser = { runtime, page };
+    try {
+      const ctx = runtime.context;
+      const page = await ctx.newPage();
+      await page.goto('https://claude.ai/new', { waitUntil: 'domcontentloaded', timeout: 45_000 });
+      await page.waitForTimeout(2500);
+      sharedClaudeBrowser = { runtime, page };
+    } catch (err) {
+      await runtime.close().catch(() => {});
+      throw err;
+    }
   }
 
   const { page } = sharedClaudeBrowser;

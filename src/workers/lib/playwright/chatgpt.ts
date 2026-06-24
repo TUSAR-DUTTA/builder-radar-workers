@@ -36,22 +36,27 @@ export async function closeChatGPTBrowser() {
 export async function scrapeChatGPTPrompt(prompt: string): Promise<{ text: string; citations: { url: string; title?: string }[] }> {
   if (!sharedChatGPTBrowser) {
     const runtime = await launchSeededPersistentContext('openai-search');
-    const ctx = runtime.context;
-    const page = await ctx.newPage();
-    const forbidden: string[] = [];
-    page.on('response', (res) => {
-      if (res.status() === 403 && res.url().includes('chatgpt.com/')) forbidden.push(res.url());
-    });
+    try {
+      const ctx = runtime.context;
+      const page = await ctx.newPage();
+      const forbidden: string[] = [];
+      page.on('response', (res) => {
+        if (res.status() === 403 && res.url().includes('chatgpt.com/')) forbidden.push(res.url());
+      });
 
-    await page.goto('https://chatgpt.com/', { waitUntil: 'domcontentloaded', timeout: 45_000 });
-    await page.waitForTimeout(2500);
+      await page.goto('https://chatgpt.com/', { waitUntil: 'domcontentloaded', timeout: 45_000 });
+      await page.waitForTimeout(2500);
 
-    const authFailures = chatGPTForbiddenUrls(forbidden);
-    if (authFailures.length) {
-      await captureDebug(page, 'chatgpt', 'auth-403-before-send', { forbidden: authFailures.slice(0, 12) });
-      throw new Error('ChatGPT session rejected browser automation: backend API returned 403 before send');
+      const authFailures = chatGPTForbiddenUrls(forbidden);
+      if (authFailures.length) {
+        await captureDebug(page, 'chatgpt', 'auth-403-before-send', { forbidden: authFailures.slice(0, 12) });
+        throw new Error('ChatGPT session rejected browser automation: backend API returned 403 before send');
+      }
+      sharedChatGPTBrowser = { runtime, page, forbidden };
+    } catch (err) {
+      await runtime.close().catch(() => {});
+      throw err;
     }
-    sharedChatGPTBrowser = { runtime, page, forbidden };
   }
 
   const { page, forbidden } = sharedChatGPTBrowser;

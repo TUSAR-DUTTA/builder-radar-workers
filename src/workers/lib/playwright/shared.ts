@@ -70,7 +70,7 @@ export async function launchSeededPersistentContext(model: AnswerModel): Promise
   await dummyBrowser.close();
 
   const context = await browserType.launchPersistentContext(userDataDir, {
-    ...stealthLaunchOptions(true, false),
+    ...stealthLaunchOptions(true, !!useProxy),
     ...stealthContext(undefined),
     proxy,
   });
@@ -104,8 +104,6 @@ export async function launchSeededPersistentContext(model: AnswerModel): Promise
     close: async () => {
       await context.close().catch(() => {});
       await fs.promises.rm(userDataDir, { recursive: true, force: true }).catch(() => {});
-      // Clear the cached dir so a fresh temp dir is created on next launch
-      delete sharedUserDataDir[model];
     },
   };
 }

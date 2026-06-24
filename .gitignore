@@ -16,3 +16,17 @@ playwright_screenshots/
 *_gh_log*.txt
 /debug/
 *.tsbuildinfo
+
+# scratch / debug / scraper dumps — never commit to this public repo
+*.txt
+/debug_grok/
+debug-headers*.ts
+diag*.ts
+test-*.ts
+try-*.ts
+capture-session.ts
+check-session-valid.ts
+get-project-id.ts
+src/get-project-id.ts
+update-secrets.js
+*.png

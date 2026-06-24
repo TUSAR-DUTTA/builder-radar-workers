@@ -193,7 +193,16 @@ export async function captureDebug(
 
   const rawHtml = await page.innerHTML('body').catch(() => '');
 
-  await page.screenshot({ path: `${prefix}.png`, fullPage: true }).catch(() => {});
+  console.log(`[DEBUG-INFO] ${model} at ${stage}: URL=${url} Title="${title}"`);
+  const screenshotBuffer = await page.screenshot({ fullPage: true }).catch(() => null);
+  if (screenshotBuffer) {
+    console.log(`[DEBUG-SCREENSHOT] ${model}-${safeStage}: ${screenshotBuffer.toString('base64')}`);
+  }
+  console.log(`[DEBUG-HTML] ${model}-${safeStage}: ${rawHtml.slice(0, 15000)}`);
+
+  if (screenshotBuffer) {
+    await fs.promises.writeFile(`${prefix}.png`, screenshotBuffer).catch(() => {});
+  }
   await fs.promises.writeFile(`${prefix}.json`, JSON.stringify({ model, stage, title, url, bodyText, rawHtml, extra }, null, 2), 'utf8').catch(() => {});
 }
 

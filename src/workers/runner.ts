@@ -116,6 +116,11 @@ async function runGeoForProject(projectId: string, sources: string[]): Promise<{
 
   const competitorEntities = entities.filter((e) => e !== project.name);
 
+  // --- TEST PROMPT INJECTION ---
+  console.log('Injecting test prompt...');
+  prompts = [{ id: 'test-prompt-id', projectId: project.id, prompt: 'What are the top 3 best AI sales intelligence tools?', createdAt: new Date() }];
+  // -----------------------------
+
   for (const p of prompts) {
     let samples;
     try {
@@ -155,6 +160,11 @@ async function runGeoForProject(projectId: string, sources: string[]): Promise<{
       // recommended, so most answers cost nothing extra.
       const recommendedComps = competitorEntities.filter((c) => verdicts[c] === 'recommended');
       const winnerReasons = await extractWinnerReasons(router, audited.answer, recommendedComps);
+
+      if (p.id === 'test-prompt-id') {
+        console.log('Skipping DB insert for test prompt.');
+        continue;
+      }
 
       await db.insert(answerRuns).values({
         promptId: p.id,

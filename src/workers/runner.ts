@@ -280,35 +280,6 @@ async function main() {
     process.exit(0);
   }
 
-  if (process.env.SCRAPE_PROJECT_ID === 'TEST_PROMPT') {
-    const source = process.env.SCRAPE_SOURCES?.trim().toLowerCase() || 'chatgpt';
-    console.log(`--- RUNNING TEST PROMPT FOR ${source} ---`);
-    try {
-      if (source === 'chatgpt') {
-        const { scrapeChatGPTPrompt } = await import('./lib/playwright/chatgpt');
-        const result = await scrapeChatGPTPrompt('What is 2+2?');
-        console.log('TEST_RESULT_START');
-        console.log(JSON.stringify(result, null, 2));
-        console.log('TEST_RESULT_END');
-      } else if (source === 'claude') {
-        const { scrapeClaudePrompt } = await import('./lib/playwright/claude');
-        const result = await scrapeClaudePrompt('What is 2+2?');
-        console.log('TEST_RESULT_START');
-        console.log(JSON.stringify(result, null, 2));
-        console.log('TEST_RESULT_END');
-      } else if (source === 'perplexity') {
-        const { scrapePerplexityPrompt } = await import('./lib/playwright/perplexity');
-        const result = await scrapePerplexityPrompt('What is 2+2?');
-        console.log('TEST_RESULT_START');
-        console.log(JSON.stringify(result, null, 2));
-        console.log('TEST_RESULT_END');
-      }
-    } catch (e) {
-      console.error('TEST_ERROR:', e);
-    }
-    process.exit(0);
-  }
-
   const scrapeProjectId = process.env.SCRAPE_PROJECT_ID?.trim();
   if (scrapeProjectId) {
     const sources = (process.env.SCRAPE_SOURCES ?? 'chatgpt')

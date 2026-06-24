@@ -25,11 +25,22 @@ export async function scrapeClaudePrompt(prompt: string): Promise<{ text: string
     await page.goto('https://claude.ai/new', { waitUntil: 'domcontentloaded', timeout: 45_000 });
     await page.waitForTimeout(1000);
 
+    // Detect Cloudflare block early — if hit, fail fast
+    const earlyBody = await page.textContent('body').catch(() => '');
+    if (/Performing security verification|Verifies you are not a bot/i.test(earlyBody ?? '')) {
+      await captureDebug(page, 'claude', 'cloudflare-block');
+      throw new Error('Claude blocked by Cloudflare on initial load');
+    }
+
     // Attempt to dismiss cookie popups repeatedly
     let composer: import('playwright').Locator | null = null;
     for (let i = 0; i < 15; i++) {
       await page.locator('button:has-text("Accept All Cookies")').click({ timeout: 1000 }).catch(() => {});
-      composer = await firstVisibleLocator(page, '[contenteditable="true"], textarea, #prompt-textarea');
+      // Claude changes CSS class names regularly — try multiple known selectors
+      composer = await firstVisibleLocator(page,
+        '[contenteditable="true"][aria-label], [contenteditable="true"].ProseMirror, ' +
+        '[contenteditable="true"], textarea, #prompt-textarea'
+      );
       if (composer) break;
       await page.waitForTimeout(1000);
     }
@@ -45,19 +56,28 @@ export async function scrapeClaudePrompt(prompt: string): Promise<{ text: string
     await composer.press('Enter');
 
     await page.waitForFunction(() => {
-      const msgs = document.querySelectorAll('.font-claude-response');
-      if (msgs.length === 0) return false;
-      const last = msgs[msgs.length - 1];
-      const container = last.closest('[data-is-streaming]');
-      if (container && container.getAttribute('data-is-streaming') === 'true') return false;
-      const text = (last.textContent || '').replace(/\s+/g, ' ').trim();
-      return text.length > 0;
+      // Try multiple selectors — Claude changes class names regularly
+      const selectors = ['.font-claude-response', '.prose', '[data-is-streaming]', '[class*="response"]', '[class*="assistant"]'];
+      for (const sel of selectors) {
+        const els = document.querySelectorAll(sel);
+        if (els.length === 0) continue;
+        const last = els[els.length - 1];
+        if (last.getAttribute('data-is-streaming') === 'true') return false;
+        const text = (last.textContent || '').replace(/\s+/g, ' ').trim();
+        if (text.length > 0) return true;
+      }
+      return false;
     }, { timeout: 180_000 }).catch(() => {});
     await page.waitForTimeout(2000);
 
     const data = await page.evaluate(() => {
-      const assistantTurns = Array.from(document.querySelectorAll('.font-claude-response'));
-      const last = assistantTurns.at(-1) || document.body;
+      const selectors = ['.font-claude-response', '.prose', '[data-is-streaming]', '[class*="response"]'];
+      let last: Element | null = null;
+      for (const sel of selectors) {
+        const els = Array.from(document.querySelectorAll(sel));
+        if (els.length > 0) { last = els[els.length - 1]; break; }
+      }
+      if (!last) last = document.body;
       const text = (last.textContent ?? '').replace(/\s+/g, ' ').trim();
       const links = Array.from(last.querySelectorAll<HTMLAnchorElement>('a[href]'))
         .map((a) => ({ url: a.href, title: (a.textContent ?? '').trim() || undefined }))

@@ -25,6 +25,13 @@ export async function scrapePerplexityPrompt(prompt: string): Promise<{ text: st
     await page.goto('https://www.perplexity.ai/', { waitUntil: 'domcontentloaded', timeout: 45_000 });
     await page.waitForTimeout(1000);
 
+    // Detect Cloudflare Turnstile early — proxy IP is being challenged, need new session
+    const bodyText = await page.textContent('body').catch(() => '');
+    if (/Performing security verification|Verifies you are not a bot/i.test(bodyText ?? '')) {
+      await captureDebug(page, 'perplexity', 'cloudflare-turnstile');
+      throw new Error('Perplexity blocked by Cloudflare Turnstile — session needs refresh from proxy IP');
+    }
+
     let composer = await firstVisibleLocator(page, '#ask-input, textarea, [contenteditable="true"], [placeholder*="Ask"], [aria-label*="Ask"]');
     if (!composer) {
       const all = await page.locator('textarea, [contenteditable="true"]').all();

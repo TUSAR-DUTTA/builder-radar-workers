@@ -47,7 +47,20 @@ export async function scrapeDeepseekPrompt(prompt: string): Promise<{ text: stri
     await page.keyboard.insertText(prompt);
     await composer.press('Enter');
 
-    await page.waitForTimeout(5000);
+    // Wait for streaming to finish — poll every second for up to 3 min
+    let lastLen = 0;
+    let stable = 0;
+    for (let i = 0; i < 180; i++) {
+      await page.waitForTimeout(1000);
+      const len = await page.evaluate(() => {
+        const els = document.querySelectorAll('.ds-markdown, .markdown-body, [class*="markdown"]');
+        const last = els[els.length - 1];
+        return last ? (last.textContent ?? '').trim().length : 0;
+      });
+      if (len > 20 && len === lastLen) { stable++; if (stable >= 3) break; }
+      else { lastLen = len; stable = 0; }
+    }
+    await page.waitForTimeout(1000);
 
     const data = await page.evaluate(() => {
       // Look for the typical markdown body class used by DeepSeek

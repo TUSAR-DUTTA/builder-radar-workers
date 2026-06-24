@@ -77,10 +77,7 @@ export async function launchSeededPersistentContext(model: AnswerModel): Promise
   );
 
   const proxyServer = process.env.PLAYWRIGHT_PROXY_SERVER?.trim();
-  // We route these bots through residential IP because their anti-bot blocks datacenter ASNs
-  // claude.ai: datacenter IPs are Cloudflare-blocked — needs proxy
-  // perplexity: proxy IP triggers Turnstile; session was saved without proxy — use datacenter IP
-  const useProxy = proxyServer && (model === 'deepseek' || model === 'grok' || model === 'claude' || model === 'openai-search');
+  const useProxy = !!proxyServer;
   const proxy = useProxy ? {
     server: proxyServer,
     username: process.env.PLAYWRIGHT_PROXY_USERNAME?.trim(),
@@ -165,7 +162,7 @@ export async function launchSeededContext(model: AnswerModel): Promise<Playwrigh
   const sessionPath = sessionPathFor(model);
   
   const proxyServer = process.env.PLAYWRIGHT_PROXY_SERVER?.trim();
-  const useProxy = proxyServer && (model === 'deepseek' || model === 'grok' || model === 'claude' || model === 'openai-search');
+  const useProxy = !!proxyServer;
   const proxy = useProxy ? {
     server: proxyServer,
     username: process.env.PLAYWRIGHT_PROXY_USERNAME?.trim(),

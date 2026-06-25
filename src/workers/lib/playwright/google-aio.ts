@@ -27,9 +27,38 @@ export async function scrapeGoogleAioPrompt(prompt: string): Promise<{ text: str
   const { page } = sharedGoogleAioBrowser;
 
   try {
-    const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(`Use web search and answer this buyer question with citations:\n\n${prompt}`)}`;
-    console.log(`[google-aio] Navigating to: ${searchUrl}`);
-    await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 45_000 });
+    await page.goto('https://www.google.com/ncr', { waitUntil: 'domcontentloaded', timeout: 45_000 });
+    await page.waitForTimeout(1000);
+
+    const composer = await firstVisibleLocator(page, 'textarea[name="q"], input[name="q"]');
+    if (!composer) {
+      await captureDebug(page, 'google-aio', 'missing-composer');
+      throw new Error('Google search bar not found');
+    }
+
+    await composer.click({ timeout: 20_000, force: true }).catch(() => {});
+    await composer.fill(`Use web search and answer this buyer question with citations:\n\n${prompt}`);
+    await page.waitForTimeout(500);
+
+    console.log(`[google-aio] Pressing Enter on composer...`);
+    await composer.press('Enter');
+
+    await page.waitForTimeout(2000);
+    if (page.url().includes('google.com') && !page.url().includes('/search')) {
+      console.log(`[google-aio] Still on homepage. Attempting to click Search button...`);
+      const searchBtn = await firstVisibleLocator(page, 'input[name="btnK"], button[name="btnK"], input[type="submit"]');
+      if (searchBtn) {
+        await searchBtn.click({ timeout: 5000, force: true }).catch((e) => {
+          console.log(`[google-aio] Failed to click search button: ${e.message}`);
+        });
+      } else {
+        console.log(`[google-aio] Search button not found. Trying form submission...`);
+        await page.evaluate(() => {
+          const form = document.querySelector('form[action="/search"]') as HTMLFormElement;
+          if (form) form.submit();
+        }).catch(() => {});
+      }
+    }
 
     // Sometimes AIO has a generate button
     const generateBtn = await firstVisibleLocator(page, 'button:has-text("Generate")');

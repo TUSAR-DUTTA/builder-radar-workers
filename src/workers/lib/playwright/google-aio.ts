@@ -37,13 +37,14 @@ export async function scrapeGoogleAioPrompt(prompt: string): Promise<{ text: str
     }
 
     await composer.click({ timeout: 20_000, force: true }).catch(() => {});
-    await composer.fill(`Use web search and answer this buyer question with citations:\n\n${prompt}`);
+    await composer.fill('');
+    await composer.pressSequentially(`Use web search and answer this buyer question with citations:\n\n${prompt}`, { delay: 10 });
     await page.waitForTimeout(500);
 
     console.log(`[google-aio] Pressing Enter on composer...`);
     await composer.press('Enter');
 
-    await page.waitForTimeout(2000);
+    await page.waitForTimeout(3000);
     if (page.url().includes('google.com') && !page.url().includes('/search')) {
       console.log(`[google-aio] Still on homepage. Attempting to click Search button...`);
       const searchBtn = await firstVisibleLocator(page, 'input[name="btnK"], button[name="btnK"], input[type="submit"]');

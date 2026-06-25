@@ -39,13 +39,18 @@ export async function launchSeededPersistentContext(model: AnswerModel): Promise
   const sessionPath = sessionPathFor(model);
   
   if (!sharedUserDataDir[model]) {
-    sharedUserDataDir[model] = await fs.promises.mkdtemp(path.join(os.tmpdir(), `builderradar-${model.replace(/[^a-z0-9-]/gi, '-')}-`));
+    if (model === 'google-aio') {
+      sharedUserDataDir[model] = path.join(process.cwd(), 'playwright_google_profile');
+    } else {
+      sharedUserDataDir[model] = await fs.promises.mkdtemp(path.join(os.tmpdir(), `builderradar-${model.replace(/[^a-z0-9-]/gi, '-')}-`));
+    }
   }
   const userDataDir = sharedUserDataDir[model];
   const storageState = JSON.parse(await fs.promises.readFile(sessionPath, 'utf8')) as {
     cookies?: any[];
     origins?: StoredOrigin[];
   };
+  console.log(`[stealth] loading session file from ${sessionPath}, found ${storageState.cookies?.length ?? 0} cookies`);
   const localStorageByOrigin = Object.fromEntries(
     (storageState.origins ?? [])
       .filter((entry) => entry.origin && entry.localStorage?.length)
@@ -54,7 +59,7 @@ export async function launchSeededPersistentContext(model: AnswerModel): Promise
 
   const proxyServer = process.env.PLAYWRIGHT_PROXY_SERVER?.trim();
   // We only route these specific bots through residential IP because their anti-bot blocks datacenter ASNs
-  const useProxy = proxyServer && (model === 'openai-search' || model === 'google-aio');
+  const useProxy = proxyServer && (model === 'openai-search');
   const proxy = useProxy ? {
     server: proxyServer,
     username: process.env.PLAYWRIGHT_PROXY_USERNAME?.trim(),
@@ -71,12 +76,27 @@ export async function launchSeededPersistentContext(model: AnswerModel): Promise
   const actualVersion = dummyBrowser.version();
   await dummyBrowser.close();
 
-  const context = await browserType.launchPersistentContext(userDataDir, {
+  const isGoogleAio = model === 'google-aio';
+  const launchOptions: any = {
     ...stealthLaunchOptions(true, !!useProxy),
     ...stealthContext(undefined),
     proxy,
-  });
-  // await applyStealth(context);
+  };
+
+  if (isGoogleAio) {
+    launchOptions.channel = process.env.PLAYWRIGHT_BROWSER_CHANNEL?.trim() || 'chrome';
+    launchOptions.ignoreDefaultArgs = ['--enable-automation', '--no-sandbox', '--disable-setuid-sandbox'];
+    launchOptions.args = [
+      '--disable-blink-features=AutomationControlled',
+      '--window-size=1440,960',
+      '--lang=en-US',
+    ];
+  }
+
+  const context = await browserType.launchPersistentContext(userDataDir, launchOptions);
+  if (model === 'google-aio') {
+    await applyStealth(context);
+  }
 
   await context.addInitScript((origins: Record<string, Array<{ name: string; value: string }>>) => {
     const items = origins[window.location.origin];
@@ -105,7 +125,9 @@ export async function launchSeededPersistentContext(model: AnswerModel): Promise
     context,
     close: async () => {
       await context.close().catch(() => {});
-      await fs.promises.rm(userDataDir, { recursive: true, force: true }).catch(() => {});
+      if (model !== 'google-aio') {
+        await fs.promises.rm(userDataDir, { recursive: true, force: true }).catch(() => {});
+      }
     },
   };
 }
@@ -115,7 +137,7 @@ export async function launchSeededContext(model: AnswerModel): Promise<Playwrigh
   const sessionPath = sessionPathFor(model);
   
   const proxyServer = process.env.PLAYWRIGHT_PROXY_SERVER?.trim();
-  const useProxy = proxyServer && (model === 'openai-search' || model === 'google-aio');
+  const useProxy = proxyServer && (model === 'openai-search');
   const proxy = useProxy ? {
     server: proxyServer,
     username: process.env.PLAYWRIGHT_PROXY_USERNAME?.trim(),

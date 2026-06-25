@@ -30,6 +30,14 @@ export async function scrapeGoogleAioPrompt(prompt: string): Promise<{ text: str
     await page.goto('https://www.google.com/ncr', { waitUntil: 'domcontentloaded', timeout: 45_000 });
     await page.waitForTimeout(1000);
 
+    // Handle cookie consent banner if present (GDPR overlay from proxy IPs)
+    const consentBtn = await firstVisibleLocator(page, '#L2AGLb, button:has-text("Accept all"), button:has-text("I agree"), button:has-text("Agree")');
+    if (consentBtn) {
+      console.log('[google-aio] Consent banner detected. Clicking Accept all...');
+      await consentBtn.click({ timeout: 5000 }).catch(() => {});
+      await page.waitForTimeout(1500);
+    }
+
     const composer = await firstVisibleLocator(page, 'textarea[name="q"], input[name="q"]');
     if (!composer) {
       await captureDebug(page, 'google-aio', 'missing-composer');
@@ -40,19 +48,30 @@ export async function scrapeGoogleAioPrompt(prompt: string): Promise<{ text: str
     await composer.fill(`Use web search and answer this buyer question with citations:\n\n${prompt}`);
     await page.waitForTimeout(500);
 
-    console.log(`[google-aio] Submitting form programmatically...`);
-    const submitted = await page.evaluate(() => {
-      const form = document.querySelector('form[action="/search"]') as HTMLFormElement;
-      if (form) {
-        form.submit();
-        return true;
-      }
-      return false;
-    }).catch(() => false);
+    console.log(`[google-aio] Pressing Enter on composer...`);
+    await composer.press('Enter');
 
-    if (!submitted) {
-      console.log(`[google-aio] Form submit failed or not found. Pressing Enter as fallback...`);
-      await composer.press('Enter');
+    await page.waitForTimeout(3000);
+    if (page.url().includes('google.com') && !page.url().includes('/search')) {
+      console.log(`[google-aio] Still on homepage. Attempting programmatic submit...`);
+      const submitted = await page.evaluate(() => {
+        const form = document.querySelector('form[action="/search"]') as HTMLFormElement;
+        if (form) {
+          form.submit();
+          return true;
+        }
+        return false;
+      }).catch(() => false);
+
+      if (!submitted) {
+        console.log(`[google-aio] Form submit failed or not found. Clicking Search button...`);
+        const searchBtn = await firstVisibleLocator(page, 'input[name="btnK"], button[name="btnK"], input[type="submit"]');
+        if (searchBtn) {
+          await searchBtn.click({ timeout: 5000, force: true }).catch((e) => {
+            console.log(`[google-aio] Failed to click search button: ${e.message}`);
+          });
+        }
+      }
     }
 
     // Sometimes AIO has a generate button

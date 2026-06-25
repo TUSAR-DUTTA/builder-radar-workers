@@ -27,19 +27,9 @@ export async function scrapeGoogleAioPrompt(prompt: string): Promise<{ text: str
   const { page } = sharedGoogleAioBrowser;
 
   try {
-    await page.goto('https://www.google.com/ncr', { waitUntil: 'domcontentloaded', timeout: 45_000 });
-    await page.waitForTimeout(1000);
-
-    const composer = await firstVisibleLocator(page, 'textarea[name="q"], input[name="q"]');
-    if (!composer) {
-      await captureDebug(page, 'google-aio', 'missing-composer');
-      throw new Error('Google search bar not found');
-    }
-
-    await composer.click({ timeout: 20_000, force: true }).catch(() => {});
-    await composer.fill('');
-    await page.keyboard.insertText(`Use web search and answer this buyer question with citations:\n\n${prompt}`);
-    await page.keyboard.press('Enter');
+    const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(`Use web search and answer this buyer question with citations:\n\n${prompt}`)}`;
+    console.log(`[google-aio] Navigating to: ${searchUrl}`);
+    await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 45_000 });
 
     // Sometimes AIO has a generate button
     const generateBtn = await firstVisibleLocator(page, 'button:has-text("Generate")');

@@ -286,7 +286,7 @@ async function main() {
     try {
       if (source === 'google-aio') {
         const { scrapeGoogleAioPrompt } = await import('./lib/playwright/google-aio');
-        const result = await scrapeGoogleAioPrompt('What is 2+2?');
+        const result = await scrapeGoogleAioPrompt('What is the best CRM software?');
         console.log('TEST_RESULT_START');
         console.log(JSON.stringify(result, null, 2));
         console.log('TEST_RESULT_END');

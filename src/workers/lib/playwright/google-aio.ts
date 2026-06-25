@@ -20,6 +20,16 @@ export async function scrapeGoogleAioPrompt(prompt: string): Promise<{ text: str
     console.log(`[google-aio] Found ${cookies.length} cookies on ${page.url()}`);
     const has1PSID = cookies.some(c => c.name === '__Secure-1PSID');
     console.log(`[google-aio] __Secure-1PSID present: ${has1PSID}`);
+    
+    // Validate session cookies
+    await page.goto('https://myaccount.google.com/', { waitUntil: 'domcontentloaded', timeout: 30_000 }).catch(() => {});
+    console.log(`[google-aio] MyAccount verification URL: ${page.url()}`);
+    if (page.url().includes('accounts.google.com') || page.url().includes('ServiceLogin')) {
+      console.log(`[google-aio] SESSION STATE: EXPIRED or INVALID! (Redirected to sign-in page)`);
+    } else {
+      console.log(`[google-aio] SESSION STATE: VALID / LOGGED IN`);
+    }
+
     await page.waitForTimeout(2500);
     sharedGoogleAioBrowser = { runtime, page };
   }

@@ -280,6 +280,23 @@ async function main() {
     process.exit(0);
   }
 
+  if (process.env.SCRAPE_PROJECT_ID === 'TEST_PROMPT') {
+    const source = process.env.SCRAPE_SOURCES?.trim().toLowerCase() || 'chatgpt';
+    console.log(`--- RUNNING TEST PROMPT FOR ${source} ---`);
+    try {
+      if (source === 'google-aio') {
+        const { scrapeGoogleAioPrompt } = await import('./lib/playwright/google-aio');
+        const result = await scrapeGoogleAioPrompt('What is 2+2?');
+        console.log('TEST_RESULT_START');
+        console.log(JSON.stringify(result, null, 2));
+        console.log('TEST_RESULT_END');
+      }
+    } catch (e) {
+      console.error('TEST_ERROR:', e);
+    }
+    process.exit(0);
+  }
+
   const scrapeProjectId = process.env.SCRAPE_PROJECT_ID?.trim();
   if (scrapeProjectId) {
     const sources = (process.env.SCRAPE_SOURCES ?? 'chatgpt')

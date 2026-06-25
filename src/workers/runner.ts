@@ -282,6 +282,20 @@ async function main() {
 
 
   const scrapeProjectId = process.env.SCRAPE_PROJECT_ID?.trim();
+  if (scrapeProjectId === 'test-mode') {
+    console.log('[runner] TEST MODE triggered. Running manual prompt via google-aio.');
+    const router = getAIRouter();
+    try {
+      const res = await runPromptViaPlaywright(router, 'What is the best CRM software?', ['Test Entity'], ['google-aio']);
+      console.log(JSON.stringify(res, null, 2));
+      console.log("Success! Extracted answer without DB.");
+    } catch (err) {
+      console.error("Test failed:", err);
+    }
+    await closeSharedBrowser();
+    process.exit(0);
+  }
+
   if (scrapeProjectId) {
     const sources = (process.env.SCRAPE_SOURCES ?? 'chatgpt')
       .split(',')

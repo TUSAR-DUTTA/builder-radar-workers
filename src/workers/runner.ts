@@ -16,7 +16,7 @@ import { db } from '@/db';
 import { projects, profiles, promptSets, answerRuns, citedSources, brandFacts, accuracyAlerts } from '@/db/schema';
 import { loadSessionsFromEnv } from '@/lib/session-loader';
 import { getAIRouter } from '@/lib/ai-router';
-import { eq, and, isNotNull, sql } from 'drizzle-orm';
+import { eq, and, isNotNull, sql, inArray } from 'drizzle-orm';
 
 import { citedSourceRows, auditAnswer, accuracyFlag, accuracyAlertRows, resolveBrandConfusion } from '@/lib/geo/engine';
 import { finalizeAccuracyLoop } from '@/lib/geo/accuracy-loop';
@@ -54,13 +54,21 @@ async function withDbRetry<T>(label: string, fn: () => Promise<T>, attempts = 3)
   }
 }
 
-async function runGeoForProject(projectId: string, sources: string[]): Promise<{ prompts: number; runs: number; models: AnswerModel[] }> {
-  const sourceToModel: Record<string, AnswerModel> = {
-    chatgpt: 'openai-search',
-  };
-  const models = sources
-    .map((s) => sourceToModel[s] ?? (s as AnswerModel))
+// Source ids (the worker workflows + SCRAPE_SOURCES use these) → the model id stored in answer_runs.
+// chatgpt is the only id that differs from its stored model; every other engine stores its own id.
+// Shared by runGeoForProject (what it writes) and runScheduledScrapes (the per-engine due gate) so
+// the two can never drift out of sync.
+const SOURCE_TO_MODEL: Record<string, AnswerModel> = {
+  chatgpt: 'openai-search',
+};
+function sourcesToModels(sources: string[]): AnswerModel[] {
+  return sources
+    .map((s) => SOURCE_TO_MODEL[s] ?? (s as AnswerModel))
     .filter((m): m is AnswerModel => Boolean(m));
+}
+
+async function runGeoForProject(projectId: string, sources: string[]): Promise<{ prompts: number; runs: number; models: AnswerModel[] }> {
+  const models = sourcesToModels(sources);
 
   const [project] = await withDbRetry('runGeoForProject', () => db
     .select({
@@ -218,11 +226,21 @@ const SCRAPE_SOURCES_AUTO = ['chatgpt', 'perplexity', 'claude', 'google-aio'];
 const MAX_SCRAPES_PER_TICK = 8;
 
 async function runScheduledScrapes(): Promise<void> {
+  // Which engines THIS run handles. Each per-engine workflow passes a single SCRAPE_SOURCES (e.g.
+  // 'claude'); an unset value means a full local/manual run across every engine.
+  const sourcesToRun = process.env.SCRAPE_SOURCES
+    ? process.env.SCRAPE_SOURCES.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean)
+    : SCRAPE_SOURCES_AUTO;
+  const targetModels = sourcesToModels(sourcesToRun);
+  if (targetModels.length === 0) {
+    console.log('[scrape-cron] no valid engines in SCRAPE_SOURCES — nothing to do');
+    return;
+  }
+
   const activeProjects = await withDbRetry('runScheduledScrapes', () => db
     .select({
       id: projects.id,
       name: projects.name,
-      lastScrapeAt: projects.lastScrapeAt,
       plan: profiles.plan,
     })
     .from(projects)
@@ -233,13 +251,46 @@ async function runScheduledScrapes(): Promise<void> {
       sql`${profiles.plan} != 'free'`,
     )));
 
+  if (activeProjects.length === 0) {
+    console.log('[scrape-cron] no active paid projects this tick');
+    return;
+  }
+
+  // Per-engine due gate. A project is due when ANY engine this run handles hasn't written an
+  // answer_run within the interval. Keying on per-(project,engine) freshness — NOT one shared
+  // projects.lastScrapeAt — is what stops engines from starving each other: previously whichever
+  // engine scraped first stamped the shared timestamp, so every engine that fired within the window
+  // saw "no projects due" and no-op'd, and the later daily engines (claude, grok) silently went
+  // stale for days behind green, "successful" runs. answer_runs.run_at is the very same per-engine
+  // freshness the dashboard badges read, so the gate and the UI can never disagree.
+  const projectIds = activeProjects.map((p) => p.id);
+  const lastRuns = await withDbRetry('runScheduledScrapes.lastRuns', () => db
+    .select({
+      projectId: answerRuns.projectId,
+      model: answerRuns.model,
+      lastRunAt: sql<string | null>`max(${answerRuns.runAt})`,
+    })
+    .from(answerRuns)
+    .where(and(
+      inArray(answerRuns.projectId, projectIds),
+      inArray(answerRuns.model, targetModels),
+    ))
+    .groupBy(answerRuns.projectId, answerRuns.model));
+
+  const lastRunAtFor = new Map<string, number>();
+  for (const r of lastRuns) {
+    if (r.lastRunAt) lastRunAtFor.set(`${r.projectId}:${r.model}`, new Date(r.lastRunAt).getTime());
+  }
+
   const now = Date.now();
   const due = activeProjects.filter((p) => {
     const plan = p.plan ?? 'starter';
     const interval = SCRAPE_INTERVAL_MIN[plan] ?? SCRAPE_INTERVAL_MIN.starter;
-    if (!p.lastScrapeAt) return true;
-    const minsSince = (now - new Date(p.lastScrapeAt).getTime()) / 60_000;
-    return minsSince >= interval - SCRAPE_GRACE_MIN;
+    return targetModels.some((m) => {
+      const last = lastRunAtFor.get(`${p.id}:${m}`);
+      if (last === undefined) return true; // this engine has never sampled this project → due
+      return (now - last) / 60_000 >= interval - SCRAPE_GRACE_MIN;
+    });
   });
 
   if (due.length === 0) {
@@ -248,16 +299,14 @@ async function runScheduledScrapes(): Promise<void> {
   }
 
   const batch = due.slice(0, MAX_SCRAPES_PER_TICK);
-  const sourcesToRun = process.env.SCRAPE_SOURCES 
-    ? process.env.SCRAPE_SOURCES.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean) 
-    : SCRAPE_SOURCES_AUTO;
-
   for (const p of batch) {
     try {
       await runGeoForProject(p.id, sourcesToRun);
     } catch (err) {
       console.error(`[scrape-cron] project "${p.name}" failed:`, err);
     } finally {
+      // Keep stamping the legacy "project last touched" timestamp for anything that still reads it;
+      // the due gate above no longer depends on it.
       await db.update(projects).set({ lastScrapeAt: new Date() }).where(eq(projects.id, p.id)).catch(() => {});
     }
   }

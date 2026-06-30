@@ -7,7 +7,6 @@ import { scrapeChatGPTPrompt, closeChatGPTBrowser } from './playwright/chatgpt';
 import { scrapeClaudePrompt, closeClaudeBrowser } from './playwright/claude';
 import { scrapePerplexityPrompt, closePerplexityBrowser } from './playwright/perplexity';
 import { scrapeGoogleAioPrompt, closeGoogleAioBrowser } from './playwright/google-aio';
-import { scrapeDeepseekPrompt, closeDeepseekBrowser } from './playwright/deepseek';
 import { scrapeGrokPrompt, closeGrokBrowser } from './playwright/grok';
 
 export async function closeSharedBrowser() {
@@ -15,7 +14,6 @@ export async function closeSharedBrowser() {
   await closeClaudeBrowser();
   await closePerplexityBrowser();
   await closeGoogleAioBrowser();
-  await closeDeepseekBrowser();
   await closeGrokBrowser();
 }
 
@@ -39,7 +37,6 @@ export async function runPromptViaPlaywright(
       else if (model === 'claude') res = await scrapeClaudePrompt(prompt);
       else if (model === 'perplexity') res = await scrapePerplexityPrompt(prompt);
       else if (model === 'google-aio') res = await scrapeGoogleAioPrompt(prompt);
-      else if (model === 'deepseek') res = await scrapeDeepseekPrompt(prompt);
       else if (model === 'grok') res = await scrapeGrokPrompt(prompt);
       else continue;
 

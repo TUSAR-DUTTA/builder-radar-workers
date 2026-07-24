@@ -1,0 +1,93 @@
+name: Manual Test Single Prompt
+on:
+  workflow_dispatch:
+    inputs:
+      prompt:
+        description: 'Prompt to test'
+        required: true
+        default: 'What is the capital of France?'
+      engine:
+        description: 'Engine to test (chatgpt, claude, perplexity)'
+        required: true
+        default: 'chatgpt'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      WORKER_SECRET: ${{ secrets.WORKER_SECRET }}
+      PLAYWRIGHT_BROWSER_CHANNEL: chrome
+      PLAYWRIGHT_HEADLESS: '0'
+      PLAYWRIGHT_PROXY_SERVER: ${{ secrets.PLAYWRIGHT_PROXY_SERVER }}
+      PLAYWRIGHT_PROXY_USERNAME: ${{ secrets.PLAYWRIGHT_PROXY_USERNAME }}
+      PLAYWRIGHT_PROXY_PASSWORD: ${{ secrets.PLAYWRIGHT_PROXY_PASSWORD }}
+      PLAYWRIGHT_SESSIONS_DIR: /tmp/playwright_sessions
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Restore sessions from secrets
+        run: |
+          mkdir -p /tmp/playwright_sessions
+          if [ -n "${{ secrets.CHATGPT_SESSION_B64 }}" ]; then
+            echo "${{ secrets.CHATGPT_SESSION_B64 }}" | base64 -d > /tmp/playwright_sessions/chatgpt_auth_state.json
+          fi
+          if [ -n "${{ secrets.CLAUDE_SESSION_B64 }}" ]; then
+            echo "${{ secrets.CLAUDE_SESSION_B64 }}" | base64 -d > /tmp/playwright_sessions/claude_auth_state.json
+          fi
+          if [ -n "${{ secrets.PERPLEXITY_SESSION_B64 }}" ]; then
+            echo "${{ secrets.PERPLEXITY_SESSION_B64 }}" | base64 -d > /tmp/playwright_sessions/perplexity_auth_state.json
+          fi
+
+      - name: Execute Single Prompt Test
+        run: |
+          cat << 'EOF' > run-single-test.ts
+          import { scrapeChatGPTPrompt } from './src/workers/lib/playwright/chatgpt';
+          import { scrapeClaudePrompt } from './src/workers/lib/playwright/claude';
+          import { scrapePerplexityPrompt } from './src/workers/lib/playwright/perplexity';
+
+          const engine = process.argv[2];
+          const prompt = process.argv[3];
+          console.log(`\n=== EXECUTING SINGLE PROMPT TEST ===\nEngine: ${engine}\nPrompt: "${prompt}"\n`);
+
+          (async () => {
+            try {
+              let result;
+              if (engine === 'chatgpt') {
+                result = await scrapeChatGPTPrompt(prompt);
+              } else if (engine === 'claude') {
+                result = await scrapeClaudePrompt(prompt);
+              } else if (engine === 'perplexity') {
+                result = await scrapePerplexityPrompt(prompt);
+              } else {
+                throw new Error(`Unknown engine: ${engine}`);
+              }
+              console.log('\n================ OUTPUT RESULT ================');
+              console.log('Text Response:\n', result.text);
+              console.log('\nCitations:\n', JSON.stringify(result.citations, null, 2));
+              console.log('===============================================\n');
+              process.exit(0);
+            } catch (err) {
+              console.error('\nTEST FAILED WITH ERROR:', err);
+              process.exit(1);
+            }
+          })();
+          EOF
+          xvfb-run -a npx tsx run-single-test.ts "${{ inputs.engine }}" "${{ inputs.prompt }}"

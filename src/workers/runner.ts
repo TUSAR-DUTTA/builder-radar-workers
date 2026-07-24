@@ -59,7 +59,7 @@ async function withDbRetry<T>(label: string, fn: () => Promise<T>, attempts = 3)
 // Shared by runGeoForProject (what it writes) and runScheduledScrapes (the per-engine due gate) so
 // the two can never drift out of sync.
 const SOURCE_TO_MODEL: Record<string, AnswerModel> = {
-  chatgpt: 'openai-search',
+  chatgpt: 'chatgpt-consumer',
 };
 function sourcesToModels(sources: string[]): AnswerModel[] {
   return sources

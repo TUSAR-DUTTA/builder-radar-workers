@@ -332,14 +332,21 @@ async function main() {
 
   const scrapeProjectId = process.env.SCRAPE_PROJECT_ID?.trim();
   if (scrapeProjectId === 'test-mode') {
-    console.log('[runner] TEST MODE triggered. Running manual prompt via google-aio.');
+    const sources = (process.env.SCRAPE_SOURCES ?? 'chatgpt')
+      .split(',')
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean);
+    const models = sourcesToModels(sources);
+    console.log(`[runner] TEST MODE triggered for engines: ${sources.join(', ')}`);
     const router = getAIRouter();
     try {
-      const res = await runPromptViaPlaywright(router, 'What is the best CRM software?', ['Test Entity'], ['google-aio']);
+      const res = await runPromptViaPlaywright(router, 'What is 2+2? Answer briefly.', ['Math'], models);
+      console.log('\n================ OFFICIAL TEST PROMPT OUTPUT ================');
       console.log(JSON.stringify(res, null, 2));
-      console.log("Success! Extracted answer without DB.");
+      console.log('=============================================================\n');
     } catch (err) {
       console.error("Test failed:", err);
+      process.exit(1);
     }
     await closeSharedBrowser();
     process.exit(0);

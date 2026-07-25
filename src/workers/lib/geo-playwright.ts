@@ -33,7 +33,7 @@ export async function runPromptViaPlaywright(
 
     try {
       let res;
-      if (model === 'openai-search') res = await scrapeChatGPTPrompt(prompt);
+      if (model === 'chatgpt-consumer') res = await scrapeChatGPTPrompt(prompt);
       else if (model === 'claude') res = await scrapeClaudePrompt(prompt);
       else if (model === 'perplexity') res = await scrapePerplexityPrompt(prompt);
       else if (model === 'google-aio') res = await scrapeGoogleAioPrompt(prompt);

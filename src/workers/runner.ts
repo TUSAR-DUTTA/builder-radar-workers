@@ -299,16 +299,24 @@ async function runScheduledScrapes(): Promise<void> {
   }
 
   const batch = due.slice(0, MAX_SCRAPES_PER_TICK);
+  const failedProjects: string[] = [];
   for (const p of batch) {
     try {
-      await runGeoForProject(p.id, sourcesToRun);
+      const result = await runGeoForProject(p.id, sourcesToRun);
+      if (result.prompts > 0 && result.runs === 0) {
+        throw new Error(`no valid stored answers for requested engines: ${result.models.join(', ')}`);
+      }
     } catch (err) {
       console.error(`[scrape-cron] project "${p.name}" failed:`, err);
+      failedProjects.push(p.id);
     } finally {
       // Keep stamping the legacy "project last touched" timestamp for anything that still reads it;
       // the due gate above no longer depends on it.
       await db.update(projects).set({ lastScrapeAt: new Date() }).where(eq(projects.id, p.id)).catch(() => {});
     }
+  }
+  if (failedProjects.length > 0) {
+    throw new Error(`${failedProjects.length}/${batch.length} browser-sampling project attempts failed`);
   }
 }
 
@@ -358,7 +366,10 @@ async function main() {
       .map((s) => s.trim().toLowerCase())
       .filter(Boolean);
     console.log(`[runner] Scrape mode - project=${scrapeProjectId} sources=${sources.join(',')}`);
-    await runGeoForProject(scrapeProjectId, sources);
+    const result = await runGeoForProject(scrapeProjectId, sources);
+    if (result.prompts > 0 && result.runs === 0) {
+      throw new Error('Browser sampling produced no valid stored answers');
+    }
     process.exit(0);
   }
 

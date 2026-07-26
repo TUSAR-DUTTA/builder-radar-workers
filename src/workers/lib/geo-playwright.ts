@@ -110,7 +110,15 @@ export async function runPromptViaPlaywrightDetailed(
       else if (model === 'google-aio') res = await scrapeGoogleAioPrompt(prompt);
       else res = await scrapeGrokPrompt(prompt);
 
-      const answer = sanitizeAnswerText(res.text);
+      let answer = sanitizeAnswerText(res.text);
+      // Retry one prompt-bound low-quality ChatGPT turn once. The scraper moves the retry to a fresh
+      // conversation while retaining the authenticated persistent browser; identity failures remain
+      // fatal and are never retried here.
+      if (model === 'chatgpt-consumer' && isLowQualityAnswer(answer)) {
+        console.warn('[geo-playwright] chatgpt-consumer returned low-quality text — retrying once in a fresh conversation');
+        res = await scrapeChatGPTPrompt(prompt);
+        answer = sanitizeAnswerText(res.text);
+      }
       if (isLowQualityAnswer(answer)) {
         console.warn(`[geo-playwright] ${model} returned no valid answer — dropped`);
         attempts.push({ model, status: 'rejected', stage: 'quality', failureReason: 'low_quality_or_empty_answer', latencyMs: Date.now() - started });

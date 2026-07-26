@@ -7,12 +7,12 @@
 // scraped counts would be apples-to-oranges with the filtered API counts and inflate Reddit/X.
 
 import { db } from '@/db';
-import { projects, socialMentions } from '@/db/schema';
+import { projects, socialMentions, brandFacts } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { stealthLaunchOptions, applyStealth, stealthContext } from './lib/stealth';
 import { getSessionsDir, loadSessionsFromEnv } from '@/lib/session-loader';
-import { filterMentions } from '@/lib/social/filter';
-import { parseCompetitors, contextTermsFromIcp } from '@/lib/social/fetch';
+import { assessMentionEntity, filterMentions, type EntityMatchOptions } from '@/lib/social/filter';
+import { parseCompetitors, contextTermsFromIcp, disambiguatorsFromIcp } from '@/lib/social/fetch';
 import type { RawSourceResult } from '@/lib/raw-source-search';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -52,11 +52,14 @@ async function filterAndStore(
   entity: string,
   contextTerms: string[],
   raw: RawSourceResult[],
+  identity: EntityMatchOptions = {},
 ): Promise<number> {
-  const kept = filterMentions(raw, entity, contextTerms);
+  const kept = filterMentions(raw, entity, contextTerms, identity);
   console.log(`[debug] filterAndStore for ${entity}: ${raw.length} raw -> ${kept.length} kept`);
   if (kept.length === 0) return 0;
-  const rows = kept.map((m) => ({
+  const rows = kept.map((m) => {
+    const decision = assessMentionEntity(m, entity, contextTerms, identity);
+    return ({
     projectId,
     entity,
     source: m.source,
@@ -68,8 +71,12 @@ async function filterAndStore(
     community: m.community,
     score: m.score ?? 0,
     commentCount: m.commentCount ?? 0,
+    entityStatus: 'verified',
+    entityConfidence: decision.confidence,
+    entityEvidence: { reason: decision.reason, matchedName: decision.matchedName },
     postedAt: m.createdAt,
-  }));
+    });
+  });
   try {
     // .returning() yields only the rows actually inserted (conflicts excluded) — the reliable
     // inserted-count across drivers; postgres-js doesn't expose .rowCount.
@@ -128,7 +135,7 @@ function extractTweetsFromGQL(json: unknown): Array<{
   return tweets;
 }
 
-async function scrapeTwitter(projectId: string, entities: string[], baseContext: string[]): Promise<number> {
+async function scrapeTwitter(projectId: string, entities: string[], baseContext: string[], brandIdentity: EntityMatchOptions): Promise<number> {
   const sessionPath = path.join(getSessionsDir(), 'x_auth_state.json');
   if (!fs.existsSync(sessionPath)) {
     console.warn('[twitter] No session at', sessionPath, '— skipping X (set X_SESSION_B64)');
@@ -183,7 +190,7 @@ async function scrapeTwitter(projectId: string, entities: string[], baseContext:
       await page.waitForTimeout(1000); // let in-flight responses settle before detaching
       page.off('response', handler);
 
-      stored += await filterAndStore(projectId, entity, contextFor(entity, entities, baseContext), raw);
+      stored += await filterAndStore(projectId, entity, contextFor(entity, entities, baseContext), raw, entity === entities[0] ? brandIdentity : {});
     }
 
     console.log(`[twitter] stored ${stored} filtered mentions for project ${projectId}`);
@@ -207,7 +214,7 @@ interface RedditChild {
   };
 }
 
-async function scrapeReddit(projectId: string, entities: string[], baseContext: string[]): Promise<number> {
+async function scrapeReddit(projectId: string, entities: string[], baseContext: string[], brandIdentity: EntityMatchOptions): Promise<number> {
   const { chromium } = await import('playwright');
   const browser = await chromium.launch(stealthLaunchOptions(true));
   let stored = 0;
@@ -248,7 +255,7 @@ async function scrapeReddit(projectId: string, entities: string[], baseContext: 
             commentCount: p.num_comments ?? 0,
             createdAt: new Date((p.created_utc ?? 0) * 1000),
           }));
-        stored += await filterAndStore(projectId, entity, contextFor(entity, entities, baseContext), raw);
+        stored += await filterAndStore(projectId, entity, contextFor(entity, entities, baseContext), raw, entity === entities[0] ? brandIdentity : {});
         await page.waitForTimeout(1500); // be polite to the JSON endpoint between entities
       } catch (e) {
         console.error(`[reddit] search failed for ${entity}`, e);
@@ -277,11 +284,18 @@ export async function runSocialScrapesForProject(projectId: string) {
   const competitors = parseCompetitors(project.competitors).slice(0, 5);
   const entities = [project.name, ...competitors].filter((e) => e && e.trim());
   const baseContext = contextTermsFromIcp(project.icpProfile);
+  const [identity] = await withDbRetry('runSocialScrapesForProject.identity', () => db.select({ aliases: brandFacts.aliases, ambiguousAliases: brandFacts.ambiguousAliases })
+    .from(brandFacts).where(eq(brandFacts.projectId, projectId)).limit(1));
+  const brandIdentity: EntityMatchOptions = {
+    ...disambiguatorsFromIcp(project.icpProfile),
+    aliases: Array.isArray(identity?.aliases) ? identity.aliases.filter((value): value is string => typeof value === 'string') : [],
+    ambiguousAliases: Array.isArray(identity?.ambiguousAliases) ? identity.ambiguousAliases.filter((value): value is string => typeof value === 'string') : [],
+  };
 
   console.log(`[social] Scraping Reddit + X for project ${projectId} (entities: ${entities.join(', ')})`);
 
-  await scrapeReddit(projectId, entities, baseContext);
-  await scrapeTwitter(projectId, entities, baseContext);
+  await scrapeReddit(projectId, entities, baseContext, brandIdentity);
+  await scrapeTwitter(projectId, entities, baseContext, brandIdentity);
 }
 
 export async function runScheduledSocialScrapes() {

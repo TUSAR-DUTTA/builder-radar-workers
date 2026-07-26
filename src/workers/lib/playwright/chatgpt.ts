@@ -35,7 +35,7 @@ export async function closeChatGPTBrowser() {
 
 export async function scrapeChatGPTPrompt(prompt: string): Promise<{ text: string; citations: { url: string; title?: string }[] }> {
   if (!sharedChatGPTBrowser) {
-    const runtime = await launchSeededPersistentContext('openai-search');
+    const runtime = await launchSeededPersistentContext('chatgpt-consumer');
     try {
       const ctx = runtime.context;
       const page = await ctx.newPage();
@@ -157,6 +157,18 @@ export async function scrapeChatGPTPrompt(prompt: string): Promise<{ text: strin
       await captureDebug(page, 'chatgpt', 'missing-composer');
       throw new Error(`ChatGPT composer not found at ${page.url()} title="${await page.title().catch(() => '')}"`);
     }
+    const turnSnapshot = await page.evaluate(() => {
+      const selector = (turn: 'assistant' | 'user') => `section[data-testid^="conversation-turn-"][data-turn="${turn}"]`;
+      const assistants = Array.from(document.querySelectorAll<HTMLElement>(selector('assistant')));
+      const users = Array.from(document.querySelectorAll<HTMLElement>(selector('user')));
+      const idOf = (node: HTMLElement | undefined) => node?.getAttribute('data-testid') || node?.id || null;
+      return {
+        assistantCount: assistants.length,
+        userCount: users.length,
+        lastAssistantId: idOf(assistants.at(-1)),
+        lastUserId: idOf(users.at(-1)),
+      };
+    });
     await composer.click({ timeout: 20_000, force: true }).catch(() => {});
     await composer.fill('');
     await page.keyboard.insertText(`Use web search and answer this buyer question with citations:\n\n${prompt}`);
@@ -177,15 +189,29 @@ export async function scrapeChatGPTPrompt(prompt: string): Promise<{ text: strin
       await page.keyboard.press('Enter');
     }
 
-    await page.waitForFunction(() => {
-      const turns = Array.from(document.querySelectorAll('section[data-testid^="conversation-turn-"][data-turn="assistant"]'));
-      const last = turns.at(-1);
-      if (!last) return false;
+    try {
+      await page.waitForFunction(({ snapshot, expectedPrompt }) => {
+      const normalize = (value: string) => value.normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim();
+      const assistants = Array.from(document.querySelectorAll<HTMLElement>('section[data-testid^="conversation-turn-"][data-turn="assistant"]'));
+      const users = Array.from(document.querySelectorAll<HTMLElement>('section[data-testid^="conversation-turn-"][data-turn="user"]'));
+      const last = assistants.at(-1);
+      const lastUser = users.at(-1);
+      if (!last || !lastUser) return false;
+      const assistantId = last.getAttribute('data-testid') || last.id || null;
+      const userId = lastUser.getAttribute('data-testid') || lastUser.id || null;
+      const newAssistant = assistants.length > snapshot.assistantCount || assistantId !== snapshot.lastAssistantId;
+      const newUser = users.length > snapshot.userCount || userId !== snapshot.lastUserId;
+      const promptBound = normalize(lastUser.textContent ?? '').includes(normalize(expectedPrompt));
+      if (!newAssistant || !newUser || !promptBound) return false;
       const busy = last.querySelector('[aria-busy="true"]');
       if (busy) return false;
       const text = (last.textContent ?? '').replace(/\s+/g, ' ').trim();
       return text.length > 'ChatGPT said:'.length + 40;
-    }, { timeout: 180_000 }).catch(() => {});
+      }, { snapshot: turnSnapshot, expectedPrompt: prompt }, { timeout: 180_000 });
+    } catch {
+      await captureDebug(page, 'chatgpt', 'prompt-binding-timeout');
+      throw new Error('prompt_identity_unverified:new_chatgpt_turn_not_bound_to_submitted_prompt');
+    }
     await page.waitForTimeout(3000);
 
     const data = await page.evaluate(() => {
@@ -207,7 +233,7 @@ export async function scrapeChatGPTPrompt(prompt: string): Promise<{ text: strin
         .map((a) => ({ url: a.href, title: (a.textContent ?? '').trim() || undefined }))
         .filter((a) => /^https?:\/\//i.test(a.url))
         .slice(0, 12);
-      return { text, links };
+      return { text, links, assistantTurnId: last.getAttribute('data-testid') || last.id || null };
     });
 
     const postSendAuthFailures = chatGPTForbiddenUrls(forbidden);
@@ -219,6 +245,10 @@ export async function scrapeChatGPTPrompt(prompt: string): Promise<{ text: strin
       await captureDebug(page, 'chatgpt', 'bad-response', { forbidden: forbidden.slice(0, 12) });
       console.error(`[DEBUG] ChatGPT data.text was: ${JSON.stringify(data.text)}`);
       throw new Error('ChatGPT did not render a real assistant answer; likely blocked or unauthenticated in browser automation');
+    }
+    if (!data.assistantTurnId || data.assistantTurnId === turnSnapshot.lastAssistantId) {
+      await captureDebug(page, 'chatgpt', 'stale-assistant-turn');
+      throw new Error('prompt_identity_unverified:stale_chatgpt_assistant_turn');
     }
 
     return { text: data.text, citations: data.links };

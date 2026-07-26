@@ -2,6 +2,9 @@ import { launchSeededPersistentContext, captureDebug, firstVisibleLocator, Playw
 
 let sharedGrokBrowser: { runtime: PlaywrightContextHandle, page: import('playwright').Page } | null = null;
 
+const GROK_ASSISTANT_SELECTOR = '.grok-response, .message.assistant, [class*="message"][class*="assistant"], [data-message-author-role="assistant"], [data-role="assistant"], [data-testid*="assistant-message"], article .markdown';
+const GROK_USER_SELECTOR = '.message.user, [class*="message"][class*="user"], [data-message-author-role="user"], [data-role="user"], [data-testid*="user-message"]';
+
 export async function closeGrokBrowser() {
   if (sharedGrokBrowser) {
     await sharedGrokBrowser.runtime.close().catch(() => {});
@@ -42,59 +45,78 @@ export async function scrapeGrokPrompt(prompt: string): Promise<{ text: string; 
       throw new Error(`Grok composer not found`);
     }
 
+    const turnSnapshot = await page.evaluate((assistantSelector) => {
+      const turns = document.querySelectorAll<HTMLElement>(assistantSelector);
+      const last = turns.length ? turns[turns.length - 1] : undefined;
+      return {
+        assistantCount: turns.length,
+        lastAssistantText: (last?.textContent ?? '').replace(/\s+/g, ' ').trim(),
+      };
+    }, GROK_ASSISTANT_SELECTOR);
+
     await composer.click({ timeout: 20_000, force: true }).catch(() => {});
     await composer.fill('');
     await page.keyboard.insertText(prompt);
     await composer.press('Enter');
 
-    // Wait for response to stream and stabilize
-    let lastLength = 0;
-    let stableCount = 0;
-    let finalData = { text: '', links: [] as any[] };
-    
-    for (let i = 0; i < 30; i++) {
+    // Require a newly rendered assistant turn bound to the submitted user prompt. Never fall back
+    // to page chrome or a previous response when the current turn cannot be proven.
+    const deadline = Date.now() + 180_000;
+    let stableChecks = 0;
+    let previousText = '';
+    let data: { text: string; links: { url: string; title?: string }[] } | null = null;
+    while (Date.now() < deadline) {
       await page.waitForTimeout(1000);
-      const data = await page.evaluate(() => {
-        // Find only assistant responses (skip user prompts)
-        const assistantTurns = Array.from(document.querySelectorAll('.markdown, .message.assistant, [class*="message"][class*="assistant"]'));
-        if (assistantTurns.length === 0) return null;
-        
-        const last = assistantTurns.at(-1)!;
-        
-        let text = '';
-        const paragraphs = last.querySelectorAll('p, li');
-        if (paragraphs.length > 0) {
-          text = Array.from(paragraphs).map(p => p.textContent).join('\n');
-        } else {
-          text = last.textContent ?? '';
+      const candidate = await page.evaluate(({ assistantSelector, userSelector, expectedPrompt, snapshot }) => {
+        const assistantTurns = document.querySelectorAll<HTMLElement>(assistantSelector);
+        const userTurns = document.querySelectorAll<HTMLElement>(userSelector);
+        const lastAssistant = assistantTurns.length ? assistantTurns[assistantTurns.length - 1] : undefined;
+        if (!lastAssistant) return null;
+
+        let promptBound = false;
+        const wanted = expectedPrompt.normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim();
+        for (let index = userTurns.length - 1; index >= 0; index -= 1) {
+          const rendered = (userTurns[index].textContent ?? '').normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim();
+          if (rendered.includes(wanted)) {
+            promptBound = true;
+            break;
+          }
         }
-        text = text.replace(/\s+/g, ' ').trim();
 
-        const links = Array.from(last.querySelectorAll<HTMLAnchorElement>('a[href]'))
-          .map((a) => ({ url: a.href, title: (a.textContent ?? '').trim() || undefined }))
-          .filter((a) => /^https?:\/\//i.test(a.url) && !a.url.includes('grok.com') && !a.url.includes('x.com'))
-          .slice(0, 12);
+        const text = (lastAssistant.textContent ?? '').replace(/\s+/g, ' ').trim();
+        const isNew = assistantTurns.length > snapshot.assistantCount || text !== snapshot.lastAssistantText;
+        const busy = lastAssistant.querySelector('[aria-busy="true"], [class*="loading"], [class*="spinner"], [data-testid*="loading"]');
+        if (!promptBound || !isNew || busy || text.length < 40) return null;
+
+        const links: { url: string; title?: string }[] = [];
+        const anchors = lastAssistant.querySelectorAll<HTMLAnchorElement>('a[href]');
+        for (let index = 0; index < anchors.length && links.length < 12; index += 1) {
+          const anchor = anchors[index];
+          if (/^https?:\/\//i.test(anchor.href) && !anchor.href.includes('grok.com') && !anchor.href.includes('x.com')) {
+            links.push({ url: anchor.href, title: (anchor.textContent ?? '').trim() || undefined });
+          }
+        }
         return { text, links };
+      }, {
+        assistantSelector: GROK_ASSISTANT_SELECTOR,
+        userSelector: GROK_USER_SELECTOR,
+        expectedPrompt: prompt,
+        snapshot: turnSnapshot,
       });
-
-      if (!data || data.text.length < 5) continue;
-
-      if (data.text.length > lastLength) {
-        lastLength = data.text.length;
-        stableCount = 0;
-        finalData = data;
-      } else {
-        stableCount++;
-        if (stableCount >= 3) break; // stable for 3 seconds
-      }
+      if (!candidate) continue;
+      if (candidate.text === previousText) stableChecks += 1;
+      else stableChecks = 0;
+      previousText = candidate.text;
+      data = candidate;
+      if (stableChecks >= 2) break;
     }
 
-    if (finalData.text.length < 5) {
-      await captureDebug(page, 'grok', 'bad-response');
-      throw new Error('Grok did not render a real assistant answer');
+    if (!data || stableChecks < 2) {
+      await captureDebug(page, 'grok', 'prompt-binding-timeout');
+      throw new Error('prompt_identity_unverified:new_grok_turn_not_bound_to_submitted_prompt');
     }
 
-    return { text: finalData.text, citations: finalData.links };
+    return { text: data.text, citations: data.links };
   } catch (err) {
     await closeGrokBrowser();
     throw err;

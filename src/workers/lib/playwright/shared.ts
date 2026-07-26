@@ -194,6 +194,39 @@ export function debugDir(): string | null {
   return dir ? dir : null;
 }
 
+export interface SafeDebugMetadata {
+  model: string;
+  stage: string;
+  origin: string | null;
+  bodyTextLength: number;
+  extraKeys: string[];
+}
+
+/** Diagnostics must never persist page text, HTML, screenshots, query strings, or extra values. */
+export function safeDebugMetadata(input: {
+  model: string;
+  stage: string;
+  url: string;
+  bodyTextLength: number;
+  extra?: Record<string, unknown>;
+}): SafeDebugMetadata {
+  let origin: string | null = null;
+  try {
+    const parsed = new URL(input.url);
+    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') origin = parsed.origin;
+  } catch { /* malformed/browser-internal URL stays null */ }
+  return {
+    model: input.model.replace(/[^a-z0-9_-]+/gi, '-').slice(0, 40),
+    stage: input.stage.replace(/[^a-z0-9_-]+/gi, '-').slice(0, 80),
+    origin,
+    bodyTextLength: Math.max(0, Math.min(Math.trunc(input.bodyTextLength), 10_000_000)),
+    extraKeys: Object.keys(input.extra ?? {})
+      .map((key) => key.replace(/[^a-z0-9_-]+/gi, '-').slice(0, 40))
+      .filter(Boolean)
+      .slice(0, 20),
+  };
+}
+
 export async function captureDebug(
   page: import('playwright').Page,
   model: string,
@@ -204,29 +237,11 @@ export async function captureDebug(
   if (!dir) return;
   await fs.promises.mkdir(dir, { recursive: true });
 
-  const safeStage = stage.replace(/[^a-z0-9_-]+/gi, '-').slice(0, 80);
-  const prefix = path.join(dir, `${model}-${safeStage}`);
-  const title = await page.title().catch(() => '');
-  const url = page.url();
-  const rawBodyText = ((await page.textContent('body').catch(() => '')) ?? '').replace(/\s+/g, ' ').trim().slice(0, 4000);
-  const bodyText = rawBodyText
-    .replace(/"accessToken":"[^"]+"/g, '"accessToken":"[redacted]"')
-    .replace(/"sessionToken":"[^"]+"/g, '"sessionToken":"[redacted]"')
-    .replace(/"email":"[^"]+"/g, '"email":"[redacted]"');
-
-  const rawHtml = await page.innerHTML('body').catch(() => '');
-
-  console.log(`[DEBUG-INFO] ${model} at ${stage}: URL=${url} Title="${title}"`);
-  const screenshotBuffer = await page.screenshot({ fullPage: true }).catch(() => null);
-  if (screenshotBuffer) {
-    console.log(`[DEBUG-SCREENSHOT] ${model}-${safeStage}: ${screenshotBuffer.toString('base64')}`);
-  }
-  console.log(`[DEBUG-HTML] ${model}-${safeStage}: ${rawHtml.slice(0, 15000)}`);
-
-  if (screenshotBuffer) {
-    await fs.promises.writeFile(`${prefix}.png`, screenshotBuffer).catch(() => {});
-  }
-  await fs.promises.writeFile(`${prefix}.json`, JSON.stringify({ model, stage, title, url, bodyText, rawHtml, extra }, null, 2), 'utf8').catch(() => {});
+  const bodyTextLength = ((await page.textContent('body').catch(() => '')) ?? '').length;
+  const metadata = safeDebugMetadata({ model, stage, url: page.url(), bodyTextLength, extra });
+  const prefix = path.join(dir, `${metadata.model}-${metadata.stage}`);
+  console.log(`[DEBUG-INFO] ${JSON.stringify(metadata)}`);
+  await fs.promises.writeFile(`${prefix}.json`, JSON.stringify(metadata, null, 2), 'utf8').catch(() => {});
 }
 
 export async function firstVisibleLocator(

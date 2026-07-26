@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "target": "ES2022",
+    "allowImportingTsExtensions": true
+  },
+  "include": [
+    "src/workers/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "src/**/*.test.ts"
+  ]
+}

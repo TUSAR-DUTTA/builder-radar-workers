@@ -12,7 +12,8 @@
     "lint": "eslint",
     "validate:consumer-ui:ingest": "tsx scripts/ingest-consumer-ui.ts",
     "workers:run": "tsx src/workers/runner.ts",
-    "workers:watch": "tsx src/workers/runner.ts --watch"
+    "workers:watch": "tsx src/workers/runner.ts --watch",
+    "typecheck:workers": "tsc --noEmit -p tsconfig.worker.json"
   },
   "dependencies": {
     "@atproto/api": "^0.20.5",

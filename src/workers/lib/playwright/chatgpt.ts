@@ -158,15 +158,17 @@ export async function scrapeChatGPTPrompt(prompt: string): Promise<{ text: strin
       throw new Error(`ChatGPT composer not found at ${page.url()} title="${await page.title().catch(() => '')}"`);
     }
     const turnSnapshot = await page.evaluate(() => {
-      const selector = (turn: 'assistant' | 'user') => `section[data-testid^="conversation-turn-"][data-turn="${turn}"]`;
-      const assistants = Array.from(document.querySelectorAll<HTMLElement>(selector('assistant')));
-      const users = Array.from(document.querySelectorAll<HTMLElement>(selector('user')));
-      const idOf = (node: HTMLElement | undefined) => node?.getAttribute('data-testid') || node?.id || null;
+      // Keep browser callbacks free of nested functions. tsx/esbuild can otherwise
+      // inject its Node-side `__name` helper into browser-evaluated code.
+      const assistants = Array.from(document.querySelectorAll<HTMLElement>('section[data-testid^="conversation-turn-"][data-turn="assistant"]'));
+      const users = Array.from(document.querySelectorAll<HTMLElement>('section[data-testid^="conversation-turn-"][data-turn="user"]'));
+      const lastAssistant = assistants.length ? assistants[assistants.length - 1] : undefined;
+      const lastUser = users.length ? users[users.length - 1] : undefined;
       return {
         assistantCount: assistants.length,
         userCount: users.length,
-        lastAssistantId: idOf(assistants.at(-1)),
-        lastUserId: idOf(users.at(-1)),
+        lastAssistantId: lastAssistant?.getAttribute('data-testid') || lastAssistant?.id || null,
+        lastUserId: lastUser?.getAttribute('data-testid') || lastUser?.id || null,
       };
     });
     await composer.click({ timeout: 20_000, force: true }).catch(() => {});
@@ -191,17 +193,18 @@ export async function scrapeChatGPTPrompt(prompt: string): Promise<{ text: strin
 
     try {
       await page.waitForFunction(({ snapshot, expectedPrompt }) => {
-      const normalize = (value: string) => value.normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim();
       const assistants = Array.from(document.querySelectorAll<HTMLElement>('section[data-testid^="conversation-turn-"][data-turn="assistant"]'));
       const users = Array.from(document.querySelectorAll<HTMLElement>('section[data-testid^="conversation-turn-"][data-turn="user"]'));
-      const last = assistants.at(-1);
-      const lastUser = users.at(-1);
+      const last = assistants.length ? assistants[assistants.length - 1] : undefined;
+      const lastUser = users.length ? users[users.length - 1] : undefined;
       if (!last || !lastUser) return false;
       const assistantId = last.getAttribute('data-testid') || last.id || null;
       const userId = lastUser.getAttribute('data-testid') || lastUser.id || null;
       const newAssistant = assistants.length > snapshot.assistantCount || assistantId !== snapshot.lastAssistantId;
       const newUser = users.length > snapshot.userCount || userId !== snapshot.lastUserId;
-      const promptBound = normalize(lastUser.textContent ?? '').includes(normalize(expectedPrompt));
+      const renderedPrompt = (lastUser.textContent ?? '').normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim();
+      const submittedPrompt = expectedPrompt.normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim();
+      const promptBound = renderedPrompt.includes(submittedPrompt);
       if (!newAssistant || !newUser || !promptBound) return false;
       const busy = last.querySelector('[aria-busy="true"]');
       if (busy) return false;
@@ -216,7 +219,7 @@ export async function scrapeChatGPTPrompt(prompt: string): Promise<{ text: strin
 
     const data = await page.evaluate(() => {
       const assistantTurns = Array.from(document.querySelectorAll<HTMLElement>('section[data-testid^="conversation-turn-"][data-turn="assistant"]'));
-      const last = assistantTurns.at(-1);
+      const last = assistantTurns.length ? assistantTurns[assistantTurns.length - 1] : undefined;
 
       if (!last) {
         return { text: '', links: [] };
@@ -229,10 +232,14 @@ export async function scrapeChatGPTPrompt(prompt: string): Promise<{ text: strin
         .replace(/\s+/g, ' ')
         .trim();
 
-      const links = Array.from(last.querySelectorAll<HTMLAnchorElement>('a[href]'))
-        .map((a) => ({ url: a.href, title: (a.textContent ?? '').trim() || undefined }))
-        .filter((a) => /^https?:\/\//i.test(a.url))
-        .slice(0, 12);
+      const links: { url: string; title?: string }[] = [];
+      const anchors = last.querySelectorAll<HTMLAnchorElement>('a[href]');
+      for (let index = 0; index < anchors.length && links.length < 12; index += 1) {
+        const anchor = anchors[index];
+        if (/^https?:\/\//i.test(anchor.href)) {
+          links.push({ url: anchor.href, title: (anchor.textContent ?? '').trim() || undefined });
+        }
+      }
       return { text, links, assistantTurnId: last.getAttribute('data-testid') || last.id || null };
     });
 

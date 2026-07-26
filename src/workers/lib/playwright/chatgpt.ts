@@ -92,6 +92,13 @@ export async function scrapeChatGPTPrompt(prompt: string): Promise<{ text: strin
   forbidden.length = 0; // Clear previous errors
 
   try {
+    // Keep the authenticated persistent browser, but isolate every measured prompt in a fresh
+    // conversation. Long shared threads can stop rendering a new assistant turn mid-batch; prompt
+    // isolation avoids that state leak without relaxing any identity or quality gate below.
+    if (/^https:\/\/chatgpt\.com\/c\//i.test(page.url())) {
+      await page.goto('https://chatgpt.com/', { waitUntil: 'domcontentloaded', timeout: 45_000 });
+      await page.waitForTimeout(1500);
+    }
     // Wait until we are fully landed and stabilized on chatgpt.com workspace page
     console.log('[chatgpt] Waiting for workspace page to be loaded and stable...');
     let stabilized = false;

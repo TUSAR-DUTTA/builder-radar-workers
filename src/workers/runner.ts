@@ -18,16 +18,18 @@ import { loadSessionsFromEnv } from '@/lib/session-loader';
 import { AI_MODELS, getAIRouter } from '@/lib/ai-router';
 import { eq, and, sql, inArray } from 'drizzle-orm';
 
-import { citedSourceRows, auditAnswerDetailed, accuracyFlag, accuracyAlertRows, resolveBrandConfusion, gateConfusion, extractWinnerReasons, runPrompt, sourceControlLevel } from '@/lib/geo/engine';
+import { citedSourceRows, auditAnswerDetailed, accuracyFlag, accuracyAlertRows, gateConfusion, extractWinnerReasons, runPrompt } from '@/lib/geo/engine';
 import { finalizeAccuracyLoop } from '@/lib/geo/accuracy-loop';
-import type { AnswerModel, BrandFact, AnswerSample, Verdict } from '@/lib/geo/types';
+import type { AnswerModel, BrandFact, AnswerSample } from '@/lib/geo/types';
 import { runPromptViaPlaywrightDetailed, closeSharedBrowser, isPlaywrightAnswerModel, isPromptIdentityError } from './lib/geo-playwright';
 import { runSocialScrapesForProject, runScheduledSocialScrapes } from './social';
 import { isLowQualityAnswer, sanitizeAnswerText } from '@/lib/geo/sanitize-answer';
 import { reserveRunCapacity, settleRunReservation } from '@/lib/run-quota';
 import { oldestAttemptFirst } from '@/lib/worker-scheduling';
-import { classifyAnswerStance } from '@/lib/geo/evidence-contract';
 import { detectAndStoreMovements } from '@/lib/geo/movement';
+import { IDENTITY_CONTRACT_VERSION, identityFromTruthRow, type ProjectIdentityProfile } from '@/lib/geo/identity-contract';
+import { ANSWER_SCHEMA_VERSION, EVIDENCE_CONTRACT_VERSION, JUDGE_PROMPT_VERSION, projectAnswerTruth, storedProjectionFields } from '@/lib/geo/truth-contract';
+import { classifyProjectSource } from '@/lib/geo/source-ownership-contract';
 
 // ── Transient DB-connect retry ───────────────────────────────────────────────
 // The Supabase pooler occasionally drops/blackholes a fresh connection from a cloud
@@ -126,9 +128,13 @@ async function runGeoForProject(projectId: string, sources: string[]): Promise<G
     .select({
       facts: brandFacts.facts,
       verificationStatus: brandFacts.verificationStatus,
+      identityVerificationStatus: brandFacts.identityVerificationStatus,
       canonicalName: brandFacts.canonicalName,
+      canonicalDomain: brandFacts.canonicalDomain,
       aliases: brandFacts.aliases,
+      domainAliases: brandFacts.domainAliases,
       ambiguousAliases: brandFacts.ambiguousAliases,
+      identityProvenance: brandFacts.identityProvenance,
     })
     .from(brandFacts)
     .where(eq(brandFacts.projectId, project.id))
@@ -136,10 +142,11 @@ async function runGeoForProject(projectId: string, sources: string[]): Promise<G
   const facts = factRow?.verificationStatus === 'user_approved'
     ? (factRow.facts as BrandFact[] | undefined) ?? []
     : [];
-  const identity = {
-    canonicalName: factRow?.canonicalName?.trim() || project.name,
-    aliases: Array.isArray(factRow?.aliases) ? factRow.aliases.filter((value): value is string => typeof value === 'string') : [],
-    ambiguousAliases: Array.isArray(factRow?.ambiguousAliases) ? factRow.ambiguousAliases.filter((value): value is string => typeof value === 'string') : [],
+  const identity = identityFromTruthRow(project.name, factRow);
+  const projectIdentity: ProjectIdentityProfile = {
+    ...identity,
+    competitors: competitors.map((canonicalName) => ({ canonicalName })),
+    contractVersion: IDENTITY_CONTRACT_VERSION,
   };
 
   // Captured BEFORE any alert upsert so the loop can tell re-seen from no-longer-seen alerts.
@@ -186,7 +193,7 @@ async function runGeoForProject(projectId: string, sources: string[]): Promise<G
             status: attempt.status,
             failureReason: attempt.failureReason,
             latencyMs: attempt.latencyMs,
-            analysisVersion: 'evidence_v2',
+            analysisVersion: EVIDENCE_CONTRACT_VERSION,
           }))).catch((error) => console.warn(`[geo-scrape] attempt diagnostics unavailable: ${(error as Error).message.slice(0, 120)}`));
         }
       } catch (err) {
@@ -200,6 +207,17 @@ async function runGeoForProject(projectId: string, sources: string[]): Promise<G
       try {
         const apiSamples = await runPrompt(router, p.prompt, entities, apiModels);
         samples.push(...apiSamples);
+        const returned = new Set(apiSamples.map((sample) => sample.model));
+        await db.insert(aiProcessingAttempts).values(apiModels.map((model) => ({
+          projectId: project.id,
+          promptId: p.id,
+          engine: model,
+          acquisition: 'api',
+          stage: 'acquisition',
+          status: returned.has(model) ? 'succeeded' : 'failed',
+          failureReason: returned.has(model) ? null : 'provider_no_valid_answer',
+          analysisVersion: EVIDENCE_CONTRACT_VERSION,
+        }))).catch((error) => console.warn(`[geo-scrape] API attempt diagnostics unavailable: ${(error as Error).message.slice(0, 120)}`));
       } catch (err) {
         console.error(`[geo-scrape] API prompt ${p.id} failed:`, err);
       }
@@ -219,8 +237,8 @@ async function runGeoForProject(projectId: string, sources: string[]): Promise<G
       // confusion (an alert), never as visibility. Fix BOTH the brand_verdict column and the
       // verdicts JSON, since the dashboard reads the column (trend/per-engine) and the JSON (share).
       const effectiveAudit = gateConfusion(audit);
-      const { verdict: brandVerdict, confused } = resolveBrandConfusion(audited.answer, project.name, s.verdicts[project.name], effectiveAudit);
-      const verdicts = confused ? { ...audited.verdicts, [project.name]: 'absent' as Verdict } : audited.verdicts;
+      const truth = projectAnswerTruth(sanitizedAnswer, projectIdentity);
+      const projection = storedProjectionFields(truth);
 
       // Keep "entity confusion" only when verifiable (a contradicted category claim — see
       // gateConfusion); otherwise drop it so we never cry "AI confused you with another company"
@@ -229,7 +247,7 @@ async function runGeoForProject(projectId: string, sources: string[]): Promise<G
       // Why each recommended rival won — a dedicated extraction (the brand audit goes empty when the
       // brand is absent, which is the usual case here). Only runs when a competitor is actually
       // recommended, so most answers cost nothing extra.
-      const recommendedComps = competitorEntities.filter((c) => verdicts[c] === 'recommended');
+      const recommendedComps = truth.competitorWinners.map((competitor) => competitor.entity);
       const winnerReasons = await extractWinnerReasons(router, audited.answer, recommendedComps);
 
       const inserted = await db.insert(answerRuns).values({
@@ -238,23 +256,24 @@ async function runGeoForProject(projectId: string, sources: string[]): Promise<G
         model: audited.model,
         answer: sanitizedAnswer.slice(0, 8000),
         sanitizedAnswer: sanitizedAnswer.slice(0, 8000),
-        verdicts,
-        brandVerdict,
-        brandRank: confused ? null : audited.brandRank,
-        sentiment: confused ? null : audited.sentiment,
+        verdicts: projection?.verdicts ?? {},
+        brandVerdict: projection?.brandVerdict ?? null,
+        brandRank: audited.brandRank,
+        sentiment: audited.sentiment,
         citations: audited.citations,
         claims: effectiveAudit?.claims ?? [],
         accuracyFlag: accuracyFlag(effectiveAudit),
         winnerReasons,
-        analysisVersion: 'evidence_v2',
-        schemaVersion: 'answer_analysis_v2',
-        promptVersion: 'geo_judge_v2_strict',
+        analysisVersion: EVIDENCE_CONTRACT_VERSION,
+        schemaVersion: ANSWER_SCHEMA_VERSION,
+        promptVersion: JUDGE_PROMPT_VERSION,
+        identityVersion: IDENTITY_CONTRACT_VERSION,
         factsVersion: facts.length > 0 ? 'user_approved_brand_facts_v1' : null,
-        analysisStatus: auditOutcome.status,
-        analysisConfidence: auditOutcome.status === 'confident' ? 'confident' : 'low_confidence',
-        entityEvidence: entities.map((entity) => ({ entity, stance: classifyAnswerStance(audited.answer, entity === project.name ? identity : { canonicalName: entity }) })),
-        providerMetadata: { answerEngine: audited.model, acquisition: 'playwright', judgeModel: AI_MODELS.structuredHighRisk, auditModel: AI_MODELS.structuredHighRisk, schemaMode: 'strict_json_schema', auditStatus: auditOutcome.status },
-        failureReason: auditOutcome.failureReason,
+        analysisStatus: projection ? auditOutcome.status : 'low_confidence',
+        analysisConfidence: projection && auditOutcome.status === 'confident' ? 'confident' : 'low_confidence',
+        entityEvidence: truth.entities,
+        providerMetadata: { answerEngine: audited.model, acquisition: isPlaywrightAnswerModel(audited.model) ? 'playwright' : 'api', judgeModel: AI_MODELS.structuredHighRisk, auditModel: AI_MODELS.structuredHighRisk, schemaMode: 'strict_json_schema', auditStatus: auditOutcome.status },
+        failureReason: projection ? auditOutcome.failureReason : 'identity_ambiguity',
       }).onConflictDoNothing().returning({ id: answerRuns.id });
       const evidenceRunId = inserted[0]?.id ?? null;
       runCount += inserted.length;
@@ -300,20 +319,27 @@ async function runGeoForProject(projectId: string, sources: string[]): Promise<G
 
     const sourceRows = citedSourceRows(samples);
     for (const src of sourceRows) {
+      const classified = classifyProjectSource(src.url, projectIdentity);
       await db.insert(citedSources).values({
         projectId: project.id,
         url: src.url,
         domain: src.domain,
-        sourceType: src.sourceType,
-        sourceControlLevel: sourceControlLevel(src.sourceType),
+        sourceType: classified.legacySourceType,
+        sourceControlLevel: classified.controlLevel,
+        ownership: classified.ownership,
+        ownerEntity: classified.ownerEntity,
+        ownershipVersion: IDENTITY_CONTRACT_VERSION,
         promptsCiting: 1,
         citations: src.count,
       }).onConflictDoUpdate({
         target: [citedSources.projectId, citedSources.url],
         set: {
           citations: sql`${citedSources.citations} + ${src.count}`,
-          sourceType: src.sourceType,
-          sourceControlLevel: sourceControlLevel(src.sourceType),
+          sourceType: classified.legacySourceType,
+          sourceControlLevel: classified.controlLevel,
+          ownership: classified.ownership,
+          ownerEntity: classified.ownerEntity,
+          ownershipVersion: IDENTITY_CONTRACT_VERSION,
           lastSeen: sql`now()`,
         },
       });

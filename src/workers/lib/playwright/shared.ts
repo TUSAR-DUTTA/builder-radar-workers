@@ -28,7 +28,12 @@ type StoredOrigin = {
   localStorage?: Array<{ name: string; value: string }>;
 };
 
-let sharedUserDataDir: Record<string, string> = {};
+const sharedUserDataDir: Record<string, string> = {};
+
+type StoredSession = {
+  cookies?: Parameters<import('playwright').BrowserContext['addCookies']>[0];
+  origins?: StoredOrigin[];
+};
 
 export async function launchSeededPersistentContext(model: AnswerModel): Promise<PlaywrightContextHandle> {
   const { chromium } = await import('playwright-extra');
@@ -45,10 +50,7 @@ export async function launchSeededPersistentContext(model: AnswerModel): Promise
     }
   }
   const userDataDir = sharedUserDataDir[model];
-  const storageState = JSON.parse(await fs.promises.readFile(sessionPath, 'utf8')) as {
-    cookies?: any[];
-    origins?: StoredOrigin[];
-  };
+  const storageState = JSON.parse(await fs.promises.readFile(sessionPath, 'utf8')) as StoredSession;
   console.log(`[stealth] loading session file from ${sessionPath}, found ${storageState.cookies?.length ?? 0} cookies`);
   const localStorageByOrigin = Object.fromEntries(
     (storageState.origins ?? [])
@@ -58,7 +60,7 @@ export async function launchSeededPersistentContext(model: AnswerModel): Promise
 
   const proxyServer = process.env.PLAYWRIGHT_PROXY_SERVER?.trim();
   // We only route these specific bots through residential IP because their anti-bot blocks datacenter ASNs
-  const useProxy = proxyServer && (model === 'openai-search' || model === 'chatgpt-consumer');
+  const useProxy = proxyServer && (model === 'chatgpt-consumer');
   const proxy = useProxy ? {
     server: proxyServer,
     username: process.env.PLAYWRIGHT_PROXY_USERNAME?.trim(),
@@ -71,26 +73,22 @@ export async function launchSeededPersistentContext(model: AnswerModel): Promise
     console.log(`[stealth] bypassing proxy for ${model} to save bandwidth`);
   }
 
-  const dummyBrowser = await browserType.launch();
-  const actualVersion = dummyBrowser.version();
-  await dummyBrowser.close();
-
   const isGoogleAio = model === 'google-aio';
-  const launchOptions: any = {
-    ...stealthLaunchOptions(true, !!useProxy),
-    ...stealthContext(undefined),
-    proxy,
-  };
-
-  if (isGoogleAio) {
-    launchOptions.channel = process.env.PLAYWRIGHT_BROWSER_CHANNEL?.trim() || 'chrome';
-    launchOptions.ignoreDefaultArgs = ['--enable-automation', '--no-sandbox', '--disable-setuid-sandbox'];
-    launchOptions.args = [
+  const googleOptions = isGoogleAio ? {
+    channel: process.env.PLAYWRIGHT_BROWSER_CHANNEL?.trim() || 'chrome',
+    ignoreDefaultArgs: ['--enable-automation', '--no-sandbox', '--disable-setuid-sandbox'],
+    args: [
       '--disable-blink-features=AutomationControlled',
       '--window-size=1440,960',
       '--lang=en-US',
-    ];
-  }
+    ],
+  } : {};
+  const launchOptions: Parameters<typeof browserType.launchPersistentContext>[1] = {
+    ...stealthLaunchOptions(true, !!useProxy),
+    ...stealthContext(undefined),
+    proxy,
+    ...googleOptions,
+  };
 
   const context = await browserType.launchPersistentContext(userDataDir, launchOptions);
   if (model === 'google-aio') {
@@ -136,7 +134,7 @@ export async function launchSeededContext(model: AnswerModel): Promise<Playwrigh
   const sessionPath = sessionPathFor(model);
   
   const proxyServer = process.env.PLAYWRIGHT_PROXY_SERVER?.trim();
-  const useProxy = proxyServer && (model === 'openai-search' || model === 'chatgpt-consumer');
+  const useProxy = proxyServer && (model === 'chatgpt-consumer');
   const proxy = useProxy ? {
     server: proxyServer,
     username: process.env.PLAYWRIGHT_PROXY_USERNAME?.trim(),
@@ -158,14 +156,14 @@ export async function launchSeededContext(model: AnswerModel): Promise<Playwrigh
   });
 
   if (hasSession) {
-    const storageState = JSON.parse(await fs.promises.readFile(sessionPath, 'utf8')) as any;
+    const storageState = JSON.parse(await fs.promises.readFile(sessionPath, 'utf8')) as StoredSession;
     if (storageState.cookies && storageState.cookies.length > 0) {
       await context.addCookies(storageState.cookies);
     }
     const localStorageByOrigin = Object.fromEntries(
       (storageState.origins ?? [])
-        .filter((entry: any) => entry.origin && entry.localStorage?.length)
-        .map((entry: any) => [entry.origin, entry.localStorage ?? []]),
+        .filter((entry) => entry.origin && entry.localStorage?.length)
+        .map((entry) => [entry.origin, entry.localStorage ?? []]),
     );
     await context.addInitScript((origins: Record<string, Array<{ name: string; value: string }>>) => {
       const items = origins[window.location.origin];
@@ -202,7 +200,11 @@ export interface SafeDebugMetadata {
   extraKeys: string[];
 }
 
-/** Diagnostics must never persist page text, HTML, screenshots, query strings, or extra values. */
+/**
+ * Build the only diagnostic payload workers may persist. Page text, HTML, screenshots, query
+ * strings, path identifiers and arbitrary `extra` values can all contain customer/session data,
+ * so diagnostics retain only bounded type/health metadata.
+ */
 export function safeDebugMetadata(input: {
   model: string;
   stage: string;

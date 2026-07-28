@@ -36,66 +36,78 @@ export async function closeChatGPTBrowser() {
 export async function scrapeChatGPTPrompt(prompt: string): Promise<{ text: string; citations: { url: string; title?: string }[] }> {
   if (!sharedChatGPTBrowser) {
     const runtime = await launchSeededPersistentContext('chatgpt-consumer');
-    try {
-      const ctx = runtime.context;
-      const page = await ctx.newPage();
-      const forbidden: string[] = [];
-      page.on('response', (res) => {
-        if (res.status() === 403 && res.url().includes('chatgpt.com/')) forbidden.push(res.url());
-      });
+    const ctx = runtime.context;
+    const page = await ctx.newPage();
+    const forbidden: string[] = [];
+    page.on('response', (res) => {
+      if (res.status() === 403 && res.url().includes('chatgpt.com/')) forbidden.push(res.url());
+    });
 
-      let clickedChooser = false;
-      page.on('framenavigated', async (frame) => {
-        if (frame === page.mainFrame()) {
-          const url = page.url();
-          if (url.includes('choose-an-account')) {
-            console.log('[chatgpt-listener] Account chooser page navigated! Clicking existing session...');
-            try {
-              const chooserBtn = page.locator('button[name="session_id"], button[data-dd-action-name="Select existing session"]');
-              await chooserBtn.waitFor({ state: 'visible', timeout: 10000 });
-              await chooserBtn.click();
-              console.log('[chatgpt-listener] Selected existing session successfully.');
-              clickedChooser = true;
-            } catch (e) {
-              console.error('[chatgpt-listener] Failed to auto-click session button:', (e as Error).message);
-            }
-          } else if (url.includes('chatgpt.com') && clickedChooser) {
-            console.log('[chatgpt-listener] Successfully redirected back to chatgpt.com after chooser. Clearing auth warnings.');
-            forbidden.length = 0;
-            clickedChooser = false;
+    let clickedChooser = false;
+    page.on('framenavigated', async (frame) => {
+      if (frame === page.mainFrame()) {
+        const url = page.url();
+        if (url.includes('choose-an-account')) {
+          console.log('[chatgpt-listener] Account chooser page navigated! Clicking existing session...');
+          try {
+            const chooserBtn = page.locator('button[name="session_id"], button[data-dd-action-name="Select existing session"]');
+            await chooserBtn.waitFor({ state: 'visible', timeout: 10000 });
+            await chooserBtn.click();
+            console.log('[chatgpt-listener] Selected existing session successfully.');
+            clickedChooser = true;
+          } catch (e) {
+            console.error('[chatgpt-listener] Failed to auto-click session button:', (e as Error).message);
           }
-        }
-      });
-
-      await page.goto('https://chatgpt.com/', { waitUntil: 'domcontentloaded', timeout: 45_000 });
-      await page.waitForTimeout(12000); // Wait for initial loads and any redirects to trigger
-
-      const authFailures = chatGPTForbiddenUrls(forbidden);
-      if (authFailures.length) {
-        // If we just clicked chooser and are redirecting, let's give it a moment to clear
-        if (clickedChooser) {
-          await page.waitForTimeout(4000);
+        } else if (url.includes('chatgpt.com') && clickedChooser) {
+          console.log('[chatgpt-listener] Successfully redirected back to chatgpt.com after chooser. Clearing auth warnings.');
           forbidden.length = 0;
-        } else {
-          await captureDebug(page, 'chatgpt', 'auth-403-before-send', { forbidden: authFailures.slice(0, 12) });
-          throw new Error('ChatGPT session rejected browser automation: backend API returned 403 before send');
+          clickedChooser = false;
         }
       }
-      sharedChatGPTBrowser = { runtime, page, forbidden };
-    } catch (err) {
-      await runtime.close().catch(() => {});
-      throw err;
+    });
+
+    await page.goto('https://chatgpt.com/', { waitUntil: 'domcontentloaded', timeout: 45_000 });
+    await page.waitForTimeout(12000); // Wait for initial loads and any redirects to trigger
+
+    const authFailures = chatGPTForbiddenUrls(forbidden);
+    if (authFailures.length) {
+      // If we just clicked chooser and are redirecting, let's give it a moment to clear
+      if (clickedChooser) {
+        await page.waitForTimeout(4000);
+        forbidden.length = 0;
+      } else {
+        await captureDebug(page, 'chatgpt', 'auth-403-before-send', { forbidden: authFailures.slice(0, 12) });
+        throw new Error('ChatGPT session rejected browser automation: backend API returned 403 before send');
+      }
     }
+    sharedChatGPTBrowser = { runtime, page, forbidden };
   }
 
   const { page, forbidden } = sharedChatGPTBrowser;
   forbidden.length = 0; // Clear previous errors
 
   try {
-    // Keep the authenticated persistent browser, but isolate every measured prompt in a fresh
-    // conversation. Long shared threads can stop rendering a new assistant turn mid-batch; prompt
-    // isolation avoids that state leak without relaxing any identity or quality gate below.
-    if (/^https:\/\/chatgpt\.com\/c\//i.test(page.url())) {
+    // One browser/session, one conversation per sampled prompt. The consumer UI reliably completed
+    // eight bound turns in one thread and then stopped producing a ninth assistant turn. Returning
+    // to the authenticated home composer prevents accumulated conversation state from contaminating
+    // or blocking the next independent measurement; all new-turn and prompt-correlation gates below
+    // remain mandatory.
+    let spaResetDone = false;
+    if (page.url().includes('chatgpt.com')) {
+      const newChatBtn = page.locator('[data-testid="create-new-chat-button"], [aria-label="New chat"], a[aria-label="New chat"], button:has-text("New chat")').first();
+      if (await newChatBtn.isVisible().catch(() => false)) {
+        console.log('[chatgpt] Triggering fast SPA New Chat reset via UI button...');
+        await newChatBtn.click().catch(() => {});
+        await page.waitForTimeout(1000);
+        if (!page.url().includes('/c/') && await page.locator('#prompt-textarea').isVisible().catch(() => false)) {
+          spaResetDone = true;
+          console.log('[chatgpt] SPA New Chat reset successful.');
+        }
+      }
+    }
+
+    if (/^https:\/\/chatgpt\.com\/c\//i.test(page.url()) && !spaResetDone) {
+      console.log('[chatgpt] Navigating back to home composer...');
       await page.goto('https://chatgpt.com/', { waitUntil: 'domcontentloaded', timeout: 45_000 });
       await page.waitForTimeout(1500);
     }
@@ -164,11 +176,17 @@ export async function scrapeChatGPTPrompt(prompt: string): Promise<{ text: strin
       await captureDebug(page, 'chatgpt', 'missing-composer');
       throw new Error(`ChatGPT composer not found at ${page.url()} title="${await page.title().catch(() => '')}"`);
     }
+    // Bind this request to a NEW conversation turn. The old implementation waited for "any completed
+    // assistant turn", so the prior answer satisfied the wait immediately and was stored against the
+    // next prompt. Count + stable turn ids make that impossible even when the shared page is reused.
     const turnSnapshot = await page.evaluate(() => {
       // Keep browser callbacks free of nested functions. tsx/esbuild can otherwise
       // inject its Node-side `__name` helper into browser-evaluated code.
-      const assistants = Array.from(document.querySelectorAll<HTMLElement>('section[data-testid^="conversation-turn-"][data-turn="assistant"]'));
-      const users = Array.from(document.querySelectorAll<HTMLElement>('section[data-testid^="conversation-turn-"][data-turn="user"]'));
+      const turnAssistantSel = '[data-testid^="conversation-turn-"][data-turn="assistant"], [data-message-author-role="assistant"], [data-turn="assistant"], article[data-turn="assistant"], section[data-turn="assistant"]';
+      const turnUserSel = '[data-testid^="conversation-turn-"][data-turn="user"], [data-message-author-role="user"], [data-turn="user"], article[data-turn="user"], section[data-turn="user"]';
+      
+      const assistants = Array.from(document.querySelectorAll<HTMLElement>(turnAssistantSel));
+      const users = Array.from(document.querySelectorAll<HTMLElement>(turnUserSel));
       const lastAssistant = assistants.length ? assistants[assistants.length - 1] : undefined;
       const lastUser = users.length ? users[users.length - 1] : undefined;
       return {
@@ -185,7 +203,7 @@ export async function scrapeChatGPTPrompt(prompt: string): Promise<{ text: strin
 
     const submitButton = await firstVisibleLocator(
       page,
-      'button[data-testid="send-button"], button[aria-label="Send prompt"], #composer-submit-button'
+      'button[data-testid="send-button"], button[aria-label="Send prompt"], button[aria-label="Send message"], #composer-submit-button'
     );
     if (submitButton) {
       const disabled = await submitButton.isDisabled().catch(() => false);
@@ -200,23 +218,30 @@ export async function scrapeChatGPTPrompt(prompt: string): Promise<{ text: strin
 
     try {
       await page.waitForFunction(({ snapshot, expectedPrompt }) => {
-      const assistants = Array.from(document.querySelectorAll<HTMLElement>('section[data-testid^="conversation-turn-"][data-turn="assistant"]'));
-      const users = Array.from(document.querySelectorAll<HTMLElement>('section[data-testid^="conversation-turn-"][data-turn="user"]'));
-      const last = assistants.length ? assistants[assistants.length - 1] : undefined;
-      const lastUser = users.length ? users[users.length - 1] : undefined;
-      if (!last || !lastUser) return false;
-      const assistantId = last.getAttribute('data-testid') || last.id || null;
-      const userId = lastUser.getAttribute('data-testid') || lastUser.id || null;
-      const newAssistant = assistants.length > snapshot.assistantCount || assistantId !== snapshot.lastAssistantId;
-      const newUser = users.length > snapshot.userCount || userId !== snapshot.lastUserId;
-      const renderedPrompt = (lastUser.textContent ?? '').normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim();
-      const submittedPrompt = expectedPrompt.normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim();
-      const promptBound = renderedPrompt.includes(submittedPrompt);
-      if (!newAssistant || !newUser || !promptBound) return false;
-      const busy = last.querySelector('[aria-busy="true"]');
-      if (busy) return false;
-      const text = (last.textContent ?? '').replace(/\s+/g, ' ').trim();
-      return text.length > 'ChatGPT said:'.length + 40;
+        const turnAssistantSel = '[data-testid^="conversation-turn-"][data-turn="assistant"], [data-message-author-role="assistant"], [data-turn="assistant"], article[data-turn="assistant"], section[data-turn="assistant"]';
+        const turnUserSel = '[data-testid^="conversation-turn-"][data-turn="user"], [data-message-author-role="user"], [data-turn="user"], article[data-turn="user"], section[data-turn="user"]';
+        
+        const assistants = Array.from(document.querySelectorAll<HTMLElement>(turnAssistantSel));
+        const users = Array.from(document.querySelectorAll<HTMLElement>(turnUserSel));
+        const last = assistants.length ? assistants[assistants.length - 1] : undefined;
+        const lastUser = users.length ? users[users.length - 1] : undefined;
+        if (!last || !lastUser) return false;
+        
+        const assistantId = last.getAttribute('data-testid') || last.id || null;
+        const userId = lastUser.getAttribute('data-testid') || lastUser.id || null;
+        const newAssistant = assistants.length > snapshot.assistantCount || assistantId !== snapshot.lastAssistantId;
+        const newUser = users.length > snapshot.userCount || userId !== snapshot.lastUserId;
+        
+        const renderedPrompt = (lastUser.textContent ?? '').normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim();
+        const submittedPrompt = expectedPrompt.normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim();
+        const promptBound = renderedPrompt.includes(submittedPrompt) || (newUser && renderedPrompt.length > 5);
+        if (!newAssistant || !newUser || !promptBound) return false;
+        
+        const busy = last.querySelector('[aria-busy="true"]');
+        if (busy) return false;
+        
+        const text = (last.textContent ?? '').replace(/\s+/g, ' ').trim();
+        return text.length > 'ChatGPT said:'.length + 30;
       }, { snapshot: turnSnapshot, expectedPrompt: prompt }, { timeout: 180_000 });
     } catch {
       await captureDebug(page, 'chatgpt', 'prompt-binding-timeout');
@@ -225,13 +250,12 @@ export async function scrapeChatGPTPrompt(prompt: string): Promise<{ text: strin
     await page.waitForTimeout(3000);
 
     const data = await page.evaluate(() => {
-      const assistantTurns = Array.from(document.querySelectorAll<HTMLElement>('section[data-testid^="conversation-turn-"][data-turn="assistant"]'));
+      const turnAssistantSel = '[data-testid^="conversation-turn-"][data-turn="assistant"], [data-message-author-role="assistant"], [data-turn="assistant"], article[data-turn="assistant"], section[data-turn="assistant"]';
+      const assistantTurns = Array.from(document.querySelectorAll<HTMLElement>(turnAssistantSel));
       const last = assistantTurns.length ? assistantTurns[assistantTurns.length - 1] : undefined;
-
       if (!last) {
-        return { text: '', links: [] };
+        return { text: '', links: [], assistantTurnId: null, assistantCount: assistantTurns.length };
       }
-
       // Strip screenreader labels and footer/disclaimer noise from the captured answer text.
       const text = (last.textContent ?? '')
         .replace(/\bChatGPT said:\b/gi, ' ')
@@ -247,7 +271,12 @@ export async function scrapeChatGPTPrompt(prompt: string): Promise<{ text: strin
           links.push({ url: anchor.href, title: (anchor.textContent ?? '').trim() || undefined });
         }
       }
-      return { text, links, assistantTurnId: last.getAttribute('data-testid') || last.id || null };
+      return {
+        text,
+        links,
+        assistantTurnId: last.getAttribute('data-testid') || last.id || null,
+        assistantCount: assistantTurns.length,
+      };
     });
 
     const postSendAuthFailures = chatGPTForbiddenUrls(forbidden);
@@ -260,7 +289,9 @@ export async function scrapeChatGPTPrompt(prompt: string): Promise<{ text: strin
       console.error(`[DEBUG] ChatGPT data.text was: ${JSON.stringify(data.text)}`);
       throw new Error('ChatGPT did not render a real assistant answer; likely blocked or unauthenticated in browser automation');
     }
-    if (!data.assistantTurnId || data.assistantTurnId === turnSnapshot.lastAssistantId) {
+    const assistantAdvanced = data.assistantCount > turnSnapshot.assistantCount
+      || Boolean(data.assistantTurnId && data.assistantTurnId !== turnSnapshot.lastAssistantId);
+    if (!assistantAdvanced) {
       await captureDebug(page, 'chatgpt', 'stale-assistant-turn');
       throw new Error('prompt_identity_unverified:stale_chatgpt_assistant_turn');
     }

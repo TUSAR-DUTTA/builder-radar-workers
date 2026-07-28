@@ -25,8 +25,24 @@ export async function scrapeGrokPrompt(prompt: string): Promise<{ text: string; 
   const { page } = sharedGrokBrowser;
 
   try {
-    await page.goto('https://grok.com/', { waitUntil: 'domcontentloaded', timeout: 45_000 });
-    await page.waitForTimeout(1000);
+    let spaResetDone = false;
+    if (page.url().includes('grok.com')) {
+      const newChatBtn = page.locator('a[href="/"], [aria-label="New chat"], [aria-label="New Thread"], button:has-text("New chat")').first();
+      if (await newChatBtn.isVisible().catch(() => false)) {
+        console.log('[grok] Triggering fast SPA New Chat reset via UI button...');
+        await newChatBtn.click().catch(() => {});
+        await page.waitForTimeout(1000);
+        if (await page.locator('#grok-input, [contenteditable="true"], textarea').first().isVisible().catch(() => false)) {
+          spaResetDone = true;
+          console.log('[grok] SPA New Chat reset successful.');
+        }
+      }
+    }
+
+    if (!spaResetDone) {
+      await page.goto('https://grok.com/', { waitUntil: 'domcontentloaded', timeout: 45_000 });
+      await page.waitForTimeout(1000);
+    }
 
     if (page.url().includes('login') || await page.locator('text="Sign in"').isVisible().catch(() => false)) {
       await captureDebug(page, 'grok', 'unauthenticated');
@@ -60,7 +76,7 @@ export async function scrapeGrokPrompt(prompt: string): Promise<{ text: string; 
     await composer.press('Enter');
 
     // Require a newly rendered assistant turn bound to the submitted user prompt. Never fall back
-    // to page chrome or a previous response when the current turn cannot be proven.
+    // to <main> or <body>: those contain navigation and prior conversation text, not answer proof.
     const deadline = Date.now() + 180_000;
     let stableChecks = 0;
     let previousText = '';
@@ -114,6 +130,11 @@ export async function scrapeGrokPrompt(prompt: string): Promise<{ text: string; 
     if (!data || stableChecks < 2) {
       await captureDebug(page, 'grok', 'prompt-binding-timeout');
       throw new Error('prompt_identity_unverified:new_grok_turn_not_bound_to_submitted_prompt');
+    }
+
+    if (data.text.length < 40) {
+      await captureDebug(page, 'grok', 'bad-response');
+      throw new Error('Grok did not render a real assistant answer');
     }
 
     return { text: data.text, citations: data.links };

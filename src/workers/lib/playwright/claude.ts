@@ -29,8 +29,24 @@ export async function scrapeClaudePrompt(prompt: string): Promise<{ text: string
   const { page } = sharedClaudeBrowser;
 
   try {
-    await page.goto('https://claude.ai/new', { waitUntil: 'domcontentloaded', timeout: 45_000 });
-    await page.waitForTimeout(1000);
+    let spaResetDone = false;
+    if (page.url().includes('claude.ai')) {
+      const newChatBtn = page.locator('a[href="/new"], [aria-label="Start new chat"], [aria-label="New chat"], button:has-text("Start new chat")').first();
+      if (await newChatBtn.isVisible().catch(() => false)) {
+        console.log('[claude] Triggering fast SPA New Chat reset via UI button...');
+        await newChatBtn.click().catch(() => {});
+        await page.waitForTimeout(1000);
+        if (page.url().endsWith('/new') || page.url().includes('/chats')) {
+          spaResetDone = true;
+          console.log('[claude] SPA New Chat reset successful.');
+        }
+      }
+    }
+
+    if (!spaResetDone) {
+      await page.goto('https://claude.ai/new', { waitUntil: 'domcontentloaded', timeout: 45_000 });
+      await page.waitForTimeout(1000);
+    }
 
     // Attempt to dismiss cookie popups repeatedly
     let composer: import('playwright').Locator | null = null;

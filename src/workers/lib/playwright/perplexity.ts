@@ -27,8 +27,24 @@ export async function scrapePerplexityPrompt(prompt: string): Promise<{ text: st
   const { page } = sharedPerplexityBrowser;
 
   try {
-    await page.goto('https://www.perplexity.ai/', { waitUntil: 'domcontentloaded', timeout: 45_000 });
-    await page.waitForTimeout(1000);
+    let spaResetDone = false;
+    if (page.url().includes('perplexity.ai')) {
+      const newThreadBtn = page.locator('[aria-label="New Thread"], [data-testid="new-thread-button"], a[href="/"], button:has-text("New Thread")').first();
+      if (await newThreadBtn.isVisible().catch(() => false)) {
+        console.log('[perplexity] Triggering fast SPA New Thread reset via UI button...');
+        await newThreadBtn.click().catch(() => {});
+        await page.waitForTimeout(1000);
+        if (await page.locator('#ask-input, textarea, [contenteditable="true"]').first().isVisible().catch(() => false)) {
+          spaResetDone = true;
+          console.log('[perplexity] SPA New Thread reset successful.');
+        }
+      }
+    }
+
+    if (!spaResetDone) {
+      await page.goto('https://www.perplexity.ai/', { waitUntil: 'domcontentloaded', timeout: 45_000 });
+      await page.waitForTimeout(1000);
+    }
 
     let composer = await firstVisibleLocator(page, '#ask-input, textarea, [contenteditable="true"], [placeholder="Ask anything..."]');
     if (!composer) {

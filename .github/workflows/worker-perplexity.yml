@@ -100,8 +100,6 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
-      - name: Run contract and typecheck tests
-        run: npm run test:worker-contracts
 
       - name: Fetch private core (read-only, runtime only)
         uses: actions/checkout@v4
@@ -116,6 +114,9 @@ jobs:
           cp -r _core/src/lib src/lib
           if [ -d _core/src/types ]; then cp -r _core/src/types src/types; fi
           rm -rf _core
+
+      - name: Run contract and typecheck tests
+        run: npm run test:worker-contracts
       - name: Install Playwright browsers and dependencies
         run: npx playwright install --with-deps chromium
 

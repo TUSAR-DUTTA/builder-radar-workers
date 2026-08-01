@@ -45,8 +45,9 @@ export async function scrapeGrokPrompt(prompt: string): Promise<BrowserCapture> 
     }
 
     const snapshot = await page.evaluate(() => {
-      const assistantTurns = Array.from(document.querySelectorAll('.markdown, .message.assistant, [class*="message"][class*="assistant"]'));
+      let assistantTurns = Array.from(document.querySelectorAll('.markdown, .message.assistant, [class*="message"][class*="assistant"]'));
       const userTurns = Array.from(document.querySelectorAll('.message.user, [class*="message"][class*="user"]'));
+      assistantTurns = assistantTurns.filter(a => !userTurns.some(u => u.contains(a) || u === a));
       const lastAssistant = assistantTurns.at(-1);
       return {
         assistantCount: assistantTurns.length,
@@ -68,8 +69,9 @@ export async function scrapeGrokPrompt(prompt: string): Promise<BrowserCapture> 
     for (let i = 0; i < 45; i++) {
       await page.waitForTimeout(1000);
       const data = await page.evaluate((expectedPrompt) => {
-        const assistantTurns = Array.from(document.querySelectorAll('.markdown, .message.assistant, [class*="message"][class*="assistant"]'));
+        let assistantTurns = Array.from(document.querySelectorAll('.markdown, .message.assistant, [class*="message"][class*="assistant"]'));
         const userTurns = Array.from(document.querySelectorAll('.message.user, [class*="message"][class*="user"]'));
+        assistantTurns = assistantTurns.filter(a => !userTurns.some(u => u.contains(a) || u === a));
         if (assistantTurns.length === 0) return null;
         
         let lastMatchingUserIndex = -1;

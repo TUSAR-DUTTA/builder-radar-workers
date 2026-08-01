@@ -206,8 +206,11 @@ export async function scrapeChatGPTPrompt(prompt: string): Promise<BrowserCaptur
       const promptBound = userText.includes(expPrompt);
       
       if (!newAssistant || !newUser || !promptBound) return false;
-      const busy = last.querySelector('[aria-busy="true"]');
+      const busy = last.querySelector('[aria-busy="true"], [class*="result-streaming"]');
       if (busy) return false;
+      const stopBtn = document.querySelector('[data-testid="stop-button"], button[aria-label="Stop generating"]');
+      if (stopBtn) return false;
+      
       const text = (last.textContent ?? '').replace(/\s+/g, ' ').trim();
       return text.length > 'ChatGPT said:'.length + 40;
       }, { snapshot: turnSnapshot, expectedPrompt: prompt }, { timeout: 180_000 });

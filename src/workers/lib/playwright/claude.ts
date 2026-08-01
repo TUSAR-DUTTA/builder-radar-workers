@@ -47,8 +47,8 @@ export async function scrapeClaudePrompt(prompt: string): Promise<BrowserCapture
     }
 
     const spec: ConversationDomSpec = {
-      userSelector: '.font-user-message, [data-is-user="true"]',
-      assistantSelector: '.font-claude-response, [data-is-user="false"]',
+      userSelector: '[class*="font-user-message"], [data-is-user="true"]',
+      assistantSelector: '[class*="font-claude-response"], [data-is-user="false"]',
       streamingSelector: '[data-is-streaming="true"]',
       loginSelector: 'form[action*="login"], [href*="/login"]',
       challengeSelector: 'iframe[src*="cloudflare"], #challenge-running',
@@ -62,6 +62,10 @@ export async function scrapeClaudePrompt(prompt: string): Promise<BrowserCapture
     await composer.fill('');
     await page.keyboard.insertText(`Use web search and answer this buyer question with citations:\n\n${prompt}`);
     await composer.press('Enter');
+    await page.waitForTimeout(500);
+    await page.keyboard.press('Enter');
+    const submit = await firstVisibleLocator(page, 'button[aria-label*="Send"]');
+    if (submit) await submit.click().catch(() => {});
 
     const inspection = await waitForStableCorrelatedTurn(page, {
       spec,

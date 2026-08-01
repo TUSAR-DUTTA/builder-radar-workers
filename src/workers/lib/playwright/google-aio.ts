@@ -50,7 +50,12 @@ export async function scrapeGoogleAioPrompt(prompt: string): Promise<BrowserCapt
     for (let i = 0; i < 45; i++) {
       await page.waitForTimeout(1000);
       
-      const inspection = await page.evaluate(inspectGoogleAioDom);
+      let inspection;
+      try {
+        inspection = await page.evaluate(inspectGoogleAioDom);
+      } catch (e) {
+        continue;
+      }
       if (inspection.state === 'consent' || inspection.state === 'challenge') {
          await captureDebug(page, 'google-aio', inspection.state);
          throw new Error(`Google blocked by ${inspection.state}`);

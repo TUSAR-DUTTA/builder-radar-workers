@@ -34,6 +34,10 @@ export async function scrapePerplexityPrompt(prompt: string): Promise<BrowserCap
 
     let composer = await firstVisibleLocator(page, '#ask-input, textarea, [contenteditable="true"], [placeholder="Ask anything..."]');
     if (!composer) {
+      await page.waitForSelector('textarea, [contenteditable="true"]', { timeout: 15_000 }).catch(() => {});
+      composer = await firstVisibleLocator(page, '#ask-input, textarea, [contenteditable="true"], [placeholder="Ask anything..."]');
+    }
+    if (!composer) {
       // Fallback: just grab the last contenteditable or ask-input
       const all = await page.locator('#ask-input, [contenteditable="true"]').all();
       if (all.length > 0) composer = all[all.length - 1];
@@ -44,7 +48,7 @@ export async function scrapePerplexityPrompt(prompt: string): Promise<BrowserCap
     }
 
     const spec: ConversationDomSpec = {
-      userSelector: '.prose, div[dir="auto"], .whitespace-pre-wrap',
+      userSelector: '.prose, div[dir="auto"], .whitespace-pre-wrap, .text-foreground, span.select-text',
       assistantSelector: '.prose, div[dir="auto"], [data-testid="answer-text"]',
       streamingSelector: '[data-is-streaming="true"], [class*="streaming"]',
       loginSelector: 'form[action*="login"]',

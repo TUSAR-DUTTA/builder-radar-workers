@@ -1,4 +1,6 @@
 import { launchSeededPersistentContext, captureDebug, firstVisibleLocator, PlaywrightContextHandle } from './shared';
+import { isGrokTurnCorrelated, GrokTurnSnapshot, GrokTurnCandidate } from './grok-turn-binding';
+import { BrowserCapture, buildProvenance } from './capture-contract';
 
 export let sharedGrokBrowser: { runtime: PlaywrightContextHandle, page: import('playwright').Page } | null = null;
 
@@ -9,7 +11,7 @@ export async function closeGrokBrowser() {
   }
 }
 
-export async function scrapeGrokPrompt(prompt: string): Promise<{ text: string; citations: { url: string; title?: string }[] }> {
+export async function scrapeGrokPrompt(prompt: string): Promise<BrowserCapture> {
   if (!sharedGrokBrowser) {
     const runtime = await launchSeededPersistentContext('grok');
     const ctx = runtime.context;
@@ -42,59 +44,100 @@ export async function scrapeGrokPrompt(prompt: string): Promise<{ text: string; 
       throw new Error(`Grok composer not found`);
     }
 
+    const snapshot = await page.evaluate(() => {
+      const assistantTurns = Array.from(document.querySelectorAll('.markdown, .message.assistant, [class*="message"][class*="assistant"]'));
+      const userTurns = Array.from(document.querySelectorAll('.message.user, [class*="message"][class*="user"]'));
+      const lastAssistant = assistantTurns.at(-1);
+      return {
+        assistantCount: assistantTurns.length,
+        userCount: userTurns.length,
+        lastAssistantText: lastAssistant ? (lastAssistant.textContent ?? '') : ''
+      };
+    });
+
     await composer.click({ timeout: 20_000, force: true }).catch(() => {});
     await composer.fill('');
     await page.keyboard.insertText(prompt);
     await composer.press('Enter');
 
     // Wait for response to stream and stabilize
-    let lastLength = 0;
     let stableCount = 0;
     let finalData = { text: '', links: [] as any[] };
+    let previousText = '';
     
-    for (let i = 0; i < 30; i++) {
+    for (let i = 0; i < 45; i++) {
       await page.waitForTimeout(1000);
-      const data = await page.evaluate(() => {
-        // Find only assistant responses (skip user prompts)
+      const data = await page.evaluate((expectedPrompt) => {
         const assistantTurns = Array.from(document.querySelectorAll('.markdown, .message.assistant, [class*="message"][class*="assistant"]'));
+        const userTurns = Array.from(document.querySelectorAll('.message.user, [class*="message"][class*="user"]'));
         if (assistantTurns.length === 0) return null;
         
-        const last = assistantTurns.at(-1)!;
-        
-        let text = '';
-        const paragraphs = last.querySelectorAll('p, li');
-        if (paragraphs.length > 0) {
-          text = Array.from(paragraphs).map(p => p.textContent).join('\n');
-        } else {
-          text = last.textContent ?? '';
+        let lastMatchingUserIndex = -1;
+        let matchingUserNode = null;
+        const normalizedWanted = expectedPrompt.normalize('NFKC').toLocaleLowerCase('en-US').replace(/\s+/g, ' ').trim();
+        for (let j = userTurns.length - 1; j >= 0; j--) {
+           const text = (userTurns[j].textContent || '').normalize('NFKC').toLocaleLowerCase('en-US').replace(/\s+/g, ' ').trim();
+           if (text.includes(normalizedWanted)) {
+              lastMatchingUserIndex = j + 1; // 1-indexed to match count
+              matchingUserNode = userTurns[j];
+              break;
+           }
         }
+        
+        const last = assistantTurns.at(-1)!;
+        const assistantFollowsMatchingUser = matchingUserNode ? !!(matchingUserNode.compareDocumentPosition(last) & Node.DOCUMENT_POSITION_FOLLOWING) : false;
+        
+        const busy = !!document.querySelector('[aria-busy="true"], [class*="streaming"], [class*="loading"]');
+        
+        let text = (last as HTMLElement).innerText || last.textContent || '';
         text = text.replace(/\s+/g, ' ').trim();
 
         const links = Array.from(last.querySelectorAll<HTMLAnchorElement>('a[href]'))
           .map((a) => ({ url: a.href, title: (a.textContent ?? '').trim() || undefined }))
           .filter((a) => /^https?:\/\//i.test(a.url) && !a.url.includes('grok.com') && !a.url.includes('x.com'))
           .slice(0, 12);
-        return { text, links };
-      });
+        
+        return { 
+          candidate: {
+            assistantCount: assistantTurns.length,
+            userCount: userTurns.length,
+            lastMatchingUserIndex,
+            assistantFollowsMatchingUser,
+            text,
+            busy,
+          },
+          links
+        };
+      }, prompt);
 
-      if (!data || data.text.length < 5) continue;
+      if (!data) continue;
+      
+      const { candidate, links } = data;
+      // Note: isGrokTurnCorrelated runs in node context
+      if (!isGrokTurnCorrelated(snapshot, candidate)) {
+        continue;
+      }
 
-      if (data.text.length > lastLength) {
-        lastLength = data.text.length;
-        stableCount = 0;
-        finalData = data;
-      } else {
+      if (candidate.text.length > 5 && candidate.text === previousText) {
         stableCount++;
+        finalData = { text: candidate.text, links };
         if (stableCount >= 3) break; // stable for 3 seconds
+      } else {
+        stableCount = 0;
+        previousText = candidate.text;
       }
     }
 
     if (finalData.text.length < 5) {
-      await captureDebug(page, 'grok', 'bad-response');
-      throw new Error('Grok did not render a real assistant answer');
+      await captureDebug(page, 'grok', 'bad-response-or-unbound');
+      throw new Error('prompt_identity_unverified:grok did not render a real assistant answer or failed to bind prompt');
     }
 
-    return { text: finalData.text, citations: finalData.links };
+    return { 
+      rawAnswer: finalData.text, 
+      citations: finalData.links,
+      provenance: buildProvenance('grok')
+    };
   } catch (err) {
     await closeGrokBrowser();
     throw err;

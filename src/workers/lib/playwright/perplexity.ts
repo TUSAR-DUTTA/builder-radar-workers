@@ -1,4 +1,6 @@
 import { launchSeededPersistentContext, captureDebug, firstVisibleLocator, PlaywrightContextHandle } from './shared';
+import { snapshotConversationDom, waitForStableCorrelatedTurn, ConversationDomSpec } from './conversation-dom';
+import { BrowserCapture, buildProvenance } from './capture-contract';
 
 export let sharedPerplexityBrowser: { runtime: PlaywrightContextHandle, page: import('playwright').Page } | null = null;
 
@@ -9,7 +11,7 @@ export async function closePerplexityBrowser() {
   }
 }
 
-export async function scrapePerplexityPrompt(prompt: string): Promise<{ text: string; citations: { url: string; title?: string }[] }> {
+export async function scrapePerplexityPrompt(prompt: string): Promise<BrowserCapture> {
   if (!sharedPerplexityBrowser) {
     const runtime = await launchSeededPersistentContext('perplexity');
     try {
@@ -41,49 +43,42 @@ export async function scrapePerplexityPrompt(prompt: string): Promise<{ text: st
       throw new Error(`Perplexity composer not found`);
     }
 
+    const spec: ConversationDomSpec = {
+      userSelector: '.prose, div[dir="auto"], .whitespace-pre-wrap',
+      assistantSelector: '.prose, div[dir="auto"], [data-testid="answer-text"]',
+      streamingSelector: '[data-is-streaming="true"], [class*="streaming"]',
+      loginSelector: 'form[action*="login"]',
+      challengeSelector: '#challenge-running',
+      rateLimitSelector: '[data-testid="rate-limit-message"]',
+      providerOrigin: 'https://www.perplexity.ai',
+    };
+
+    const snapshot = await page.evaluate(snapshotConversationDom, spec);
+
     await composer.click({ timeout: 20_000, force: true }).catch(() => {});
     await composer.fill('');
     await page.keyboard.insertText(`Use web search and answer this buyer question with citations:\n\n${prompt}`);
     await page.keyboard.press('Enter');
 
-    await page.waitForFunction(() => {
-      const answers = document.querySelectorAll('.prose, div[dir="auto"], [data-testid="answer-text"]');
-      if (answers.length === 0) return false;
-      for (let i = answers.length - 1; i >= 0; i--) {
-        const text = (answers[i].textContent || '').replace(/\s+/g, ' ').trim();
-        if (text.length > 0) return true;
-      }
-      return false;
-    }, { timeout: 180_000 }).catch(() => {});
-    await page.waitForTimeout(6000);
-
-    const data = await page.evaluate(() => {
-      const answers = document.querySelectorAll('.prose, div[dir="auto"], [data-testid="answer-text"]');
-      let targetNode: Element | null = null;
-      for (let i = answers.length - 1; i >= 0; i--) {
-        if ((answers[i].textContent || '').trim().length > 0) {
-          targetNode = answers[i];
-          break;
-        }
-      }
-      const last = targetNode || document.body;
-      const text = (last.textContent || '').replace(/\s+/g, ' ').trim();
-      
-      const links = Array.from(document.querySelectorAll<HTMLAnchorElement>('a[href]'))
-        .map((a) => ({ url: a.href, title: (a.textContent ?? '').trim() || undefined }))
-        .filter((a) => /^https?:\/\//i.test(a.url) && !a.url.includes('perplexity.ai'))
-        .slice(0, 12);
-        
-      return { text, links };
+    const inspection = await waitForStableCorrelatedTurn(page, {
+      spec,
+      snapshot,
+      expectedPrompt: prompt,
+      provider: 'perplexity',
+      timeoutMs: 180_000,
     });
 
-    if (!data || !data.text || data.text.length < 10) {
+    if (!inspection.rawAnswer || inspection.rawAnswer.length < 10) {
       const html = await page.content().catch(() => '');
       require('fs').writeFileSync('perplexity_dump.html', html);
       throw new Error(`Perplexity did not render a real assistant answer`);
     }
 
-    return { text: data.text, citations: data.links };
+    return { 
+      rawAnswer: inspection.rawAnswer, 
+      citations: inspection.links,
+      provenance: buildProvenance('perplexity')
+    };
   } catch (err) {
     await closePerplexityBrowser();
     throw err;

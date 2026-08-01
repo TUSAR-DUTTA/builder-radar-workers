@@ -33,7 +33,9 @@ export async function closeChatGPTBrowser() {
   }
 }
 
-export async function scrapeChatGPTPrompt(prompt: string): Promise<{ text: string; citations: { url: string; title?: string }[] }> {
+import { BrowserCapture, buildProvenance } from './capture-contract';
+
+export async function scrapeChatGPTPrompt(prompt: string): Promise<BrowserCapture> {
   if (!sharedChatGPTBrowser) {
     const runtime = await launchSeededPersistentContext('chatgpt-consumer');
     try {
@@ -224,11 +226,7 @@ export async function scrapeChatGPTPrompt(prompt: string): Promise<{ text: strin
       }
 
       // Strip screenreader labels and footer/disclaimer noise from the captured answer text.
-      const text = (last.textContent ?? '')
-        .replace(/\bChatGPT said:\b/gi, ' ')
-        .replace(/\bChatGPT can make mistakes\. Check important info\.\b/gi, ' ')
-        .replace(/\s+/g, ' ')
-        .trim();
+      const text = last.innerText || last.textContent || '';
 
       const links = Array.from(last.querySelectorAll<HTMLAnchorElement>('a[href]'))
         .map((a) => ({ url: a.href, title: (a.textContent ?? '').trim() || undefined }))
@@ -252,7 +250,11 @@ export async function scrapeChatGPTPrompt(prompt: string): Promise<{ text: strin
       throw new Error('prompt_identity_unverified:stale_chatgpt_assistant_turn');
     }
 
-    return { text: data.text, citations: data.links };
+    return { 
+      rawAnswer: data.text, 
+      citations: data.links,
+      provenance: buildProvenance('chatgpt-consumer')
+    };
   } catch (err) {
     await closeChatGPTBrowser();
     throw err;

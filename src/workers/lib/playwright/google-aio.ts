@@ -1,4 +1,6 @@
 import { launchSeededPersistentContext, captureDebug, firstVisibleLocator, PlaywrightContextHandle } from './shared';
+import { inspectGoogleAioDom } from './google-aio-dom';
+import { BrowserCapture, buildProvenance, BrowserNoAnswerError } from './capture-contract';
 
 export let sharedGoogleAioBrowser: { runtime: PlaywrightContextHandle, page: import('playwright').Page } | null = null;
 
@@ -9,7 +11,7 @@ export async function closeGoogleAioBrowser() {
   }
 }
 
-export async function scrapeGoogleAioPrompt(prompt: string): Promise<{ text: string; citations: { url: string; title?: string }[] }> {
+export async function scrapeGoogleAioPrompt(prompt: string): Promise<BrowserCapture> {
   if (!sharedGoogleAioBrowser) {
     const runtime = await launchSeededPersistentContext('google-aio');
     const ctx = runtime.context;
@@ -41,62 +43,63 @@ export async function scrapeGoogleAioPrompt(prompt: string): Promise<{ text: str
     await page.keyboard.insertText(prompt);
     await page.keyboard.press('Enter');
 
-    // Sometimes AIO has a generate button
-    const generateBtn = await firstVisibleLocator(page, 'button:has-text("Generate")');
-    if (generateBtn) {
-      await generateBtn.click({ timeout: 5000 }).catch(() => {});
-      await page.waitForTimeout(4000);
-    }
-
-    // Wait for the AI Overview container or text to appear
-    await page.waitForFunction(() => {
-      const text = document.body.innerText;
-      return text.includes('AI Overview') || text.includes('Generative AI is experimental');
-    }, { timeout: 20_000 }).catch(() => {});
+    let stableCount = 0;
+    let finalInspection: any = null;
+    let previousText = '';
     
-    // Sometimes AIO has a Show more button
-    const showMoreBtn = await firstVisibleLocator(page, 'span:has-text("Show more"), div:has-text("Show more")');
-    if (showMoreBtn) {
-      await showMoreBtn.click({ timeout: 5000 }).catch(() => {});
-      await page.waitForTimeout(2000);
+    for (let i = 0; i < 45; i++) {
+      await page.waitForTimeout(1000);
+      
+      const inspection = await page.evaluate(inspectGoogleAioDom);
+      if (inspection.state === 'consent' || inspection.state === 'challenge') {
+         await captureDebug(page, 'google-aio', inspection.state);
+         throw new Error(`Google blocked by ${inspection.state}`);
+      }
+      if (inspection.state === 'search_submitted') {
+         continue;
+      }
+      
+      if (inspection.state === 'aio_rendering' || inspection.state === 'aio_complete') {
+        const generateBtn = await firstVisibleLocator(page, 'button:has-text("Generate")');
+        if (generateBtn) {
+          await generateBtn.click({ timeout: 5000 }).catch(() => {});
+        }
+        
+        const showMoreBtn = await firstVisibleLocator(page, 'span:has-text("Show more"), div:has-text("Show more")');
+        if (showMoreBtn) {
+          await showMoreBtn.click({ timeout: 5000 }).catch(() => {});
+        }
+        
+        if (inspection.rawAnswer === previousText && inspection.rawAnswer.length > 50) {
+           stableCount++;
+        } else {
+           stableCount = 0;
+        }
+        previousText = inspection.rawAnswer;
+        finalInspection = inspection;
+        
+        if (stableCount >= 3 && inspection.state === 'aio_complete') {
+           break;
+        }
+      } else {
+         finalInspection = inspection; // results_loaded
+      }
     }
 
-    const data = await page.evaluate(() => {
-      // Find the main AIO container. Google usually puts it in a div that contains "AI Overview"
-      // We will look for the highest level block that has the AI Overview and is likely the answer container.
-      const allDivs = Array.from(document.querySelectorAll('div'));
-      const aioContainer = allDivs.find(div => {
-         const text = div.innerText;
-         // Check if this div is a major block containing the AIO
-         return text && text.includes('AI Overview') && text.length > 100 && !text.includes('Related searches');
-      });
+    if (!finalInspection || finalInspection.state === 'results_loaded' || (finalInspection.state !== 'aio_complete' && finalInspection.state !== 'aio_rendering')) {
+      throw new BrowserNoAnswerError('google-aio', 'no AI overview triggered');
+    }
 
-      if (!aioContainer) {
-        return { text: '', links: [] };
-      }
-
-      // Remove noise from the container text
-      const text = aioContainer.innerText
-        .replace(/AI Overview/g, '')
-        .replace(/Show more/g, '')
-        .replace(/Generative AI is experimental/g, '')
-        .replace(/\s+/g, ' ')
-        .trim();
-
-      const links = Array.from(aioContainer.querySelectorAll<HTMLAnchorElement>('a[href]'))
-        .map(a => ({ url: a.href, title: (a.textContent ?? '').trim() || undefined }))
-        .filter(a => /^https?:\/\//i.test(a.url) && !a.url.includes('google.com'))
-        .slice(0, 12);
-
-      return { text, links };
-    });
-
-    if (data.text.length < 50) {
+    if (finalInspection.rawAnswer.length < 50) {
       await captureDebug(page, 'google-aio', 'bad-response');
       throw new Error('Google AIO did not render a real assistant answer');
     }
 
-    return { text: data.text, citations: data.links };
+    return { 
+      rawAnswer: finalInspection.rawAnswer, 
+      citations: finalInspection.links,
+      provenance: buildProvenance('google-aio')
+    };
   } catch (err) {
     if (process.env.PLAYWRIGHT_HEADLESS !== '0') {
       await closeGoogleAioBrowser();

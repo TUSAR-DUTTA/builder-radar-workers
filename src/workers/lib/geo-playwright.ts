@@ -11,6 +11,9 @@ import { scrapePerplexityPrompt, closePerplexityBrowser } from './playwright/per
 import { scrapeGoogleAioPrompt, closeGoogleAioBrowser } from './playwright/google-aio';
 import { scrapeGrokPrompt, closeGrokBrowser } from './playwright/grok';
 
+import { isBrowserNoAnswerError, type BrowserCapture } from './playwright/capture-contract';
+import { classifySamplingFailure, type FailureClassification } from '@/lib/scan-job-contract';
+
 const observedBrowserAnswers = new Map<string, string>();
 
 export class PromptIdentityError extends Error {
@@ -33,7 +36,7 @@ function normalizedFingerprint(value: string): string {
 export function registerPromptResponseBinding(model: AnswerModel, prompt: string, answer: string): boolean {
   const fingerprint = normalizedFingerprint(answer);
   if (fingerprint.length < 200) return true;
-  const key = `${model}\u0000${fingerprint}`;
+  const key = `${model}\0${fingerprint}`;
   const promptKey = normalizedFingerprint(prompt);
   const priorPrompt = observedBrowserAnswers.get(key);
   if (priorPrompt && priorPrompt !== promptKey) return false;
@@ -68,6 +71,7 @@ export interface PlaywrightAttempt {
 export interface PlaywrightPromptResult {
   samples: AnswerSample[];
   attempts: PlaywrightAttempt[];
+  outcomes: Partial<Record<AnswerModel, FailureClassification>>;
 }
 
 const PLAYWRIGHT_MODELS = new Set<AnswerModel>(['chatgpt-consumer', 'claude', 'perplexity', 'google-aio', 'grok']);
@@ -89,35 +93,40 @@ export async function runPromptViaPlaywrightDetailed(
 ): Promise<PlaywrightPromptResult> {
   const samples: AnswerSample[] = [];
   const attempts: PlaywrightAttempt[] = [];
+  const outcomes: Partial<Record<AnswerModel, FailureClassification>> = {};
 
   for (const model of models) {
     const started = Date.now();
     if (!isPlaywrightAnswerModel(model)) {
       attempts.push({ model, status: 'skipped', stage: 'session', failureReason: 'unsupported_playwright_engine', latencyMs: 0 });
+      outcomes[model] = { category: 'acquisition_failure', retryable: false, code: 'unsupported_engine' };
       continue;
     }
     if (!isSessionAvailable(model)) {
       console.warn(`[geo-playwright] ${model} skipped - no session file`);
       attempts.push({ model, status: 'skipped', stage: 'session', failureReason: 'missing_session', latencyMs: Date.now() - started });
+      outcomes[model] = { category: 'authentication_failure', retryable: false, code: 'missing_session' };
       continue;
     }
 
     try {
-      let res;
+      let res: BrowserCapture;
       if (model === 'chatgpt-consumer') res = await scrapeChatGPTPrompt(prompt);
       else if (model === 'claude') res = await scrapeClaudePrompt(prompt);
       else if (model === 'perplexity') res = await scrapePerplexityPrompt(prompt);
       else if (model === 'google-aio') res = await scrapeGoogleAioPrompt(prompt);
       else res = await scrapeGrokPrompt(prompt);
 
-      const answer = sanitizeAnswerText(res.text);
+      const answer = sanitizeAnswerText(res.rawAnswer);
       if (isLowQualityAnswer(answer)) {
-        console.warn(`[geo-playwright] ${model} returned no valid answer — dropped`);
+        console.warn(`[geo-playwright] ${model} returned no valid answer - dropped`);
         attempts.push({ model, status: 'rejected', stage: 'quality', failureReason: 'low_quality_or_empty_answer', latencyMs: Date.now() - started });
+        outcomes[model] = { category: 'no_answer', retryable: false, code: 'low_quality_or_empty_answer' };
         continue;
       }
       if (!registerPromptResponseBinding(model, prompt, answer)) {
         attempts.push({ model, status: 'rejected', stage: 'quality', failureReason: 'cross_prompt_duplicate_answer', latencyMs: Date.now() - started });
+        outcomes[model] = { category: 'identity_binding_failure', retryable: false, code: 'cross_prompt_duplicate_answer' };
         throw new PromptIdentityError('prompt_identity_unverified:cross_prompt_duplicate_answer');
       }
 
@@ -125,8 +134,9 @@ export async function runPromptViaPlaywrightDetailed(
       try {
         verdicts = await judgeAnswer(router, answer, entities);
       } catch (error) {
-        console.warn(`[geo-playwright] ${model} adjudication failed — dropped`);
+        console.warn(`[geo-playwright] ${model} adjudication failed - dropped`);
         attempts.push({ model, status: 'failed', stage: 'adjudication', failureReason: boundedFailureReason(error), latencyMs: Date.now() - started });
+        outcomes[model] = classifySamplingFailure(error);
         continue;
       }
 
@@ -138,17 +148,30 @@ export async function runPromptViaPlaywrightDetailed(
         verdicts,
         brandRank: null,
         sentiment: null,
+        providerMetadata: {
+          ...res.provenance,
+          rawCapturePreserved: true,
+        },
       });
       attempts.push({ model, status: 'succeeded', stage: 'complete', failureReason: null, latencyMs: Date.now() - started });
     } catch (error) {
       const reason = boundedFailureReason(error);
       console.warn(`[geo-playwright] ${model} failed for "${prompt.slice(0, 40)}": ${reason}`);
-      if (isPromptIdentityError(error)) throw error;
+      
+      if (isPromptIdentityError(error)) {
+        outcomes[model] = { category: 'identity_binding_failure', retryable: false, code: reason };
+        throw error;
+      }
+      if (isBrowserNoAnswerError(error)) {
+        outcomes[model] = { category: 'no_answer', retryable: false, code: reason };
+      } else {
+        outcomes[model] = classifySamplingFailure(error);
+      }
       attempts.push({ model, status: 'failed', stage: 'acquisition', failureReason: reason, latencyMs: Date.now() - started });
     }
   }
 
-  return { samples, attempts };
+  return { samples, attempts, outcomes };
 }
 
 export async function runPromptViaPlaywright(

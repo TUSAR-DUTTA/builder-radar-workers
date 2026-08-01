@@ -43,3 +43,16 @@ export function isBrowserNoAnswerError(error: unknown): error is BrowserNoAnswer
   return error instanceof BrowserNoAnswerError
     || (typeof error === 'object' && error !== null && (error as { code?: unknown }).code === 'provider_no_answer');
 }
+
+export function buildProvenance(model: AnswerModel, overrides?: Partial<CaptureProvenance>): CaptureProvenance {
+  return {
+    requestedMarket: 'US',
+    actualEgressRegion: null,
+    connectionMode: 'direct',
+    fallbackOccurred: false,
+    uiLocale: 'en-US',
+    sessionType: 'persistent',
+    adapterVersion: BROWSER_ADAPTER_VERSIONS[model] || 'unknown',
+    ...overrides,
+  };
+}

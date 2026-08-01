@@ -158,15 +158,13 @@ export async function scrapeChatGPTPrompt(prompt: string): Promise<{ text: strin
       throw new Error(`ChatGPT composer not found at ${page.url()} title="${await page.title().catch(() => '')}"`);
     }
     const turnSnapshot = await page.evaluate(() => {
-      const selector = (turn: 'assistant' | 'user') => `section[data-testid^="conversation-turn-"][data-turn="${turn}"]`;
-      const assistants = Array.from(document.querySelectorAll<HTMLElement>(selector('assistant')));
-      const users = Array.from(document.querySelectorAll<HTMLElement>(selector('user')));
-      const idOf = (node: HTMLElement | undefined) => node?.getAttribute('data-testid') || node?.id || null;
+      const assistants = Array.from(document.querySelectorAll<HTMLElement>('section[data-testid^="conversation-turn-"][data-turn="assistant"]'));
+      const users = Array.from(document.querySelectorAll<HTMLElement>('section[data-testid^="conversation-turn-"][data-turn="user"]'));
       return {
         assistantCount: assistants.length,
         userCount: users.length,
-        lastAssistantId: idOf(assistants.at(-1)),
-        lastUserId: idOf(users.at(-1)),
+        lastAssistantId: assistants.length > 0 ? (assistants[assistants.length - 1].getAttribute('data-testid') || assistants[assistants.length - 1].id || null) : null,
+        lastUserId: users.length > 0 ? (users[users.length - 1].getAttribute('data-testid') || users[users.length - 1].id || null) : null,
       };
     });
     await composer.click({ timeout: 20_000, force: true }).catch(() => {});
@@ -191,7 +189,6 @@ export async function scrapeChatGPTPrompt(prompt: string): Promise<{ text: strin
 
     try {
       await page.waitForFunction(({ snapshot, expectedPrompt }) => {
-      const normalize = (value: string) => value.normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim();
       const assistants = Array.from(document.querySelectorAll<HTMLElement>('section[data-testid^="conversation-turn-"][data-turn="assistant"]'));
       const users = Array.from(document.querySelectorAll<HTMLElement>('section[data-testid^="conversation-turn-"][data-turn="user"]'));
       const last = assistants.at(-1);
@@ -201,7 +198,11 @@ export async function scrapeChatGPTPrompt(prompt: string): Promise<{ text: strin
       const userId = lastUser.getAttribute('data-testid') || lastUser.id || null;
       const newAssistant = assistants.length > snapshot.assistantCount || assistantId !== snapshot.lastAssistantId;
       const newUser = users.length > snapshot.userCount || userId !== snapshot.lastUserId;
-      const promptBound = normalize(lastUser.textContent ?? '').includes(normalize(expectedPrompt));
+      
+      const userText = (lastUser.textContent ?? '').normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim();
+      const expPrompt = expectedPrompt.normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim();
+      const promptBound = userText.includes(expPrompt);
+      
       if (!newAssistant || !newUser || !promptBound) return false;
       const busy = last.querySelector('[aria-busy="true"]');
       if (busy) return false;

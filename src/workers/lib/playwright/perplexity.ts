@@ -1,6 +1,6 @@
 import { launchSeededPersistentContext, captureDebug, firstVisibleLocator, PlaywrightContextHandle } from './shared';
 
-let sharedPerplexityBrowser: { runtime: PlaywrightContextHandle, page: import('playwright').Page } | null = null;
+export let sharedPerplexityBrowser: { runtime: PlaywrightContextHandle, page: import('playwright').Page } | null = null;
 
 export async function closePerplexityBrowser() {
   if (sharedPerplexityBrowser) {
@@ -49,26 +49,38 @@ export async function scrapePerplexityPrompt(prompt: string): Promise<{ text: st
     await page.waitForFunction(() => {
       const answers = document.querySelectorAll('.prose, div[dir="auto"], [data-testid="answer-text"]');
       if (answers.length === 0) return false;
-      const last = answers[answers.length - 1];
-      const text = (last.textContent || '').replace(/\s+/g, ' ').trim();
-      return text.length > 0;
+      for (let i = answers.length - 1; i >= 0; i--) {
+        const text = (answers[i].textContent || '').replace(/\s+/g, ' ').trim();
+        if (text.length > 0) return true;
+      }
+      return false;
     }, { timeout: 180_000 }).catch(() => {});
     await page.waitForTimeout(6000);
 
     const data = await page.evaluate(() => {
-      const answers = Array.from(document.querySelectorAll('.prose, div[dir="auto"], [data-testid="answer-text"]'));
-      const last = answers.at(-1) || document.body;
+      const answers = document.querySelectorAll('.prose, div[dir="auto"], [data-testid="answer-text"]');
+      let targetNode: Element | null = null;
+      for (let i = answers.length - 1; i >= 0; i--) {
+        if ((answers[i].textContent || '').trim().length > 0) {
+          targetNode = answers[i];
+          break;
+        }
+      }
+      const last = targetNode || document.body;
       const text = (last.textContent || '').replace(/\s+/g, ' ').trim();
-      const links = Array.from(last.querySelectorAll<HTMLAnchorElement>('a[href]'))
+      
+      const links = Array.from(document.querySelectorAll<HTMLAnchorElement>('a[href]'))
         .map((a) => ({ url: a.href, title: (a.textContent ?? '').trim() || undefined }))
         .filter((a) => /^https?:\/\//i.test(a.url) && !a.url.includes('perplexity.ai'))
         .slice(0, 12);
+        
       return { text, links };
     });
 
-    if (data.text.length < 5) {
-      await captureDebug(page, 'perplexity', 'bad-response');
-      throw new Error('Perplexity did not render a real assistant answer');
+    if (!data || !data.text || data.text.length < 10) {
+      const html = await page.content().catch(() => '');
+      require('fs').writeFileSync('perplexity_dump.html', html);
+      throw new Error(`Perplexity did not render a real assistant answer`);
     }
 
     return { text: data.text, citations: data.links };

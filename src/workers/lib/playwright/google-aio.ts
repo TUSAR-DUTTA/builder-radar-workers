@@ -1,6 +1,6 @@
 import { launchSeededPersistentContext, captureDebug, firstVisibleLocator, PlaywrightContextHandle } from './shared';
 
-let sharedGoogleAioBrowser: { runtime: PlaywrightContextHandle, page: import('playwright').Page } | null = null;
+export let sharedGoogleAioBrowser: { runtime: PlaywrightContextHandle, page: import('playwright').Page } | null = null;
 
 export async function closeGoogleAioBrowser() {
   if (sharedGoogleAioBrowser) {

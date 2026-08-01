@@ -94,6 +94,11 @@ export async function scrapeChatGPTPrompt(prompt: string): Promise<BrowserCaptur
   forbidden.length = 0; // Clear previous errors
 
   try {
+    if (page.url().includes('/c/') || !page.url().includes('chatgpt.com')) {
+      await page.goto('https://chatgpt.com/', { waitUntil: 'domcontentloaded', timeout: 45_000 });
+      await page.waitForTimeout(2000);
+    }
+
     // Wait until we are fully landed and stabilized on chatgpt.com workspace page
     console.log('[chatgpt] Waiting for workspace page to be loaded and stable...');
     let stabilized = false;

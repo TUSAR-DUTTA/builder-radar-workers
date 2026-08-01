@@ -253,7 +253,7 @@ async function runGeoForProject(projectId: string, sources: string[]): Promise<G
         analysisStatus: auditOutcome.status,
         analysisConfidence: auditOutcome.status === 'confident' ? 'confident' : 'low_confidence',
         entityEvidence: entities.map((entity) => ({ entity, stance: classifyAnswerStance(audited.answer, entity === project.name ? identity : { canonicalName: entity }) })),
-        providerMetadata: { answerEngine: audited.model, acquisition: 'playwright', judgeModel: AI_MODELS.structuredHighRisk, auditModel: AI_MODELS.structuredHighRisk, schemaMode: 'strict_json_schema', auditStatus: auditOutcome.status },
+        providerMetadata: { answerEngine: audited.model, acquisition: 'playwright-worker', judgeModel: AI_MODELS.structuredHighRisk, auditModel: AI_MODELS.structuredHighRisk, schemaMode: 'strict_json_schema', auditStatus: auditOutcome.status },
         failureReason: auditOutcome.failureReason,
       }).onConflictDoNothing().returning({ id: answerRuns.id });
       const evidenceRunId = inserted[0]?.id ?? null;

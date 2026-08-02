@@ -245,5 +245,7 @@ export async function waitForStableCorrelatedTurn(
     previousText = inspection.rawAnswer;
     if (stableCount >= requiredStableChecks) return inspection;
   }
+  const html = await page.evaluate(() => document.body.innerHTML);
+  console.log(`[${input.provider}] Turn timeout. Body HTML snippet:`, html.substring(0, 5000));
   throw new Error(`prompt_identity_unverified:${input.provider}_turn_timeout:last_state_${lastStatus}`);
 }

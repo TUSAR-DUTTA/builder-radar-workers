@@ -11,7 +11,11 @@ export async function closePerplexityBrowser() {
   }
 }
 
-export async function scrapePerplexityPrompt(prompt: string): Promise<BrowserCapture> {
+export async function scrapePerplexityPrompt(
+  prompt: string,
+  signal?: AbortSignal,
+  deadlineAt?: number,
+): Promise<BrowserCapture> {
   if (!sharedPerplexityBrowser) {
     const runtime = await launchSeededPersistentContext('perplexity');
     try {
@@ -69,7 +73,8 @@ export async function scrapePerplexityPrompt(prompt: string): Promise<BrowserCap
       snapshot,
       expectedPrompt: prompt,
       provider: 'perplexity',
-      timeoutMs: 180_000,
+      timeoutMs: deadlineAt ? Math.max(0, deadlineAt - Date.now()) : 180_000,
+      signal,
     });
 
     if (!inspection.rawAnswer || inspection.rawAnswer.length < 10) {

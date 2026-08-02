@@ -90,6 +90,8 @@ export async function runPromptViaPlaywrightDetailed(
   prompt: string,
   entities: string[],
   models: AnswerModel[],
+  signal?: AbortSignal,
+  deadlineAt?: number,
 ): Promise<PlaywrightPromptResult> {
   const samples: AnswerSample[] = [];
   const attempts: PlaywrightAttempt[] = [];
@@ -111,11 +113,11 @@ export async function runPromptViaPlaywrightDetailed(
 
     try {
       let res: BrowserCapture;
-      if (model === 'chatgpt-consumer') res = await scrapeChatGPTPrompt(prompt);
-      else if (model === 'claude') res = await scrapeClaudePrompt(prompt);
-      else if (model === 'perplexity') res = await scrapePerplexityPrompt(prompt);
-      else if (model === 'google-aio') res = await scrapeGoogleAioPrompt(prompt);
-      else res = await scrapeGrokPrompt(prompt);
+      if (model === 'chatgpt-consumer') res = await scrapeChatGPTPrompt(prompt, signal, deadlineAt);
+      else if (model === 'claude') res = await scrapeClaudePrompt(prompt, signal, deadlineAt);
+      else if (model === 'perplexity') res = await scrapePerplexityPrompt(prompt, signal, deadlineAt);
+      else if (model === 'google-aio') res = await scrapeGoogleAioPrompt(prompt, signal, deadlineAt);
+      else res = await scrapeGrokPrompt(prompt, signal, deadlineAt);
 
       const answer = sanitizeAnswerText(res.rawAnswer);
       if (isLowQualityAnswer(answer)) {

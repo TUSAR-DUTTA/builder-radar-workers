@@ -11,7 +11,11 @@ export async function closeGoogleAioBrowser() {
   }
 }
 
-export async function scrapeGoogleAioPrompt(prompt: string): Promise<BrowserCapture> {
+export async function scrapeGoogleAioPrompt(
+  prompt: string,
+  signal?: AbortSignal,
+  deadlineAt?: number,
+): Promise<BrowserCapture> {
   if (!sharedGoogleAioBrowser) {
     const runtime = await launchSeededPersistentContext('google-aio');
     const ctx = runtime.context;
@@ -29,7 +33,9 @@ export async function scrapeGoogleAioPrompt(prompt: string): Promise<BrowserCapt
   const { page } = sharedGoogleAioBrowser;
 
   try {
-    await page.goto('https://www.google.com/ncr', { waitUntil: 'domcontentloaded', timeout: 45_000 });
+    if (signal?.aborted) throw new Error('provider_deadline_aborted');
+
+    await page.goto('https://www.google.com/', { waitUntil: 'domcontentloaded', timeout: 30_000 });
     await page.waitForTimeout(1000);
 
     const composer = await firstVisibleLocator(page, 'textarea[name="q"], input[name="q"]');
@@ -44,11 +50,13 @@ export async function scrapeGoogleAioPrompt(prompt: string): Promise<BrowserCapt
     await page.keyboard.press('Enter');
 
     let stableCount = 0;
-    let stableContainerIdentity: string | null = null;
-    let finalInspection: any = null;
     let previousText = '';
+    const deadline = deadlineAt || (Date.now() + 180_000);
+    let finalInspection: any = null;
+    let stableContainerIdentity: string | null = null;
     
-    for (let i = 0; i < 45; i++) {
+    while (Date.now() < deadline) {
+      if (signal?.aborted) throw new Error('provider_deadline_aborted');
       await page.waitForTimeout(1000);
       
       let inspection;

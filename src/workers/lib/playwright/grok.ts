@@ -11,7 +11,11 @@ export async function closeGrokBrowser() {
   }
 }
 
-export async function scrapeGrokPrompt(prompt: string): Promise<BrowserCapture> {
+export async function scrapeGrokPrompt(
+  prompt: string,
+  signal?: AbortSignal,
+  deadlineAt?: number,
+): Promise<BrowserCapture> {
   if (!sharedGrokBrowser) {
     const runtime = await launchSeededPersistentContext('grok');
     const ctx = runtime.context;
@@ -102,9 +106,10 @@ export async function scrapeGrokPrompt(prompt: string): Promise<BrowserCapture> 
     let stableCount = 0;
     let finalData = { text: '', links: [] as any[] };
     let previousText = '';
-    const maxIterations = 90; // 90 seconds max
+    const deadline = deadlineAt || (Date.now() + 180_000);
     
-    for (let i = 0; i < maxIterations; i++) {
+    for (let i = 0; Date.now() < deadline; i++) {
+      if (signal?.aborted) throw new Error('provider_deadline_aborted');
       await page.waitForTimeout(1000);
 
       // If at 5s/10s the composer still contains text and no assistant response is found, re-trigger submission

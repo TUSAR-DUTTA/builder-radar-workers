@@ -35,7 +35,11 @@ export async function closeChatGPTBrowser() {
 
 import { BrowserCapture, buildProvenance, type TerminalProof, type BrowserConnectionMetadata } from './capture-contract';
 
-export async function scrapeChatGPTPrompt(prompt: string): Promise<BrowserCapture> {
+export async function scrapeChatGPTPrompt(
+  prompt: string,
+  signal?: AbortSignal,
+  deadlineAt?: number,
+): Promise<BrowserCapture> {
   if (!sharedChatGPTBrowser) {
     const runtime = await launchSeededPersistentContext('chatgpt-consumer');
     try {

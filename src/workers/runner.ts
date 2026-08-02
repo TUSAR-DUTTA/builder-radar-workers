@@ -204,8 +204,12 @@ async function runGeoForProject(projectId: string, sources: string[]): Promise<G
         continue;
       }
 
+      const controller = new AbortController();
+      const deadlineAt = Date.now() + PROVIDER_DEADLINE_MS;
+      const timer = setTimeout(() => controller.abort(new Error("provider_deadline_aborted")), PROVIDER_DEADLINE_MS);
+
       try {
-        const sampled = await withProviderDeadline(sampleProjectPrompts({
+        const sampled = await sampleProjectPrompts({
           router, projectId: project.id, brand: project.name, competitors,
           prompts: [prompt], models: [cell.engine], facts, identity,
           userId: project.userId ?? undefined, 
@@ -214,22 +218,33 @@ async function runGeoForProject(projectId: string, sources: string[]): Promise<G
           scanCellId: cell.id,
           scanCellClaimedBy: scanWorkerId,
           acquirePrompt: async (input) => {
-            const res = await runPromptViaPlaywrightDetailed(router, input.prompt.prompt, input.entities, input.models);
+            const res = await runPromptViaPlaywrightDetailed(
+              router, input.prompt.prompt, input.entities, input.models, controller.signal, deadlineAt
+            );
             return {
               samples: res.samples,
               failures: res.outcomes,
               acquisition: 'playwright'
             };
           }
-        }), PROVIDER_DEADLINE_MS);
+        });
 
         if (sampled.runCount > 0 && await completeScanCell(cell.id, scanWorkerId)) {
           // Success
         } else {
           await failScanCell(cell.id, scanWorkerId, new Error('provider_no_valid_answer'), sampled.failures[cell.engine]);
         }
-      } catch (cellError) {
-        await failScanCell(cell.id, scanWorkerId, cellError);
+      } catch (cellError: any) {
+        if (cellError.message && cellError.message.includes('_aborted')) {
+          await failScanCell(cell.id, scanWorkerId, new Error('provider_deadline_exceeded_after_240000ms'));
+        } else {
+          await failScanCell(cell.id, scanWorkerId, cellError);
+        }
+      } finally {
+        clearTimeout(timer);
+        if (controller.signal.aborted) {
+          await closeSharedBrowser();
+        }
       }
     }
   } finally {

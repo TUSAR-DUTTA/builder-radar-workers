@@ -11,7 +11,11 @@ export async function closeClaudeBrowser() {
   }
 }
 
-export async function scrapeClaudePrompt(prompt: string): Promise<BrowserCapture> {
+export async function scrapeClaudePrompt(
+  prompt: string,
+  signal?: AbortSignal,
+  deadlineAt?: number,
+): Promise<BrowserCapture> {
   if (!sharedClaudeBrowser) {
     const runtime = await launchSeededPersistentContext('claude');
     try {
@@ -80,7 +84,8 @@ export async function scrapeClaudePrompt(prompt: string): Promise<BrowserCapture
       snapshot,
       expectedPrompt: prompt,
       provider: 'claude',
-      timeoutMs: 180_000,
+      timeoutMs: deadlineAt ? Math.max(0, deadlineAt - Date.now()) : 180_000,
+      signal,
     });
 
     const isCloudflare = /Performing security verification|Verifies you are not a bot/i.test(inspection.rawAnswer);

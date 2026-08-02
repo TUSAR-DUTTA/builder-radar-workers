@@ -103,14 +103,11 @@ function extractTweetsFromGQL(json: unknown): Array<{
 }> {
   const tweets: ReturnType<typeof extractTweetsFromGQL> = [];
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- untyped Twitter GraphQL shape
     const instructions: unknown[] = (json as any)?.data?.search_by_raw_query?.search_timeline?.timeline?.instructions ?? [];
 
     for (const instr of instructions) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- untyped Twitter GraphQL shape
       const entries: unknown[] = (instr as any)?.entries ?? [];
       for (const entry of entries) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- untyped Twitter GraphQL shape
         const result = (entry as any)?.content?.itemContent?.tweet_results?.result;
         if (!result) continue;
 

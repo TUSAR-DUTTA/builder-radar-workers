@@ -7,7 +7,7 @@ minutes**.
 ## How it works
 - This repo holds **only** the worker/automation code (`src/workers/**`) + workflows.
 - The evidence boundary is the exact immutable
-  `@builder-radar/evidence-contract@1.0.0` tarball under `vendor/`, verified by SHA-512 and npm
+  `@builder-radar/evidence-contract@1.0.1` tarball under `vendor/`, verified by SHA-512 and npm
   lockfile integrity. Contract definitions are never copied from private source folders.
 - The private database/ingestion implementation (`src/db`, `src/lib`) is **not** stored here. Each
   workflow checks out an exact 40-character commit configured in `PRIVATE_INGESTION_COMMIT`, verifies

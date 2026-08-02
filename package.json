@@ -19,7 +19,7 @@
     "test:worker-browser-contracts": "tsx test/run-worker-tests.ts"
   },
   "dependencies": {
-    "@builder-radar/evidence-contract": "file:vendor/builder-radar-evidence-contract-1.0.0.tgz",
+    "@builder-radar/evidence-contract": "file:vendor/builder-radar-evidence-contract-1.0.1.tgz",
     "@atproto/api": "^0.20.5",
     "@next/third-parties": "^16.2.7",
     "@qdrant/js-client-rest": "^1.18.0",

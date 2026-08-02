@@ -1,13 +1,12 @@
 import type { AnswerModel } from '@/lib/geo/types';
 
-export const BROWSER_ADAPTER_VERSIONS: Readonly<Record<AnswerModel, string>> = {
+export const BROWSER_ADAPTER_VERSIONS: Record<string, string> = {
   'chatgpt-consumer': 'chatgpt_dom_v3',
   claude: 'claude_dom_v3',
   perplexity: 'perplexity_dom_v3',
   'google-aio': 'google_aio_state_v3',
   grok: 'grok_dom_v3',
   'gemini-grounded': 'not_browser_captured',
-  'openai-search': 'not_browser_captured',
   kimi: 'not_browser_captured',
   mistral: 'not_browser_captured',
   'gpt-oss': 'not_browser_captured',

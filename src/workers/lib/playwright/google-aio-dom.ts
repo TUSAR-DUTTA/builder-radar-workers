@@ -45,22 +45,16 @@ export function inspectGoogleAioDom(): GoogleAioInspection {
   );
   let container: HTMLElement | null = explicit.length ? explicit[explicit.length - 1] : null;
   if (!container) {
-    const candidates = document.querySelectorAll<HTMLElement>('section, [role="region"], div');
+    const candidates = document.querySelectorAll<HTMLElement>('section, [role="region"], div.MjjYud, div');
     let shortest = Number.POSITIVE_INFINITY;
     for (let index = 0; index < candidates.length; index += 1) {
       const candidate = candidates[index];
+      if (candidate.id === 'rso' || candidate.id === 'search' || candidate.id === 'rcnt' || candidate.tagName === 'BODY' || candidate.tagName === 'MAIN') continue;
       const text = candidate.innerText || candidate.textContent || '';
       if (!/(^|\n)\s*AI Overview\s*(\n|$)/i.test(text)) continue;
       if (text.length < 80 || text.length > 25_000 || text.length >= shortest) continue;
       shortest = text.length;
       container = candidate;
-    }
-  }
-
-  if (!container) {
-    const fallbackContainer = document.querySelector<HTMLElement>('[data-attrid*="kc:"], [data-kp-hs], #kp-wp-tab-overview, div.g, #rso div.MjjYud, #rso');
-    if (fallbackContainer && (fallbackContainer.innerText || '').length > 40) {
-      container = fallbackContainer;
     }
   }
 

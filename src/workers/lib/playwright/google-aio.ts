@@ -100,10 +100,15 @@ export async function scrapeGoogleAioPrompt(prompt: string): Promise<BrowserCapt
       throw new Error('Google AIO did not render a real assistant answer');
     }
 
+    const uiLocale = await page.evaluate(() => document.documentElement.lang || 'en-US').catch(() => 'en-US');
+
     return { 
       rawAnswer: finalInspection.rawAnswer, 
       citations: finalInspection.links,
-      provenance: buildProvenance('google-aio')
+      provenance: buildProvenance('google-aio', {
+        uiLocale,
+        connectionMode: 'direct',
+      })
     };
   } catch (err) {
     if (process.env.PLAYWRIGHT_HEADLESS !== '0') {

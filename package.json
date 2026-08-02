@@ -13,7 +13,8 @@
     "validate:consumer-ui:ingest": "tsx scripts/ingest-consumer-ui.ts",
     "workers:run": "tsx src/workers/runner.ts",
     "workers:watch": "tsx src/workers/runner.ts --watch",
-    "typecheck:workers": "tsc --noEmit -p tsconfig.worker.json", "test:worker-contracts": "tsc --noEmit -p tsconfig.worker.json"
+    "typecheck:workers": "tsc --noEmit -p tsconfig.worker.json",
+    "test:worker-contracts": "tsx test/run-worker-tests.ts"
   },
   "dependencies": {
     "@atproto/api": "^0.20.5",

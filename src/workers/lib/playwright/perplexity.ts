@@ -48,9 +48,9 @@ export async function scrapePerplexityPrompt(prompt: string): Promise<BrowserCap
     }
 
     const spec: ConversationDomSpec = {
-      userSelector: '.prose, div[dir="auto"], .whitespace-pre-wrap, .text-foreground, span.select-text',
-      assistantSelector: '.prose, div[dir="auto"], [data-testid="answer-text"]',
-      streamingSelector: '[data-is-streaming="true"], [class*="streaming"]',
+      userSelector: '[data-testid="query-text"], [data-testid="user-query"], h1.font-display, div.whitespace-pre-wrap.select-text',
+      assistantSelector: '[data-testid="answer-text"], div[class*="answer-text"], .default.font-sans.select-text, div.prose.dark\\:prose-invert',
+      streamingSelector: '[data-is-streaming="true"], [class*="streaming"], [class*="animate-pulse"]',
       loginSelector: 'form[action*="login"]',
       challengeSelector: '#challenge-running',
       rateLimitSelector: '[data-testid="rate-limit-message"]',
@@ -73,15 +73,20 @@ export async function scrapePerplexityPrompt(prompt: string): Promise<BrowserCap
     });
 
     if (!inspection.rawAnswer || inspection.rawAnswer.length < 10) {
-      const html = await page.content().catch(() => '');
-      require('fs').writeFileSync('perplexity_dump.html', html);
+      await captureDebug(page, 'perplexity', 'bad-response');
       throw new Error(`Perplexity did not render a real assistant answer`);
     }
+
+    const proxyServer = process.env.PLAYWRIGHT_PROXY_SERVER?.trim();
+    const uiLocale = await page.evaluate(() => document.documentElement.lang || 'en-US').catch(() => 'en-US');
 
     return { 
       rawAnswer: inspection.rawAnswer, 
       citations: inspection.links,
-      provenance: buildProvenance('perplexity')
+      provenance: buildProvenance('perplexity', {
+        connectionMode: proxyServer ? 'proxy' : 'direct',
+        uiLocale,
+      })
     };
   } catch (err) {
     await closePerplexityBrowser();

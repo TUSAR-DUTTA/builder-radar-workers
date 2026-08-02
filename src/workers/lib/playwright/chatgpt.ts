@@ -196,52 +196,75 @@ export async function scrapeChatGPTPrompt(prompt: string): Promise<BrowserCaptur
 
     try {
       await page.waitForFunction(({ snapshot, expectedPrompt }) => {
-      const assistants = Array.from(document.querySelectorAll<HTMLElement>('section[data-testid^="conversation-turn-"][data-turn="assistant"]'));
-      const users = Array.from(document.querySelectorAll<HTMLElement>('section[data-testid^="conversation-turn-"][data-turn="user"]'));
-      const last = assistants.at(-1);
-      const lastUser = users.at(-1);
-      if (!last || !lastUser) return false;
-      const assistantId = last.getAttribute('data-testid') || last.id || null;
-      const userId = lastUser.getAttribute('data-testid') || lastUser.id || null;
-      const newAssistant = assistants.length > snapshot.assistantCount || assistantId !== snapshot.lastAssistantId;
-      const newUser = users.length > snapshot.userCount || userId !== snapshot.lastUserId;
-      
-      const userText = (lastUser.textContent ?? '').normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim();
-      const expPrompt = expectedPrompt.normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim();
-      const promptBound = userText.includes(expPrompt);
-      
-      if (!newAssistant || !newUser || !promptBound) return false;
-      const busy = last.querySelector('[aria-busy="true"], [class*="result-streaming"]');
-      if (busy) return false;
-      const stopBtn = document.querySelector('[data-testid="stop-button"], button[aria-label="Stop generating"]');
-      if (stopBtn) return false;
-      
-      const text = (last.textContent ?? '').replace(/\s+/g, ' ').trim();
-      return text.length > 'ChatGPT said:'.length + 40;
+        const assistants = Array.from(document.querySelectorAll<HTMLElement>('section[data-testid^="conversation-turn-"][data-turn="assistant"]'));
+        const users = Array.from(document.querySelectorAll<HTMLElement>('section[data-testid^="conversation-turn-"][data-turn="user"]'));
+        const last = assistants.at(-1);
+        const lastUser = users.at(-1);
+        if (!last || !lastUser) return false;
+        const assistantId = last.getAttribute('data-testid') || last.id || null;
+        const userId = lastUser.getAttribute('data-testid') || lastUser.id || null;
+        const newAssistant = assistants.length > snapshot.assistantCount || assistantId !== snapshot.lastAssistantId;
+        const newUser = users.length > snapshot.userCount || userId !== snapshot.lastUserId;
+        
+        const userText = (lastUser.textContent ?? '').normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim();
+        const expPrompt = expectedPrompt.normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim();
+        const promptBound = userText.includes(expPrompt);
+        
+        if (!newAssistant || !newUser || !promptBound) return false;
+        const busy = last.querySelector('[aria-busy="true"], [class*="result-streaming"]');
+        if (busy) return false;
+        const stopBtn = document.querySelector('[data-testid="stop-button"], button[aria-label="Stop generating"], button[aria-label*="stop" i]');
+        if (stopBtn) return false;
+        
+        // Positive terminal check: must contain markdown container or substantive paragraph
+        const markdownEl = last.querySelector('.markdown, [data-message-author-role="assistant"] .markdown, .prose');
+        const text = ((markdownEl || last).textContent ?? '').replace(/\s+/g, ' ').trim();
+        
+        // Reject interim research / search status strings
+        const isInterimStatusOnly = /^(researching|searching|thinking|thought for \d+ seconds?)\.?$/i.test(text);
+        if (isInterimStatusOnly) return false;
+
+        return text.length > 40;
       }, { snapshot: turnSnapshot, expectedPrompt: prompt }, { timeout: 180_000 });
     } catch {
       await captureDebug(page, 'chatgpt', 'prompt-binding-timeout');
       throw new Error('prompt_identity_unverified:new_chatgpt_turn_not_bound_to_submitted_prompt');
     }
-    await page.waitForTimeout(3000);
 
-    const data = await page.evaluate(() => {
-      const assistantTurns = Array.from(document.querySelectorAll<HTMLElement>('section[data-testid^="conversation-turn-"][data-turn="assistant"]'));
-      const last = assistantTurns.at(-1);
+    // Verify stability over consecutive checks instead of a blind sleep
+    let stableCount = 0;
+    let lastObservedText = '';
+    let data = { text: '', links: [] as { url: string; title?: string }[], assistantTurnId: null as string | null };
 
-      if (!last) {
-        return { text: '', links: [] };
+    for (let s = 0; s < 10; s++) {
+      await page.waitForTimeout(1000);
+      data = await page.evaluate(() => {
+        const assistantTurns = Array.from(document.querySelectorAll<HTMLElement>('section[data-testid^="conversation-turn-"][data-turn="assistant"]'));
+        const last = assistantTurns.at(-1);
+
+        if (!last) {
+          return { text: '', links: [], assistantTurnId: null };
+        }
+
+        const markdownEl = last.querySelector<HTMLElement>('.markdown, [data-message-author-role="assistant"] .markdown, .prose');
+        const target = markdownEl || last;
+        const text = target.innerText || target.textContent || '';
+
+        const links = Array.from(last.querySelectorAll<HTMLAnchorElement>('a[href]'))
+          .map((a) => ({ url: a.href, title: (a.textContent ?? '').trim() || undefined }))
+          .filter((a) => /^https?:\/\//i.test(a.url) && !a.url.includes('chatgpt.com') && !a.url.includes('openai.com'))
+          .slice(0, 12);
+        return { text, links, assistantTurnId: last.getAttribute('data-testid') || last.id || null };
+      });
+
+      if (data.text.length >= 40 && data.text === lastObservedText) {
+        stableCount++;
+        if (stableCount >= 2) break;
+      } else {
+        stableCount = 0;
+        lastObservedText = data.text;
       }
-
-      // Strip screenreader labels and footer/disclaimer noise from the captured answer text.
-      const text = last.innerText || last.textContent || '';
-
-      const links = Array.from(last.querySelectorAll<HTMLAnchorElement>('a[href]'))
-        .map((a) => ({ url: a.href, title: (a.textContent ?? '').trim() || undefined }))
-        .filter((a) => /^https?:\/\//i.test(a.url))
-        .slice(0, 12);
-      return { text, links, assistantTurnId: last.getAttribute('data-testid') || last.id || null };
-    });
+    }
 
     const postSendAuthFailures = chatGPTForbiddenUrls(forbidden);
     if (postSendAuthFailures.length) {
@@ -258,10 +281,16 @@ export async function scrapeChatGPTPrompt(prompt: string): Promise<BrowserCaptur
       throw new Error('prompt_identity_unverified:stale_chatgpt_assistant_turn');
     }
 
+    const proxyServer = process.env.PLAYWRIGHT_PROXY_SERVER?.trim();
+    const uiLocale = await page.evaluate(() => document.documentElement.lang || 'en-US').catch(() => 'en-US');
+
     return { 
       rawAnswer: data.text, 
       citations: data.links,
-      provenance: buildProvenance('chatgpt-consumer')
+      provenance: buildProvenance('chatgpt-consumer', {
+        connectionMode: proxyServer ? 'proxy' : 'direct',
+        uiLocale,
+      })
     };
   } catch (err) {
     await closeChatGPTBrowser();

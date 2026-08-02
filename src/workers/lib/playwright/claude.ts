@@ -47,9 +47,9 @@ export async function scrapeClaudePrompt(prompt: string): Promise<BrowserCapture
     }
 
     const spec: ConversationDomSpec = {
-      userSelector: '[class*="font-user-message"], [data-is-user="true"]',
-      assistantSelector: '[class*="font-claude-response"], [data-is-user="false"]',
-      streamingSelector: '[data-is-streaming="true"]',
+      userSelector: '[data-is-user="true"], [data-testid="user-message"], [class*="font-user-message"], div[data-message-author-role="user"]',
+      assistantSelector: '[data-is-user="false"], [data-testid="assistant-message"], [class*="font-claude-response"], div[data-message-author-role="assistant"]',
+      streamingSelector: '[data-is-streaming="true"], [class*="streaming"], [class*="animate-pulse"]',
       loginSelector: 'form[action*="login"], [href*="/login"]',
       challengeSelector: 'iframe[src*="cloudflare"], #challenge-running',
       rateLimitSelector: '[data-testid="rate-limit-message"]',
@@ -61,11 +61,19 @@ export async function scrapeClaudePrompt(prompt: string): Promise<BrowserCapture
     await composer.click({ timeout: 20_000, force: true }).catch(() => {});
     await composer.fill('');
     await page.keyboard.insertText(`Use web search and answer this buyer question with citations:\n\n${prompt}`);
-    await composer.press('Enter');
-    await page.waitForTimeout(500);
-    await page.keyboard.press('Enter');
-    const submit = await firstVisibleLocator(page, 'button[aria-label*="Send"]');
-    if (submit) await submit.click().catch(() => {});
+    await page.waitForTimeout(300);
+
+    const submit = await firstVisibleLocator(page, 'button[aria-label*="Send" i], button[data-testid="send-button"]');
+    if (submit) {
+      const disabled = await submit.isDisabled().catch(() => false);
+      if (!disabled) {
+        await submit.click().catch(() => {});
+      } else {
+        await composer.press('Enter');
+      }
+    } else {
+      await composer.press('Enter');
+    }
 
     const inspection = await waitForStableCorrelatedTurn(page, {
       spec,
@@ -81,10 +89,16 @@ export async function scrapeClaudePrompt(prompt: string): Promise<BrowserCapture
       throw new Error(isCloudflare ? 'Claude blocked by Cloudflare' : 'Claude did not render a real assistant answer');
     }
 
+    const proxyServer = process.env.PLAYWRIGHT_PROXY_SERVER?.trim();
+    const uiLocale = await page.evaluate(() => document.documentElement.lang || 'en-US').catch(() => 'en-US');
+
     return { 
       rawAnswer: inspection.rawAnswer, 
       citations: inspection.links,
-      provenance: buildProvenance('claude')
+      provenance: buildProvenance('claude', {
+        connectionMode: proxyServer ? 'proxy' : 'direct',
+        uiLocale,
+      })
     };
   } catch (err) {
     await closeClaudeBrowser();

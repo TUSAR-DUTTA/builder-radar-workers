@@ -14,19 +14,20 @@ export interface GrokTurnCandidate {
   promptBound?: boolean;
 }
 
-/** Pure prompt-turn correlation shared by the scraper and adversarial DOM fixtures. */
 export function isGrokTurnCorrelated(snapshot: GrokTurnSnapshot, candidate: GrokTurnCandidate): boolean {
   const newAssistant = candidate.assistantCount > snapshot.assistantCount
     || (candidate.text.length >= 50 && candidate.text !== snapshot.lastAssistantText);
   
-  const newBoundUser = candidate.promptBound === true
-    || (candidate.userCount > snapshot.userCount && candidate.lastMatchingUserIndex >= 0)
-    || (candidate.lastMatchingUserIndex >= 0 && candidate.lastMatchingUserIndex >= snapshot.userCount);
+  const hasMatchingUser = candidate.promptBound === true || candidate.lastMatchingUserIndex > 0;
+  const isNewTurnSequence = candidate.userCount > snapshot.userCount || candidate.assistantCount > snapshot.assistantCount;
 
-  return newAssistant
-    && newBoundUser
+  return Boolean(
+    newAssistant
+    && hasMatchingUser
+    && isNewTurnSequence
     && (candidate.assistantFollowsMatchingUser || candidate.promptBound === true)
     && !candidate.busy
-    && candidate.text.trim().length >= 50;
+    && candidate.text.trim().length >= 50
+  );
 }
 

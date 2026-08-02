@@ -1,11 +1,11 @@
 import type { AnswerModel } from '@/lib/geo/types';
 
 export const BROWSER_ADAPTER_VERSIONS: Record<string, string> = {
-  'chatgpt-consumer': 'chatgpt_dom_v3',
-  claude: 'claude_dom_v3',
-  perplexity: 'perplexity_dom_v3',
-  'google-aio': 'google_aio_state_v3',
-  grok: 'grok_dom_v3',
+  'chatgpt-consumer': 'chatgpt_dom_v4',
+  claude: 'claude_dom_v4',
+  perplexity: 'perplexity_dom_v4',
+  'google-aio': 'google_aio_state_v4',
+  grok: 'grok_dom_v4',
   'gemini-grounded': 'not_browser_captured',
   kimi: 'not_browser_captured',
   mistral: 'not_browser_captured',

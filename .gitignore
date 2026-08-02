@@ -29,4 +29,6 @@ check-session-valid.ts
 get-project-id.ts
 src/get-project-id.ts
 update-secrets.js
+dump-*.ts
+playwright_*profile*/
 *.png

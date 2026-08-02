@@ -193,21 +193,6 @@ export async function scrapeGrokPrompt(prompt: string): Promise<BrowserCapture> 
             targetAssistant = followingAssistantTurns.reduce((prev, curr) => 
               ((curr.innerText || curr.textContent || '').length > (prev.innerText || prev.textContent || '').length) ? curr : prev
             );
-          } else {
-            // Fallback: search following container with substantial text
-            const allFollowing = Array.from(document.querySelectorAll<HTMLElement>('main div, #chat-history div, div[class*="chat"] div, div[class*="conversation"] div, .markdown, .prose'))
-              .filter(el => {
-                if (el === matchingUserNode || matchingUserNode!.contains(el) || el.contains(matchingUserNode!)) return false;
-                if (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT' || el.closest('form, [contenteditable="true"]')) return false;
-                return !!(matchingUserNode!.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING);
-              });
-            for (let k = allFollowing.length - 1; k >= 0; k--) {
-              const elText = (allFollowing[k].innerText || allFollowing[k].textContent || '').trim();
-              if (elText.length >= 80) {
-                targetAssistant = allFollowing[k];
-                break;
-              }
-            }
           }
         } else if (assistantTurns.length > 0) {
           targetAssistant = assistantTurns.at(-1)!;
@@ -267,10 +252,16 @@ export async function scrapeGrokPrompt(prompt: string): Promise<BrowserCapture> 
       throw new Error('prompt_identity_unverified:grok did not render a real assistant answer or failed to bind prompt');
     }
 
+    const proxyServer = process.env.PLAYWRIGHT_PROXY_SERVER?.trim();
+    const uiLocale = await page.evaluate(() => document.documentElement.lang || 'en-US').catch(() => 'en-US');
+
     return { 
       rawAnswer: finalData.text, 
       citations: finalData.links,
-      provenance: buildProvenance('grok')
+      provenance: buildProvenance('grok', {
+        connectionMode: proxyServer ? 'proxy' : 'direct',
+        uiLocale,
+      })
     };
   } catch (err) {
     await closeGrokBrowser();

@@ -225,12 +225,45 @@ async function runScheduledScrapes(): Promise<void> {
     return;
   }
 
+  const jobKind = `worker:playwright:${[...targetModels].sort().join(',')}`;
+  
+  // Fetch recent scan jobs for this jobKind to determine per-engine/cell freshness
+  const recentJobs = await withDbRetry('runScheduledScrapes.recentJobs', () => db
+    .select({
+      projectId: scanJobs.projectId,
+      completedAt: scanJobs.completedAt,
+      status: scanJobs.status,
+    })
+    .from(scanJobs)
+    .where(and(
+      inArray(scanJobs.projectId, activeProjects.map(p => p.id)),
+      eq(scanJobs.kind, jobKind),
+    )));
+
+  const jobMap = new Map<string, { completedAt: Date | null, status: string }>();
+  for (const j of recentJobs) {
+    const existing = jobMap.get(j.projectId);
+    if (!existing || (j.completedAt && (!existing.completedAt || j.completedAt > existing.completedAt))) {
+      jobMap.set(j.projectId, j);
+    }
+  }
+
   const now = Date.now();
   const due = activeProjects.filter((p) => {
     const plan = p.subscriptionPlan ?? 'starter';
     const interval = SCRAPE_INTERVAL_MIN[plan] ?? SCRAPE_INTERVAL_MIN.starter;
-    const last = p.lastAttemptAt ? new Date(p.lastAttemptAt).getTime() : 0;
-    return (now - last) / 60_000 >= interval - SCRAPE_GRACE_MIN;
+    const projectLast = p.lastAttemptAt ? new Date(p.lastAttemptAt).getTime() : 0;
+    
+    const engineJob = jobMap.get(p.id);
+    const engineLast = engineJob?.completedAt ? new Date(engineJob.completedAt).getTime() : 0;
+
+    // If this engine job has never run or is incomplete, it's due
+    if (!engineJob || !engineJob.completedAt) return true;
+
+    // Check per-engine/cell freshness
+    const engineDue = (now - engineLast) / 60_000 >= interval - SCRAPE_GRACE_MIN;
+    const projectDue = (now - projectLast) / 60_000 >= interval - SCRAPE_GRACE_MIN;
+    return engineDue || projectDue;
   });
 
   if (due.length === 0) {

@@ -190,7 +190,8 @@ export async function scrapeGrokPrompt(prompt: string): Promise<BrowserCapture> 
           ? !!(matchingUserNode.compareDocumentPosition(last) & Node.DOCUMENT_POSITION_FOLLOWING)
           : false;
 
-        const busy = !!document.querySelector('[aria-busy="true"], [class*="streaming"], [class*="loading"], button[aria-label*="Stop"], button:has-text("Stop"), [data-testid="stop-button"], [class*="animate-spin"]');
+        const busy = !!document.querySelector('[aria-busy="true"], [class*="streaming"], [class*="loading"], button[aria-label*="Stop"], button[aria-label*="stop"], [data-testid="stop-button"], [class*="animate-spin"], [class*="animate-pulse"]')
+          || Array.from(document.querySelectorAll<HTMLButtonElement>('button')).some(b => (b.textContent || '').trim().toLowerCase() === 'stop');
 
         let text = (last as HTMLElement).innerText || last.textContent || '';
         text = text.replace(/\s+/g, ' ').trim();

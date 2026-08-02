@@ -68,7 +68,7 @@ interface GeoRunResult {
 }
 
 const CELL_LEASE_MS = 120_000;
-const PROVIDER_DEADLINE_MS = 90_000;
+const PROVIDER_DEADLINE_MS = 240_000;
 
 async function runGeoForProject(projectId: string, sources: string[]): Promise<GeoRunResult> {
   const models = sourcesToModels(sources).filter(isPlaywrightAnswerModel);

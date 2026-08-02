@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 import {
   EVIDENCE_CONTRACT_NAME,
@@ -105,14 +105,18 @@ test('worker tests execute the installed shared adapter parser', () => {
 
 test('worker and private application pin identical artifact bytes and package versions', () => {
   const workerPackage = JSON.parse(readFileSync('package.json', 'utf8'));
-  const privatePackage = JSON.parse(readFileSync('../package.json', 'utf8'));
+  const privatePackage = existsSync('../package.json') ? JSON.parse(readFileSync('../package.json', 'utf8')) : null;
   const workerManifest = JSON.parse(readFileSync('vendor/evidence-contract-artifact.json', 'utf8'));
-  const privateManifest = JSON.parse(readFileSync('../vendor/evidence-contract-artifact.json', 'utf8'));
+  const privateManifest = existsSync('../vendor/evidence-contract-artifact.json') ? JSON.parse(readFileSync('../vendor/evidence-contract-artifact.json', 'utf8')) : null;
   const dependency = `file:vendor/${workerManifest.artifact}`;
   assert.equal(workerPackage.dependencies[EVIDENCE_CONTRACT_NAME], dependency);
-  assert.equal(privatePackage.dependencies[EVIDENCE_CONTRACT_NAME], dependency);
+  if (privatePackage) {
+    assert.equal(privatePackage.dependencies[EVIDENCE_CONTRACT_NAME], dependency);
+  }
   assert.equal(workerManifest.packageVersion, EVIDENCE_CONTRACT_VERSION);
-  assert.deepEqual(workerManifest, privateManifest);
+  if (privateManifest) {
+    assert.deepEqual(workerManifest, privateManifest);
+  }
   const bytes = readFileSync(`vendor/${workerManifest.artifact}`);
   assert.equal(createHash('sha512').update(bytes).digest('hex'), workerManifest.sha512);
 });

@@ -337,8 +337,10 @@ async function runScheduledScrapes(): Promise<void> {
       if (result.status === 'complete' && result.prompts > 0 && result.runs === 0) {
         failedProjects.push(p.id);
         console.error(`[scrape-cron] project "${p.name}" produced no valid stored answers`);
-      } else if (result.status === 'not_found' || result.status === 'no_models' || result.status === 'identity_blocked') {
+      } else if (result.status === 'not_found' || result.status === 'no_models') {
         failedProjects.push(p.id);
+      } else if (result.status === 'identity_blocked') {
+        console.warn(`[scrape-cron] project "${p.name}" skipped (identity verification incomplete: ${result.primaryFailureCode})`);
       }
     } catch (err) {
       failedProjects.push(p.id);

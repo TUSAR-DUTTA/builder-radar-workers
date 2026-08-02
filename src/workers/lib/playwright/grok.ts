@@ -145,7 +145,6 @@ export async function scrapeGrokPrompt(prompt: string): Promise<BrowserCapture> 
           'div.response-body',
           '.message.assistant',
           '[class*="message"][class*="assistant"]',
-          '[class*="items-start"]',
         ].join(', ');
 
         let userTurns = Array.from(document.querySelectorAll<HTMLElement>(userSelector));
@@ -183,27 +182,57 @@ export async function scrapeGrokPrompt(prompt: string): Promise<BrowserCapture> 
 
         let assistantTurns = Array.from(document.querySelectorAll<HTMLElement>(assistantSelector));
         assistantTurns = assistantTurns.filter(a => !userTurns.some(u => u.contains(a) || u === a));
-        if (assistantTurns.length === 0) return null;
 
-        const last = assistantTurns.at(-1)!;
+        // If matchingUserNode is found, find following elements that could be the assistant turn
+        let targetAssistant: HTMLElement | null = null;
+        if (matchingUserNode) {
+          const followingAssistantTurns = assistantTurns.filter(a => 
+            !!(matchingUserNode!.compareDocumentPosition(a) & Node.DOCUMENT_POSITION_FOLLOWING)
+          );
+          if (followingAssistantTurns.length > 0) {
+            targetAssistant = followingAssistantTurns.reduce((prev, curr) => 
+              ((curr.innerText || curr.textContent || '').length > (prev.innerText || prev.textContent || '').length) ? curr : prev
+            );
+          } else {
+            // Fallback: search following container with substantial text
+            const allFollowing = Array.from(document.querySelectorAll<HTMLElement>('main div, #chat-history div, div[class*="chat"] div, div[class*="conversation"] div, .markdown, .prose'))
+              .filter(el => {
+                if (el === matchingUserNode || matchingUserNode!.contains(el) || el.contains(matchingUserNode!)) return false;
+                if (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT' || el.closest('form, [contenteditable="true"]')) return false;
+                return !!(matchingUserNode!.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING);
+              });
+            for (let k = allFollowing.length - 1; k >= 0; k--) {
+              const elText = (allFollowing[k].innerText || allFollowing[k].textContent || '').trim();
+              if (elText.length >= 80) {
+                targetAssistant = allFollowing[k];
+                break;
+              }
+            }
+          }
+        } else if (assistantTurns.length > 0) {
+          targetAssistant = assistantTurns.at(-1)!;
+        }
+
+        if (!targetAssistant) return null;
+
         const assistantFollowsMatchingUser = matchingUserNode
-          ? !!(matchingUserNode.compareDocumentPosition(last) & Node.DOCUMENT_POSITION_FOLLOWING)
+          ? !!(matchingUserNode.compareDocumentPosition(targetAssistant) & Node.DOCUMENT_POSITION_FOLLOWING)
           : false;
 
         const busy = !!document.querySelector('[aria-busy="true"], [class*="streaming"], [class*="loading"], button[aria-label*="Stop"], button[aria-label*="stop"], [data-testid="stop-button"], [class*="animate-spin"], [class*="animate-pulse"]')
           || Array.from(document.querySelectorAll<HTMLButtonElement>('button')).some(b => (b.textContent || '').trim().toLowerCase() === 'stop');
 
-        let text = (last as HTMLElement).innerText || last.textContent || '';
+        let text = (targetAssistant as HTMLElement).innerText || targetAssistant.textContent || '';
         text = text.replace(/\s+/g, ' ').trim();
 
-        const links = Array.from(last.querySelectorAll<HTMLAnchorElement>('a[href]'))
+        const links = Array.from(targetAssistant.querySelectorAll<HTMLAnchorElement>('a[href]'))
           .map((a) => ({ url: a.href, title: (a.textContent ?? '').trim() || undefined }))
           .filter((a) => /^https?:\/\//i.test(a.url) && !a.url.includes('grok.com') && !a.url.includes('x.com'))
           .slice(0, 12);
 
         return {
           candidate: {
-            assistantCount: assistantTurns.length,
+            assistantCount: assistantTurns.length || 1,
             userCount: userTurns.length,
             lastMatchingUserIndex,
             assistantFollowsMatchingUser,
@@ -223,7 +252,7 @@ export async function scrapeGrokPrompt(prompt: string): Promise<BrowserCapture> 
         continue;
       }
 
-      if (candidate.text.length > 5 && candidate.text === previousText) {
+      if (candidate.text.length >= 80 && candidate.text === previousText && !candidate.busy) {
         stableCount++;
         finalData = { text: candidate.text, links };
         if (stableCount >= 3) break; // stable for 3 seconds
@@ -233,7 +262,7 @@ export async function scrapeGrokPrompt(prompt: string): Promise<BrowserCapture> 
       }
     }
 
-    if (finalData.text.length < 5) {
+    if (finalData.text.length < 50) {
       await captureDebug(page, 'grok', 'bad-response-or-unbound');
       throw new Error('prompt_identity_unverified:grok did not render a real assistant answer or failed to bind prompt');
     }

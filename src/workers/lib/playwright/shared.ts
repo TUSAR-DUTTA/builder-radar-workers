@@ -4,10 +4,12 @@ import * as os from 'os';
 import { getSessionsDir } from '@/lib/session-loader';
 import type { AnswerModel } from '@/lib/geo/types';
 import { stealthContext, stealthLaunchOptions, applyStealth } from '../stealth';
+import type { BrowserConnectionMetadata } from './capture-contract';
 
 export type PlaywrightContextHandle = {
   context: import('playwright').BrowserContext;
   close: () => Promise<void>;
+  connectionMeta: BrowserConnectionMetadata;
 };
 
 export function sessionPathFor(model: AnswerModel): string {
@@ -28,13 +30,17 @@ type StoredOrigin = {
   localStorage?: Array<{ name: string; value: string }>;
 };
 
-let sharedUserDataDir: Record<string, string> = {};
+const sharedUserDataDir: Record<string, string> = {};
 
 export async function launchSeededPersistentContext(model: AnswerModel): Promise<PlaywrightContextHandle> {
+  const proxyServer = process.env.PLAYWRIGHT_PROXY_SERVER?.trim();
+  // We only route these specific bots through residential IP because their anti-bot blocks datacenter ASNs
+  const proxyRequested = !!proxyServer;
+  const proxyUsed = !!(proxyServer && (model as string === 'chatgpt-consumer' || model as string === 'openai-search'));
+  const requestedMarket = process.env.PLAYWRIGHT_MARKET?.trim() || 'US';
   const { chromium } = await import('playwright-extra');
   const stealthPlugin = (await import('puppeteer-extra-plugin-stealth')).default;
   chromium.use(stealthPlugin());
-  const browserType = chromium;
   const sessionPath = sessionPathFor(model);
   
   if (!sharedUserDataDir[model]) {
@@ -56,28 +62,21 @@ export async function launchSeededPersistentContext(model: AnswerModel): Promise
       .map((entry) => [entry.origin, entry.localStorage ?? []]),
   );
 
-  const proxyServer = process.env.PLAYWRIGHT_PROXY_SERVER?.trim();
-  // We only route these specific bots through residential IP because their anti-bot blocks datacenter ASNs
-  const useProxy = proxyServer && (model as string === 'chatgpt-consumer' || model as string === 'openai-search');
-  const proxy = useProxy ? {
-    server: proxyServer,
+  const proxy = proxyUsed ? {
+    server: proxyServer!,
     username: process.env.PLAYWRIGHT_PROXY_USERNAME?.trim(),
     password: process.env.PLAYWRIGHT_PROXY_PASSWORD?.trim(),
   } : undefined;
   
-  if (useProxy) {
+  if (proxyUsed) {
     console.log(`[stealth] routing Playwright through proxy ${proxyServer}`);
-  } else if (proxyServer) {
+  } else if (proxyRequested) {
     console.log(`[stealth] bypassing proxy for ${model} to save bandwidth`);
   }
 
-  const dummyBrowser = await browserType.launch();
-  const actualVersion = dummyBrowser.version();
-  await dummyBrowser.close();
-
   const isGoogleAio = model === 'google-aio';
   const launchOptions: any = {
-    ...stealthLaunchOptions(true, !!useProxy),
+    ...stealthLaunchOptions(true, proxyUsed),
     ...stealthContext(undefined),
     proxy,
   };
@@ -92,7 +91,7 @@ export async function launchSeededPersistentContext(model: AnswerModel): Promise
     ];
   }
 
-  const context = await browserType.launchPersistentContext(userDataDir, launchOptions);
+  const context = await chromium.launchPersistentContext(userDataDir, launchOptions);
   if (model === 'google-aio') {
     await applyStealth(context);
   }
@@ -107,7 +106,7 @@ export async function launchSeededPersistentContext(model: AnswerModel): Promise
     }
   }, localStorageByOrigin);
 
-  await context.route('**/*', (route) => {
+  await context.route('**/*', (route: import('playwright').Route) => {
     const type = route.request().resourceType();
     if (['image', 'media', 'font'].includes(type)) {
       route.abort().catch(() => {});
@@ -120,8 +119,20 @@ export async function launchSeededPersistentContext(model: AnswerModel): Promise
     await context.addCookies(storageState.cookies);
   }
 
+  const connectionMeta: BrowserConnectionMetadata = {
+    connectionMode: proxyUsed ? 'proxy' : 'direct',
+    proxyRequested,
+    proxyUsed,
+    fallbackUsed: false,
+    requestedMarket,
+    actualRegion: null,
+    regionVerified: false,
+    locale: 'en-US',
+  };
+
   return {
     context,
+    connectionMeta,
     close: async () => {
       await context.close().catch(() => {});
       if (model !== 'google-aio') {
@@ -136,15 +147,17 @@ export async function launchSeededContext(model: AnswerModel): Promise<Playwrigh
   const sessionPath = sessionPathFor(model);
   
   const proxyServer = process.env.PLAYWRIGHT_PROXY_SERVER?.trim();
-  const useProxy = proxyServer && (model as string === 'chatgpt-consumer' || model as string === 'openai-search');
-  const proxy = useProxy ? {
-    server: proxyServer,
+  const proxyRequested = !!proxyServer;
+  const proxyUsed = !!(proxyServer && (model as string === 'chatgpt-consumer' || model as string === 'openai-search'));
+  const requestedMarket = process.env.PLAYWRIGHT_MARKET?.trim() || 'US';
+  const proxy = proxyUsed ? {
+    server: proxyServer!,
     username: process.env.PLAYWRIGHT_PROXY_USERNAME?.trim(),
     password: process.env.PLAYWRIGHT_PROXY_PASSWORD?.trim(),
   } : undefined;
 
   const browser = await chromium.launch({
-    ...stealthLaunchOptions(true, !!useProxy),
+    ...stealthLaunchOptions(true, proxyUsed),
     proxy,
   });
 
@@ -180,8 +193,20 @@ export async function launchSeededContext(model: AnswerModel): Promise<Playwrigh
 
   await applyStealth(context);
 
+  const connectionMeta: BrowserConnectionMetadata = {
+    connectionMode: proxyUsed ? 'proxy' : 'direct',
+    proxyRequested,
+    proxyUsed,
+    fallbackUsed: false,
+    requestedMarket,
+    actualRegion: null,
+    regionVerified: false,
+    locale: 'en-US',
+  };
+
   return {
     context,
+    connectionMeta,
     close: async () => {
       await context.close().catch(() => {});
       await browser.close().catch(() => {});

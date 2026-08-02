@@ -8,7 +8,7 @@ import { db } from '@/db';
 import { projects, profiles, promptSets, scanJobs } from '@/db/schema';
 import { loadSessionsFromEnv } from '@/lib/session-loader';
 import { getAIRouter } from '@/lib/ai-router';
-import { eq, and, inArray } from 'drizzle-orm';
+import { eq, and, inArray, sql } from 'drizzle-orm';
 
 import type { AnswerModel, BrandFact } from '@/lib/geo/types';
 import { runPromptViaPlaywrightDetailed, closeSharedBrowser, isPlaywrightAnswerModel } from './lib/geo-playwright';
@@ -17,12 +17,17 @@ import { oldestAttemptFirst } from '@/lib/worker-scheduling';
 
 import { 
   claimNextScanCell, completeScanCell, failScanCell, 
-  initializeScanJobCells, refreshScanJob, resumeCandidate, scanJobCellStatus 
+  initializeScanJobCells, refreshScanJob, resumeCandidate,
 } from '@/lib/scan-job-store';
 import { sampleProjectPrompts } from '@/lib/geo/sample-run';
 import { SCAN_JOB_CONTRACT_VERSION, withProviderDeadline } from '@/lib/scan-job-contract';
-import { brandFacts } from '@/db/schema';
-import { identityFromTruthRow } from '@/lib/geo/evidence-contract';
+import type { EvidenceFailureCode } from '@builder-radar/evidence-contract';
+import {
+  blockedIdentityCode,
+  completeIdentityToLegacyPrivateProfile,
+  validateWorkerIdentityBeforePaidAcquisition,
+  workerSourcesToEngines,
+} from './lib/evidence-contract-boundary';
 
 const TRANSIENT_DB_CODES = new Set([
   'CONNECT_TIMEOUT', 'ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'EPIPE', 'EAI_AGAIN', 'ENOTFOUND',
@@ -49,24 +54,25 @@ async function withDbRetry<T>(label: string, fn: () => Promise<T>, attempts = 3)
   }
 }
 
-const SOURCE_TO_MODEL: Record<string, AnswerModel> = {
-  chatgpt: 'chatgpt-consumer',
-};
 function sourcesToModels(sources: string[]): AnswerModel[] {
-  return sources
-    .map((s) => SOURCE_TO_MODEL[s] ?? (s as AnswerModel))
-    .filter((m): m is AnswerModel => Boolean(m));
+  return workerSourcesToEngines(sources);
 }
 
-type GeoRunStatus = 'complete' | 'not_found' | 'no_models' | 'no_prompts' | 'quota_exhausted';
-interface GeoRunResult { prompts: number; runs: number; models: AnswerModel[]; status: GeoRunStatus }
+type GeoRunStatus = 'complete' | 'not_found' | 'no_models' | 'no_prompts' | 'quota_exhausted' | 'identity_blocked';
+interface GeoRunResult {
+  prompts: number;
+  runs: number;
+  models: AnswerModel[];
+  status: GeoRunStatus;
+  primaryFailureCode: EvidenceFailureCode | null;
+}
 
 const CELL_LEASE_MS = 120_000;
 const PROVIDER_DEADLINE_MS = 90_000;
 
 async function runGeoForProject(projectId: string, sources: string[]): Promise<GeoRunResult> {
   const models = sourcesToModels(sources).filter(isPlaywrightAnswerModel);
-  if (models.length === 0) return { prompts: 0, runs: 0, models: [], status: 'no_models' };
+  if (models.length === 0) return { prompts: 0, runs: 0, models: [], status: 'no_models', primaryFailureCode: null };
 
   const [project] = await withDbRetry('runGeoForProject', () => db
     .select({
@@ -76,44 +82,96 @@ async function runGeoForProject(projectId: string, sources: string[]): Promise<G
       plan: profiles.plan,
       subscriptionPlan: profiles.subscriptionPlan,
       ltdTier: profiles.ltdTier,
-      competitors: projects.competitors,
     })
     .from(projects)
     .leftJoin(profiles, eq(profiles.id, projects.userId))
     .where(eq(projects.id, projectId))
     .limit(1));
 
-  if (!project) return { prompts: 0, runs: 0, models, status: 'not_found' };
+  if (!project) return { prompts: 0, runs: 0, models, status: 'not_found', primaryFailureCode: null };
 
   const prompts = await withDbRetry('runGeoForProject.prompts', () => db
     .select({ id: promptSets.id, prompt: promptSets.prompt })
     .from(promptSets)
     .where(and(eq(promptSets.projectId, project.id), eq(promptSets.active, true))));
 
-  if (prompts.length === 0) return { prompts: 0, runs: 0, models, status: 'no_prompts' };
-
-  const competitors = Array.isArray(project.competitors)
-    ? (project.competitors as unknown[])
-        .map((c) => (typeof c === 'string' ? c : (c as { name?: string }).name))
-        .filter((c): c is string => Boolean(c))
-    : [];
+  if (prompts.length === 0) return { prompts: 0, runs: 0, models, status: 'no_prompts', primaryFailureCode: null };
   
-  const [factRow] = await withDbRetry('runGeoForProject.facts', () => db
-    .select({
-      facts: brandFacts.facts,
-      verificationStatus: brandFacts.verificationStatus,
-      canonicalName: brandFacts.canonicalName,
-      aliases: brandFacts.aliases,
-      ambiguousAliases: brandFacts.ambiguousAliases,
-    })
-    .from(brandFacts)
-    .where(eq(brandFacts.projectId, project.id))
-    .limit(1));
+  // Raw SQL is deliberate at this boundary: public workers compile against staged private runtime
+  // sources of different ages, while the database contract must load every current identity field.
+  const identityRows = await withDbRetry('runGeoForProject.identity', () => db.execute(sql`
+    SELECT
+      bf.facts AS "facts",
+      bf.verification_status AS "verificationStatus",
+      bf.canonical_name AS "canonicalName",
+      bf.canonical_domain AS "canonicalDomain",
+      bf.category AS "category",
+      bf.aliases AS "aliases",
+      bf.domain_aliases AS "domainAliases",
+      bf.ambiguous_aliases AS "ambiguousAliases",
+      bf.negative_meanings AS "negativeMeanings",
+      bf.geography AS "geography",
+      bf.competitor_identities AS "competitorIdentities",
+      bf.identity_provenance AS "identityProvenance",
+      bf.identity_version AS "identityVersion",
+      bf.identity_verification_status AS "identityVerificationStatus",
+      bf.verified_at AS "verifiedAt",
+      p.measurement_baseline_version AS "measurementBaselineVersion",
+      p.market_profile AS "marketProfile"
+    FROM projects p
+    LEFT JOIN brand_facts bf ON bf.project_id = p.id
+    WHERE p.id = ${project.id}
+    LIMIT 1
+  `));
+  const factRow = identityRows[0] as unknown as {
+    facts: unknown;
+    verificationStatus: unknown;
+    canonicalName: unknown;
+    canonicalDomain: unknown;
+    category: unknown;
+    aliases: unknown;
+    domainAliases: unknown;
+    ambiguousAliases: unknown;
+    negativeMeanings: unknown;
+    geography: unknown;
+    competitorIdentities: unknown;
+    identityProvenance: unknown;
+    identityVersion: unknown;
+    identityVerificationStatus: unknown;
+    verifiedAt: unknown;
+    measurementBaselineVersion: unknown;
+    marketProfile: unknown;
+  } | undefined;
     
   const facts = factRow?.verificationStatus === 'user_approved'
     ? (factRow.facts as BrandFact[] | undefined) ?? []
     : [];
-  const identity = identityFromTruthRow(project.name, factRow as any);
+  const identityResult = validateWorkerIdentityBeforePaidAcquisition(factRow ? {
+    projectId: project.id,
+    baselineId: factRow.measurementBaselineVersion,
+    canonicalName: factRow.canonicalName,
+    canonicalDomain: factRow.canonicalDomain,
+    category: factRow.category,
+    aliases: factRow.aliases,
+    domainAliases: factRow.domainAliases,
+    ambiguousAliases: factRow.ambiguousAliases,
+    negativeMeanings: factRow.negativeMeanings,
+    geography: factRow.geography,
+    identityVersion: factRow.identityVersion,
+    identityVerificationStatus: factRow.identityVerificationStatus,
+    identityProvenance: factRow.identityProvenance,
+    identityVerifiedAt: factRow.verifiedAt,
+    competitorIdentities: factRow.competitorIdentities,
+    marketProfile: factRow.marketProfile,
+  } : null);
+  if (!identityResult.success) {
+    const primaryFailureCode = blockedIdentityCode(identityResult);
+    console.error(`[runner] project ${project.id} blocked before paid acquisition: ${primaryFailureCode}`);
+    return { prompts: prompts.length, runs: 0, models, status: 'identity_blocked', primaryFailureCode };
+  }
+  const completeIdentity = identityResult.value;
+  const identity = completeIdentityToLegacyPrivateProfile(completeIdentity);
+  const competitors = completeIdentity.competitors.map((competitor) => competitor.canonicalName);
 
   const router = getAIRouter();
   const jobKind = `worker:playwright:${[...models].sort().join(',')}`;
@@ -130,7 +188,7 @@ async function runGeoForProject(projectId: string, sources: string[]): Promise<G
   });
   
   const job = existingJob ?? insertedJob;
-  if (!job) return { prompts: prompts.length, runs: 0, models, status: 'quota_exhausted' };
+  if (!job) return { prompts: prompts.length, runs: 0, models, status: 'quota_exhausted', primaryFailureCode: null };
 
   await initializeScanJobCells({ jobId: job.id, projectId: project.id, prompts, models });
   const promptById = new Map(prompts.map(p => [p.id, p]));
@@ -183,7 +241,7 @@ async function runGeoForProject(projectId: string, sources: string[]): Promise<G
     await db.update(projects).set({ lastScrapeAt: new Date() }).where(eq(projects.id, project.id)).catch(() => {});
   }
 
-  return { prompts: prompts.length, runs: lifecycle.successful, models, status: 'complete' };
+  return { prompts: prompts.length, runs: lifecycle.successful, models, status: 'complete', primaryFailureCode: null };
 }
 
 const SCRAPE_INTERVAL_MIN: Record<string, number> = {
@@ -279,7 +337,7 @@ async function runScheduledScrapes(): Promise<void> {
       if (result.status === 'complete' && result.prompts > 0 && result.runs === 0) {
         failedProjects.push(p.id);
         console.error(`[scrape-cron] project "${p.name}" produced no valid stored answers`);
-      } else if (result.status === 'not_found' || result.status === 'no_models') {
+      } else if (result.status === 'not_found' || result.status === 'no_models' || result.status === 'identity_blocked') {
         failedProjects.push(p.id);
       }
     } catch (err) {
@@ -313,6 +371,9 @@ async function main() {
       .filter(Boolean);
     console.log(`[runner] Scrape mode - project=${scrapeProjectId} sources=${sources.join(',')}`);
     const result = await runGeoForProject(scrapeProjectId, sources);
+    if (result.status === 'identity_blocked') {
+      throw new Error(`Paid acquisition blocked: ${result.primaryFailureCode ?? 'identity_incomplete'}`);
+    }
     if (result.status === 'complete' && result.prompts > 0 && result.runs === 0) {
       throw new Error('Browser sampling produced no valid stored answers');
     }

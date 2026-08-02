@@ -6,10 +6,14 @@ minutes**.
 
 ## How it works
 - This repo holds **only** the worker/automation code (`src/workers/**`) + workflows.
-- The private application core (`src/db`, `src/lib`) is **not** stored here. Each workflow
-  checks it out at runtime from the private repo via `secrets.CORE_REPO_PAT`, copies it into
-  `src/`, runs the worker, and the ephemeral runner is destroyed. Core code is never committed
-  or uploaded as an artifact.
+- The evidence boundary is the exact immutable
+  `@builder-radar/evidence-contract@1.0.0` tarball under `vendor/`, verified by SHA-512 and npm
+  lockfile integrity. Contract definitions are never copied from private source folders.
+- The private database/ingestion implementation (`src/db`, `src/lib`) is **not** stored here. Each
+  workflow checks out an exact 40-character commit configured in `PRIVATE_INGESTION_COMMIT`, verifies
+  that its contract dependency matches, stages runtime implementation files into `src/`, runs the
+  worker, and destroys the ephemeral checkout. A branch such as `main` is never accepted as the
+  compatibility boundary.
 - Workers write results to the same Supabase database via repository secrets.
 
 ## Triggers

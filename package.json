@@ -9,14 +9,17 @@
     "db:seed": "tsx scripts/seed.ts",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint",
+    "lint": "eslint src/workers contract-tests",
     "validate:consumer-ui:ingest": "tsx scripts/ingest-consumer-ui.ts",
     "workers:run": "tsx src/workers/runner.ts",
     "workers:watch": "tsx src/workers/runner.ts --watch",
     "typecheck:workers": "tsc --noEmit -p tsconfig.worker.json",
-    "test:worker-contracts": "tsx test/run-worker-tests.ts"
+    "verify:evidence-contract": "node scripts/verify-evidence-contract.mjs",
+    "test:worker-contracts": "npm run typecheck:workers && node contract-tests/run-contract-tests.mjs",
+    "test:worker-browser-contracts": "tsx test/run-worker-tests.ts"
   },
   "dependencies": {
+    "@builder-radar/evidence-contract": "file:vendor/builder-radar-evidence-contract-1.0.0.tgz",
     "@atproto/api": "^0.20.5",
     "@next/third-parties": "^16.2.7",
     "@qdrant/js-client-rest": "^1.18.0",

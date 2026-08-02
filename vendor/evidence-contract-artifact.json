@@ -1,0 +1,10 @@
+{
+  "packageName": "@builder-radar/evidence-contract",
+  "packageVersion": "1.0.0",
+  "artifact": "builder-radar-evidence-contract-1.0.0.tgz",
+  "sha512": "eeeb77e3064f87d05b26d3a36ba57ec34b09cfb489674dffa7f46dcc3559fe9ac86da70d85d94b58f98aad8094c8e1da816a3206177fd7668067d5f59179016b",
+  "integrity": "sha512-7ut34wZPh9BbJtOja6V+w0sJz7SJZ03/p/RtzDVZ/prIbacNhdlLWPmKrYCUyOHagWoyBhd/12aAZ9X1kXkBaw==",
+  "sourceCommit": "9787361829e74c047867fcacc5224b32f73920da",
+  "workerSourceCommit": "a64a55329d986c1f2ec154f44ac10f8924ee0fb5",
+  "deterministicBuildCommand": "npm run build:evidence-contract"
+}

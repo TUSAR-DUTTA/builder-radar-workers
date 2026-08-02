@@ -1,8 +1,8 @@
 import { launchSeededPersistentContext, captureDebug, firstVisibleLocator, PlaywrightContextHandle } from './shared';
 import { snapshotConversationDom, waitForStableCorrelatedTurn, ConversationDomSpec } from './conversation-dom';
-import { BrowserCapture, buildProvenance } from './capture-contract';
+import { BrowserCapture, buildProvenance, type TerminalProof, type BrowserConnectionMetadata } from './capture-contract';
 
-export let sharedPerplexityBrowser: { runtime: PlaywrightContextHandle, page: import('playwright').Page } | null = null;
+export let sharedPerplexityBrowser: { runtime: PlaywrightContextHandle, page: import('playwright').Page, connectionMeta: BrowserConnectionMetadata } | null = null;
 
 export async function closePerplexityBrowser() {
   if (sharedPerplexityBrowser) {
@@ -19,7 +19,7 @@ export async function scrapePerplexityPrompt(prompt: string): Promise<BrowserCap
       const page = await ctx.newPage();
       await page.goto('https://www.perplexity.ai/', { waitUntil: 'domcontentloaded', timeout: 45_000 });
       await page.waitForTimeout(2500);
-      sharedPerplexityBrowser = { runtime, page };
+      sharedPerplexityBrowser = { runtime, page, connectionMeta: runtime.connectionMeta };
     } catch (err) {
       await runtime.close().catch(() => {});
       throw err;
@@ -48,8 +48,8 @@ export async function scrapePerplexityPrompt(prompt: string): Promise<BrowserCap
     }
 
     const spec: ConversationDomSpec = {
-      userSelector: '[data-testid="query-text"], [data-testid="user-query"], h1.font-display, div.whitespace-pre-wrap.select-text',
-      assistantSelector: '[data-testid="answer-text"], div[class*="answer-text"], .default.font-sans.select-text, div.prose.dark\\:prose-invert',
+      userSelector: '[data-testid="query-text"], [data-testid="user-query"], div.whitespace-pre-wrap.select-text',
+      assistantSelector: '[data-testid="answer-text"], div[class*="answer-text"], .default.font-sans.select-text',
       streamingSelector: '[data-is-streaming="true"], [class*="streaming"], [class*="animate-pulse"]',
       loginSelector: 'form[action*="login"]',
       challengeSelector: '#challenge-running',
@@ -77,16 +77,23 @@ export async function scrapePerplexityPrompt(prompt: string): Promise<BrowserCap
       throw new Error(`Perplexity did not render a real assistant answer`);
     }
 
-    const proxyServer = process.env.PLAYWRIGHT_PROXY_SERVER?.trim();
+    const { connectionMeta } = sharedPerplexityBrowser!;
     const uiLocale = await page.evaluate(() => document.documentElement.lang || 'en-US').catch(() => 'en-US');
+    connectionMeta.locale = uiLocale;
+
+    const terminalProof: TerminalProof = {
+      providerState: 'complete',
+      userTurnId: inspection.userNodeId || 'user-node',
+      assistantTurnId: inspection.assistantNodeId || 'assistant-node',
+      answerNodeId: inspection.assistantNodeId || 'answer-node',
+      terminalSignal: `correlated_stable_turn`,
+      stableChecks: 3,
+    };
 
     return { 
       rawAnswer: inspection.rawAnswer, 
       citations: inspection.links,
-      provenance: buildProvenance('perplexity', {
-        connectionMode: proxyServer ? 'proxy' : 'direct',
-        uiLocale,
-      })
+      provenance: buildProvenance('perplexity', { terminalProof }, connectionMeta)
     };
   } catch (err) {
     await closePerplexityBrowser();

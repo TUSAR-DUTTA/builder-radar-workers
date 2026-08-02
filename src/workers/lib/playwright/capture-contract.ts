@@ -1,16 +1,38 @@
 import type { AnswerModel } from '@/lib/geo/types';
 
 export const BROWSER_ADAPTER_VERSIONS: Record<string, string> = {
-  'chatgpt-consumer': 'chatgpt_dom_v4',
-  claude: 'claude_dom_v4',
-  perplexity: 'perplexity_dom_v4',
-  'google-aio': 'google_aio_state_v4',
-  grok: 'grok_dom_v4',
+  'chatgpt-consumer': 'chatgpt_dom_v5',
+  claude: 'claude_dom_v5',
+  perplexity: 'perplexity_dom_v5',
+  'google-aio': 'google_aio_state_v5',
+  grok: 'grok_dom_v5',
   'gemini-grounded': 'not_browser_captured',
   kimi: 'not_browser_captured',
   mistral: 'not_browser_captured',
   'gpt-oss': 'not_browser_captured',
 };
+
+/** Factual connection metadata returned from the launcher — never inferred from env var existence. */
+export interface BrowserConnectionMetadata {
+  connectionMode: 'direct' | 'proxy';
+  proxyRequested: boolean;
+  proxyUsed: boolean;
+  fallbackUsed: boolean;
+  requestedMarket: string;
+  actualRegion: string | null;
+  regionVerified: boolean;
+  locale: string;
+}
+
+/** Evidence that the captured answer reached a genuine provider-specific terminal state. */
+export interface TerminalProof {
+  providerState: 'complete';
+  userTurnId: string;
+  assistantTurnId: string;
+  answerNodeId: string;
+  terminalSignal: string;
+  stableChecks: number;
+}
 
 export interface CaptureProvenance {
   requestedMarket: string;
@@ -20,6 +42,11 @@ export interface CaptureProvenance {
   uiLocale: string;
   sessionType: string;
   adapterVersion: string;
+  proxyRequested?: boolean;
+  proxyUsed?: boolean;
+  regionVerified?: boolean;
+  terminalProof?: TerminalProof;
+  connectionMetadata?: BrowserConnectionMetadata;
 }
 
 export interface BrowserCapture {
@@ -43,15 +70,25 @@ export function isBrowserNoAnswerError(error: unknown): error is BrowserNoAnswer
     || (typeof error === 'object' && error !== null && (error as { code?: unknown }).code === 'provider_no_answer');
 }
 
-export function buildProvenance(model: AnswerModel, overrides?: Partial<CaptureProvenance>): CaptureProvenance {
-  return {
-    requestedMarket: 'US',
-    actualEgressRegion: null,
-    connectionMode: 'direct',
-    fallbackOccurred: false,
-    uiLocale: 'en-US',
+export function buildProvenance(
+  model: AnswerModel,
+  overrides?: Partial<CaptureProvenance>,
+  connectionMeta?: BrowserConnectionMetadata,
+): CaptureProvenance {
+  const base: CaptureProvenance = {
+    requestedMarket: connectionMeta?.requestedMarket ?? 'US',
+    actualEgressRegion: connectionMeta?.actualRegion ?? null,
+    connectionMode: connectionMeta?.connectionMode ?? 'direct',
+    fallbackOccurred: connectionMeta?.fallbackUsed ?? false,
+    uiLocale: connectionMeta?.locale ?? 'en-US',
     sessionType: 'persistent',
     adapterVersion: BROWSER_ADAPTER_VERSIONS[model] || 'unknown',
-    ...overrides,
+    proxyRequested: connectionMeta?.proxyRequested ?? false,
+    proxyUsed: connectionMeta?.proxyUsed ?? false,
+    regionVerified: connectionMeta?.regionVerified ?? false,
   };
+  if (connectionMeta) {
+    base.connectionMetadata = connectionMeta;
+  }
+  return { ...base, ...overrides };
 }

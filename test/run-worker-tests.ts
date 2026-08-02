@@ -26,16 +26,39 @@ async function runTests() {
   // 1. Provenance Version Tests
   console.log('[Suite 1: Adapter Provenance Versions]');
   {
-    assert.strictEqual(BROWSER_ADAPTER_VERSIONS['chatgpt-consumer'], 'chatgpt_dom_v4');
-    assert.strictEqual(BROWSER_ADAPTER_VERSIONS['google-aio'], 'google_aio_state_v4');
-    assert.strictEqual(BROWSER_ADAPTER_VERSIONS['perplexity'], 'perplexity_dom_v4');
-    assert.strictEqual(BROWSER_ADAPTER_VERSIONS['claude'], 'claude_dom_v4');
-    assert.strictEqual(BROWSER_ADAPTER_VERSIONS['grok'], 'grok_dom_v4');
+    assert.strictEqual(BROWSER_ADAPTER_VERSIONS['chatgpt-consumer'], 'chatgpt_dom_v5');
+    assert.strictEqual(BROWSER_ADAPTER_VERSIONS['google-aio'], 'google_aio_state_v5');
+    assert.strictEqual(BROWSER_ADAPTER_VERSIONS['perplexity'], 'perplexity_dom_v5');
+    assert.strictEqual(BROWSER_ADAPTER_VERSIONS['claude'], 'claude_dom_v5');
+    assert.strictEqual(BROWSER_ADAPTER_VERSIONS['grok'], 'grok_dom_v5');
 
-    const prov = buildProvenance('google-aio', { connectionMode: 'proxy', uiLocale: 'en-GB' });
-    assert.strictEqual(prov.adapterVersion, 'google_aio_state_v4');
+    const prov = buildProvenance(
+      'google-aio',
+      {
+        terminalProof: {
+          providerState: 'complete',
+          userTurnId: 'u1',
+          assistantTurnId: 'a1',
+          answerNodeId: 'node-1',
+          terminalSignal: 'aio_complete:stable_3',
+          stableChecks: 3,
+        }
+      },
+      {
+        connectionMode: 'proxy',
+        proxyRequested: true,
+        proxyUsed: true,
+        fallbackUsed: false,
+        requestedMarket: 'US',
+        actualRegion: null,
+        regionVerified: false,
+        locale: 'en-GB',
+      }
+    );
+    assert.strictEqual(prov.adapterVersion, 'google_aio_state_v5');
     assert.strictEqual(prov.connectionMode, 'proxy');
     assert.strictEqual(prov.uiLocale, 'en-GB');
+    assert.strictEqual(prov.terminalProof?.terminalSignal, 'aio_complete:stable_3');
     record('Adapter versions and provenance construction', true);
   }
 

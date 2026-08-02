@@ -211,6 +211,7 @@ export async function waitForStableCorrelatedTurn(
     timeoutMs?: number;
     minimumChars?: number;
     stableChecks?: number;
+    signal?: AbortSignal;
   },
 ): Promise<CorrelatedTurnInspection> {
   const deadline = Date.now() + (input.timeoutMs ?? 180_000);
@@ -221,6 +222,9 @@ export async function waitForStableCorrelatedTurn(
   let lastStatus: CorrelatedTurnStatus = 'waiting';
 
   while (Date.now() < deadline) {
+    if (input.signal?.aborted) {
+      throw new Error(`provider_deadline:${input.provider}_aborted`);
+    }
     await page.waitForTimeout(1_000);
     const inspection = await page.evaluate(inspectCorrelatedConversationTurn, {
       spec: input.spec,

@@ -1,8 +1,8 @@
 import { launchSeededPersistentContext, captureDebug, firstVisibleLocator, PlaywrightContextHandle } from './shared';
 import { inspectGoogleAioDom } from './google-aio-dom';
-import { BrowserCapture, buildProvenance, BrowserNoAnswerError } from './capture-contract';
+import { BrowserCapture, buildProvenance, BrowserNoAnswerError, type TerminalProof, type BrowserConnectionMetadata } from './capture-contract';
 
-export let sharedGoogleAioBrowser: { runtime: PlaywrightContextHandle, page: import('playwright').Page } | null = null;
+export let sharedGoogleAioBrowser: { runtime: PlaywrightContextHandle, page: import('playwright').Page, connectionMeta: BrowserConnectionMetadata } | null = null;
 
 export async function closeGoogleAioBrowser() {
   if (sharedGoogleAioBrowser) {
@@ -23,7 +23,7 @@ export async function scrapeGoogleAioPrompt(prompt: string): Promise<BrowserCapt
     const has1PSID = cookies.some(c => c.name === '__Secure-1PSID');
     console.log(`[google-aio] __Secure-1PSID present: ${has1PSID}`);
     await page.waitForTimeout(2500);
-    sharedGoogleAioBrowser = { runtime, page };
+    sharedGoogleAioBrowser = { runtime, page, connectionMeta: runtime.connectionMeta };
   }
 
   const { page } = sharedGoogleAioBrowser;
@@ -44,6 +44,7 @@ export async function scrapeGoogleAioPrompt(prompt: string): Promise<BrowserCapt
     await page.keyboard.press('Enter');
 
     let stableCount = 0;
+    let stableContainerIdentity: string | null = null;
     let finalInspection: any = null;
     let previousText = '';
     
@@ -53,7 +54,7 @@ export async function scrapeGoogleAioPrompt(prompt: string): Promise<BrowserCapt
       let inspection;
       try {
         inspection = await page.evaluate(inspectGoogleAioDom);
-      } catch (e) {
+      } catch {
         continue;
       }
       if (inspection.state === 'consent' || inspection.state === 'challenge') {
@@ -65,6 +66,15 @@ export async function scrapeGoogleAioPrompt(prompt: string): Promise<BrowserCapt
       }
       
       if (inspection.state === 'aio_rendering' || inspection.state === 'aio_complete') {
+        if (stableContainerIdentity === null && inspection.containerIdentity) {
+          stableContainerIdentity = inspection.containerIdentity;
+        } else if (stableContainerIdentity && inspection.containerIdentity && inspection.containerIdentity !== stableContainerIdentity) {
+          stableCount = 0;
+          previousText = '';
+          stableContainerIdentity = inspection.containerIdentity;
+          continue;
+        }
+
         const generateBtn = await firstVisibleLocator(page, 'button:has-text("Generate")');
         if (generateBtn) {
           await generateBtn.click({ timeout: 5000 }).catch(() => {});
@@ -91,7 +101,7 @@ export async function scrapeGoogleAioPrompt(prompt: string): Promise<BrowserCapt
       }
     }
 
-    if (!finalInspection || finalInspection.state === 'results_loaded' || (finalInspection.state !== 'aio_complete' && finalInspection.state !== 'aio_rendering')) {
+    if (!finalInspection || finalInspection.state !== 'aio_complete') {
       throw new BrowserNoAnswerError('google-aio', 'no AI overview triggered');
     }
 
@@ -100,15 +110,23 @@ export async function scrapeGoogleAioPrompt(prompt: string): Promise<BrowserCapt
       throw new Error('Google AIO did not render a real assistant answer');
     }
 
+    const { connectionMeta } = sharedGoogleAioBrowser;
     const uiLocale = await page.evaluate(() => document.documentElement.lang || 'en-US').catch(() => 'en-US');
+    connectionMeta.locale = uiLocale;
+
+    const terminalProof: TerminalProof = {
+      providerState: 'complete',
+      userTurnId: 'google-search-query',
+      assistantTurnId: finalInspection.containerIdentity || 'aio-container',
+      answerNodeId: finalInspection.containerIdentity || 'aio-container',
+      terminalSignal: `aio_complete:stable_${stableCount}`,
+      stableChecks: stableCount,
+    };
 
     return { 
       rawAnswer: finalInspection.rawAnswer, 
       citations: finalInspection.links,
-      provenance: buildProvenance('google-aio', {
-        uiLocale,
-        connectionMode: 'direct',
-      })
+      provenance: buildProvenance('google-aio', { terminalProof }, connectionMeta)
     };
   } catch (err) {
     if (process.env.PLAYWRIGHT_HEADLESS !== '0') {

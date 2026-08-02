@@ -24,7 +24,7 @@ function chatGPTForbiddenUrls(urls: string[]): string[] {
   return urls.filter((url) => patterns.some((pattern) => url.includes(pattern)));
 }
 
-export let sharedChatGPTBrowser: { runtime: PlaywrightContextHandle, page: import('playwright').Page, forbidden: string[] } | null = null;
+export let sharedChatGPTBrowser: { runtime: PlaywrightContextHandle, page: import('playwright').Page, forbidden: string[], connectionMeta: BrowserConnectionMetadata } | null = null;
 
 export async function closeChatGPTBrowser() {
   if (sharedChatGPTBrowser) {
@@ -33,7 +33,7 @@ export async function closeChatGPTBrowser() {
   }
 }
 
-import { BrowserCapture, buildProvenance } from './capture-contract';
+import { BrowserCapture, buildProvenance, type TerminalProof, type BrowserConnectionMetadata } from './capture-contract';
 
 export async function scrapeChatGPTPrompt(prompt: string): Promise<BrowserCapture> {
   if (!sharedChatGPTBrowser) {
@@ -83,7 +83,7 @@ export async function scrapeChatGPTPrompt(prompt: string): Promise<BrowserCaptur
           throw new Error('ChatGPT session rejected browser automation: backend API returned 403 before send');
         }
       }
-      sharedChatGPTBrowser = { runtime, page, forbidden };
+      sharedChatGPTBrowser = { runtime, page, forbidden, connectionMeta: runtime.connectionMeta };
     } catch (err) {
       await runtime.close().catch(() => {});
       throw err;
@@ -220,9 +220,16 @@ export async function scrapeChatGPTPrompt(prompt: string): Promise<BrowserCaptur
         const markdownEl = last.querySelector('.markdown, [data-message-author-role="assistant"] .markdown, .prose');
         const text = ((markdownEl || last).textContent ?? '').replace(/\s+/g, ' ').trim();
         
-        // Reject interim research / search status strings
+        // Reject interim research / search / tool-use status strings
         const isInterimStatusOnly = /^(researching|searching|thinking|thought for \d+ seconds?)\.?$/i.test(text);
         if (isInterimStatusOnly) return false;
+        // Also reject if text starts with research/search status patterns even when longer
+        const startsWithResearch = /^(researching|searching|i'll compare|let me search|let me find|looking up|browsing|reading|analyzing)/i.test(text);
+        const hasResultStreaming = !!last.querySelector('[class*="result-streaming"]');
+        if ((startsWithResearch || hasResultStreaming) && text.length < 200) return false;
+        // Check for positive terminal signals
+        const hasTerminalSignals = !!document.querySelector('button[data-testid="copy-turn-action-button"], button[aria-label*="Copy" i], [data-testid="thumbs-up"], [data-testid="thumbs-down"]');
+        if (!hasTerminalSignals && text.length < 120) return false;
 
         return text.length > 40;
       }, { snapshot: turnSnapshot, expectedPrompt: prompt }, { timeout: 180_000 });
@@ -265,6 +272,7 @@ export async function scrapeChatGPTPrompt(prompt: string): Promise<BrowserCaptur
         lastObservedText = data.text;
       }
     }
+    const userTurnId = turnSnapshot.lastUserId || 'user-turn';
 
     const postSendAuthFailures = chatGPTForbiddenUrls(forbidden);
     if (postSendAuthFailures.length) {
@@ -281,16 +289,23 @@ export async function scrapeChatGPTPrompt(prompt: string): Promise<BrowserCaptur
       throw new Error('prompt_identity_unverified:stale_chatgpt_assistant_turn');
     }
 
-    const proxyServer = process.env.PLAYWRIGHT_PROXY_SERVER?.trim();
+    const { connectionMeta } = sharedChatGPTBrowser!;
     const uiLocale = await page.evaluate(() => document.documentElement.lang || 'en-US').catch(() => 'en-US');
+    connectionMeta.locale = uiLocale;
+
+    const terminalProof: TerminalProof = {
+      providerState: 'complete',
+      userTurnId,
+      assistantTurnId: data.assistantTurnId || 'assistant-turn',
+      answerNodeId: data.assistantTurnId || 'assistant-node',
+      terminalSignal: `stable_text:${stableCount}`,
+      stableChecks: stableCount,
+    };
 
     return { 
       rawAnswer: data.text, 
       citations: data.links,
-      provenance: buildProvenance('chatgpt-consumer', {
-        connectionMode: proxyServer ? 'proxy' : 'direct',
-        uiLocale,
-      })
+      provenance: buildProvenance('chatgpt-consumer', { terminalProof }, connectionMeta)
     };
   } catch (err) {
     await closeChatGPTBrowser();

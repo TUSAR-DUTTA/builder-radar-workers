@@ -97,15 +97,26 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Verify evidence-contract version and integrity
+        run: npm run verify:evidence-contract
+
+      - name: Require a pinned private ingestion commit
+        env:
+          PRIVATE_INGESTION_COMMIT: ${{ vars.PRIVATE_INGESTION_COMMIT }}
+        run: |
+          [[ "$PRIVATE_INGESTION_COMMIT" =~ ^[0-9a-f]{40}$ ]] || exit 1
+
       - name: Fetch private core (read-only, runtime only)
         uses: actions/checkout@v4
         with:
           repository: TUSAR-DUTTA/Builder-Radar
-          ref: main
+          ref: ${{ vars.PRIVATE_INGESTION_COMMIT }}
           token: ${{ secrets.CORE_REPO_PAT }}
           path: _core
-      - name: Stage private core into src/ (never committed)
+      - name: Verify and stage pinned private runtime (contract package is not copied)
         run: |
+          test "$(git -C _core rev-parse HEAD)" = "${{ vars.PRIVATE_INGESTION_COMMIT }}"
+          node -e "const worker=require('./package.json'); const core=require('./_core/package.json'); const name='@builder-radar/evidence-contract'; if (worker.dependencies[name] !== core.dependencies[name]) throw new Error('evidence-contract pins differ')"
           cp -r _core/src/db src/db
           cp -r _core/src/lib src/lib
           if [ -d _core/src/types ]; then cp -r _core/src/types src/types; fi

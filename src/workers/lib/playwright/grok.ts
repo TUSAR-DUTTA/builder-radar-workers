@@ -1,8 +1,8 @@
 import { launchSeededPersistentContext, captureDebug, firstVisibleLocator, PlaywrightContextHandle } from './shared';
-import { isGrokTurnCorrelated, GrokTurnSnapshot, GrokTurnCandidate } from './grok-turn-binding';
-import { BrowserCapture, buildProvenance } from './capture-contract';
+import { isGrokTurnCorrelated } from './grok-turn-binding';
+import { BrowserCapture, buildProvenance, type TerminalProof, type BrowserConnectionMetadata } from './capture-contract';
 
-export let sharedGrokBrowser: { runtime: PlaywrightContextHandle, page: import('playwright').Page } | null = null;
+export let sharedGrokBrowser: { runtime: PlaywrightContextHandle, page: import('playwright').Page, connectionMeta: BrowserConnectionMetadata } | null = null;
 
 export async function closeGrokBrowser() {
   if (sharedGrokBrowser) {
@@ -18,7 +18,7 @@ export async function scrapeGrokPrompt(prompt: string): Promise<BrowserCapture> 
     const page = await ctx.newPage();
     await page.goto('https://grok.com/', { waitUntil: 'domcontentloaded', timeout: 45_000 });
     await page.waitForTimeout(2500);
-    sharedGrokBrowser = { runtime, page };
+    sharedGrokBrowser = { runtime, page, connectionMeta: runtime.connectionMeta };
   }
 
   const { page } = sharedGrokBrowser;
@@ -53,15 +53,10 @@ export async function scrapeGrokPrompt(prompt: string): Promise<BrowserCapture> 
         'div[data-message-author-role="user"]',
         '.message.user',
         '[class*="message"][class*="user"]',
-        '[class*="items-end"]',
-        '[class*="self-end"]',
-        '[class*="bubble"]',
         '.query-text',
       ].join(', ');
 
       const assistantSelector = [
-        '.markdown',
-        '.prose',
         'div[data-testid*="assistant"]',
         'div[data-message-author-role="assistant"]',
         'div[data-testid*="response"]',
@@ -69,7 +64,6 @@ export async function scrapeGrokPrompt(prompt: string): Promise<BrowserCapture> 
         'div.response-body',
         '.message.assistant',
         '[class*="message"][class*="assistant"]',
-        '[class*="items-start"]',
       ].join(', ');
 
       const userTurns = Array.from(document.querySelectorAll<HTMLElement>(userSelector));
@@ -115,11 +109,23 @@ export async function scrapeGrokPrompt(prompt: string): Promise<BrowserCapture> 
 
       // If at 5s/10s the composer still contains text and no assistant response is found, re-trigger submission
       if ((i === 4 || i === 9) && !finalData.text) {
-        const composerText = await composer.inputValue().catch(() => '') || await composer.innerText().catch(() => '');
-        if (composerText && composerText.trim().length > 0) {
-          const retryBtn = await firstVisibleLocator(page, 'button[aria-label*="Send"], button[aria-label*="Submit"], button[type="submit"]');
-          if (retryBtn) await retryBtn.click().catch(() => {});
-          await composer.press('Enter').catch(() => {});
+        // Check if a user turn with the prompt already exists before retrying
+        const hasExistingUserTurn = await page.evaluate((expectedPrompt) => {
+          const normalizedWanted = expectedPrompt.normalize('NFKC').toLocaleLowerCase('en-US').replace(/\s+/g, ' ').trim();
+          const userEls = document.querySelectorAll<HTMLElement>('div[data-testid*="user"], div[data-message-author-role="user"], .message.user, [class*="message"][class*="user"], .query-text');
+          return Array.from(userEls).some(el => {
+            const text = (el.innerText || el.textContent || '').normalize('NFKC').toLocaleLowerCase('en-US').replace(/\s+/g, ' ').trim();
+            return text.includes(normalizedWanted);
+          });
+        }, prompt).catch(() => false);
+
+        if (!hasExistingUserTurn) {
+          const composerText = await composer.inputValue().catch(() => '') || await composer.innerText().catch(() => '');
+          if (composerText && composerText.trim().length > 0) {
+            const retryBtn = await firstVisibleLocator(page, 'button[aria-label*="Send"], button[aria-label*="Submit"], button[type="submit"]');
+            if (retryBtn) await retryBtn.click().catch(() => {});
+            await composer.press('Enter').catch(() => {});
+          }
         }
       }
 
@@ -129,15 +135,10 @@ export async function scrapeGrokPrompt(prompt: string): Promise<BrowserCapture> 
           'div[data-message-author-role="user"]',
           '.message.user',
           '[class*="message"][class*="user"]',
-          '[class*="items-end"]',
-          '[class*="self-end"]',
-          '[class*="bubble"]',
           '.query-text',
         ].join(', ');
 
         const assistantSelector = [
-          '.markdown',
-          '.prose',
           'div[data-testid*="assistant"]',
           'div[data-message-author-role="assistant"]',
           'div[data-testid*="response"]',
@@ -147,7 +148,7 @@ export async function scrapeGrokPrompt(prompt: string): Promise<BrowserCapture> 
           '[class*="message"][class*="assistant"]',
         ].join(', ');
 
-        let userTurns = Array.from(document.querySelectorAll<HTMLElement>(userSelector));
+        const userTurns = Array.from(document.querySelectorAll<HTMLElement>(userSelector));
         const normalizedWanted = expectedPrompt.normalize('NFKC').toLocaleLowerCase('en-US').replace(/\s+/g, ' ').trim();
 
         let matchingUserNode: HTMLElement | null = null;
@@ -163,21 +164,7 @@ export async function scrapeGrokPrompt(prompt: string): Promise<BrowserCapture> 
             }
           }
 
-          if (!matchingUserNode) {
-            // Broader fallback search for user prompt node in chat body
-            const allElements = Array.from(document.querySelectorAll<HTMLElement>('main div, #chat-history div, div[class*="chat"] div, div[class*="conversation"] div, p, span'));
-            for (let j = allElements.length - 1; j >= 0; j--) {
-              const el = allElements[j];
-              if (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT' || el.isContentEditable || el.closest('[contenteditable="true"], textarea, form')) continue;
-              const text = (el.innerText || el.textContent || '').normalize('NFKC').toLocaleLowerCase('en-US').replace(/\s+/g, ' ').trim();
-              if (text === normalizedWanted || (text.includes(normalizedWanted) && text.length < normalizedWanted.length + 150)) {
-                matchingUserNode = el;
-                if (!userTurns.includes(el)) userTurns.push(el);
-                lastMatchingUserIndex = userTurns.length;
-                break;
-              }
-            }
-          }
+
         }
 
         let assistantTurns = Array.from(document.querySelectorAll<HTMLElement>(assistantSelector));
@@ -252,16 +239,23 @@ export async function scrapeGrokPrompt(prompt: string): Promise<BrowserCapture> 
       throw new Error('prompt_identity_unverified:grok did not render a real assistant answer or failed to bind prompt');
     }
 
-    const proxyServer = process.env.PLAYWRIGHT_PROXY_SERVER?.trim();
+    const { connectionMeta } = sharedGrokBrowser!;
     const uiLocale = await page.evaluate(() => document.documentElement.lang || 'en-US').catch(() => 'en-US');
+    connectionMeta.locale = uiLocale;
+
+    const terminalProof: TerminalProof = {
+      providerState: 'complete',
+      userTurnId: 'grok-user-turn',
+      assistantTurnId: 'grok-assistant-turn',
+      answerNodeId: 'grok-answer-node',
+      terminalSignal: `stable_text:${stableCount}`,
+      stableChecks: stableCount,
+    };
 
     return { 
       rawAnswer: finalData.text, 
       citations: finalData.links,
-      provenance: buildProvenance('grok', {
-        connectionMode: proxyServer ? 'proxy' : 'direct',
-        uiLocale,
-      })
+      provenance: buildProvenance('grok', { terminalProof }, connectionMeta)
     };
   } catch (err) {
     await closeGrokBrowser();

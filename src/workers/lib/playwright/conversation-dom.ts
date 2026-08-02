@@ -141,29 +141,44 @@ export function inspectCorrelatedConversationTurn(input: {
     }
   }
 
-  if (!matchingUser) {
-    root.setAttribute('data-builderradar-node-counter', String(counter));
-    return { status: 'waiting', rawAnswer: '', links: [], userNodeId: null, assistantNodeId: null, promptMatched: false, assistantFollowsUser: false };
-  }
-
   let matchingAssistant: HTMLElement | null = null;
   let matchingAssistantId: string | null = null;
-  for (let index = 0; index < assistants.length; index += 1) {
-    const node = assistants[index];
-    let identity = node.getAttribute('data-builderradar-node-id')
-      || node.getAttribute('data-message-id')
-      || node.id;
-    if (!identity) {
-      counter += 1;
-      identity = `assistant-${counter}`;
-      node.setAttribute('data-builderradar-node-id', identity);
+
+  if (matchingUser) {
+    for (let index = 0; index < assistants.length; index += 1) {
+      const node = assistants[index];
+      let identity = node.getAttribute('data-builderradar-node-id')
+        || node.getAttribute('data-message-id')
+        || node.id;
+      if (!identity) {
+        counter += 1;
+        identity = `assistant-${counter}`;
+        node.setAttribute('data-builderradar-node-id', identity);
+      }
+      if (oldAssistants.has(identity)) continue;
+      if (!(matchingUser.compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING)) continue;
+      matchingAssistant = node;
+      matchingAssistantId = identity;
+      break;
     }
-    if (oldAssistants.has(identity)) continue;
-    if (!(matchingUser.compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING)) continue;
-    matchingAssistant = node;
-    matchingAssistantId = identity;
-    break;
+  } else {
+    for (let index = assistants.length - 1; index >= 0; index -= 1) {
+      const node = assistants[index];
+      let identity = node.getAttribute('data-builderradar-node-id')
+        || node.getAttribute('data-message-id')
+        || node.id;
+      if (!identity) {
+        counter += 1;
+        identity = `assistant-${counter}`;
+        node.setAttribute('data-builderradar-node-id', identity);
+      }
+      if (oldAssistants.has(identity)) continue;
+      matchingAssistant = node;
+      matchingAssistantId = identity;
+      break;
+    }
   }
+  
   root.setAttribute('data-builderradar-node-counter', String(counter));
 
   if (!matchingAssistant) {
@@ -196,8 +211,8 @@ export function inspectCorrelatedConversationTurn(input: {
     links,
     userNodeId: matchingUserId,
     assistantNodeId: matchingAssistantId,
-    promptMatched: true,
-    assistantFollowsUser: true,
+    promptMatched: Boolean(matchingUser),
+    assistantFollowsUser: Boolean(matchingUser),
   };
 }
 

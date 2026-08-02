@@ -47,8 +47,8 @@ export async function scrapeClaudePrompt(prompt: string): Promise<BrowserCapture
     }
 
     const spec: ConversationDomSpec = {
-      userSelector: '[data-is-user="true"], [data-testid="user-message"], [class*="font-user-message"]',
-      assistantSelector: '[data-is-user="false"], [data-testid="assistant-message"], [class*="font-claude-response"]',
+      userSelector: '[data-is-user="true"], [data-testid="user-message"], [class*="font-user-message"], .font-claude-message',
+      assistantSelector: '[data-is-user="false"], [data-testid="assistant-message"], [class*="font-claude-response"], div.prose',
       streamingSelector: '[data-is-streaming="true"], [class*="streaming"], [class*="animate-pulse"]',
       loginSelector: 'form[action*="login"], [href*="/login"]',
       challengeSelector: 'iframe[src*="cloudflare"], #challenge-running',

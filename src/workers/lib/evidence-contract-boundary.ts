@@ -85,7 +85,11 @@ function stringOrEmpty(value: unknown): string {
 
 function isoOrNull(value: unknown): string | null {
   if (value instanceof Date) return value.toISOString();
-  return typeof value === 'string' ? value : null;
+  if (typeof value === 'string' && value.trim().length > 0) {
+    const parsed = Date.parse(value);
+    if (Number.isFinite(parsed)) return new Date(parsed).toISOString();
+  }
+  return null;
 }
 
 function explicitLocaleAndLanguage(marketProfile: unknown): { locale: string; language: string } {

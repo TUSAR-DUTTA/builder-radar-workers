@@ -1,0 +1,34 @@
+name: Test All Workers - Single Prompt
+
+on:
+  workflow_dispatch:
+
+env:
+  PLAYWRIGHT_PROXY_SERVER: ${{ secrets.PLAYWRIGHT_PROXY_SERVER }}
+  PLAYWRIGHT_PROXY_CREDENTIALS: ${{ secrets.PLAYWRIGHT_PROXY_CREDENTIALS }}
+  CHATGPT_SESSION_B64: ${{ secrets.CHATGPT_SESSION_B64 }}
+  CLAUDE_SESSION_B64: ${{ secrets.CLAUDE_SESSION_B64 }}
+  PERPLEXITY_SESSION_B64: ${{ secrets.PERPLEXITY_SESSION_B64 }}
+  GOOGLE_SESSION_B64: ${{ secrets.GOOGLE_SESSION_B64 }}
+  GROK_SESSION_B64: ${{ secrets.GROK_SESSION_B64 }}
+
+jobs:
+  run-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright Browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run test-single-prompt.ts
+        run: npx tsx test-single-prompt.ts

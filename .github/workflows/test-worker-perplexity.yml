@@ -66,5 +66,5 @@ jobs:
           fi
           
       - name: Run Test Script
-        run: npx tsx verify-single-worker.ts
+        run: xvfb-run -a npx tsx verify-single-worker.ts
 

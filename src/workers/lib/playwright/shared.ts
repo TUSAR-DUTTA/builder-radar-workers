@@ -36,7 +36,7 @@ export async function launchSeededPersistentContext(model: AnswerModel): Promise
   const proxyServer = process.env.PLAYWRIGHT_PROXY_SERVER?.trim();
   // We only route these specific bots through residential IP because their anti-bot blocks datacenter ASNs
   const proxyRequested = !!proxyServer;
-  const proxyUsed = !!(proxyServer && (model as string === 'chatgpt-consumer' || model as string === 'openai-search'));
+  const proxyUsed = !!(proxyServer && (model as string === 'chatgpt-consumer' || model as string === 'openai-search' || model as string === 'google-aio'));
   const requestedMarket = process.env.PLAYWRIGHT_MARKET?.trim() || 'US';
   const { chromium } = await import('playwright-extra');
   const stealthPlugin = (await import('puppeteer-extra-plugin-stealth')).default;
@@ -148,7 +148,7 @@ export async function launchSeededContext(model: AnswerModel): Promise<Playwrigh
   
   const proxyServer = process.env.PLAYWRIGHT_PROXY_SERVER?.trim();
   const proxyRequested = !!proxyServer;
-  const proxyUsed = !!(proxyServer && (model as string === 'chatgpt-consumer' || model as string === 'openai-search'));
+  const proxyUsed = !!(proxyServer && (model as string === 'chatgpt-consumer' || model as string === 'openai-search' || model as string === 'google-aio'));
   const requestedMarket = process.env.PLAYWRIGHT_MARKET?.trim() || 'US';
   const proxy = proxyUsed ? {
     server: proxyServer!,

@@ -53,7 +53,7 @@ export async function scrapePerplexityPrompt(
 
     const spec: ConversationDomSpec = {
       userSelector: '[data-testid="query-text"], [data-testid="user-query"], h1.font-display, div.whitespace-pre-wrap.select-text',
-      assistantSelector: '[data-testid="answer-text"], div[class*="answer-text"], .default.font-sans.select-text',
+      assistantSelector: '[data-testid="answer-text"], div[class*="answer-text"], .default.font-sans.select-text, div.prose.dark\\:prose-invert',
       streamingSelector: '[data-is-streaming="true"], [class*="streaming"], [class*="animate-pulse"]',
       loginSelector: 'form[action*="login"]',
       challengeSelector: '#challenge-running',

@@ -110,14 +110,14 @@ async function runTests() {
     {
       const genuineHtml = fs.readFileSync(path.join(__dirname, 'fixtures/google-aio-genuine.html'), 'utf8');
       await page.setContent(genuineHtml);
-      const genuineResult = await page.evaluate(() => inspectGoogleAioDom());
+      const genuineResult = await page.evaluate(inspectGoogleAioDom as any);
       record('Genuine AIO DOM detected as aio_complete', genuineResult.state === 'aio_complete');
       record('Genuine AIO extracts raw answer containing Tally', genuineResult.rawAnswer.includes('Tally'));
       record('Genuine AIO extracts citations without google.com links', genuineResult.links.some(l => l.url.includes('tally.so')));
 
       const organicHtml = fs.readFileSync(path.join(__dirname, 'fixtures/google-aio-organic-serp.html'), 'utf8');
       await page.setContent(organicHtml);
-      const organicResult = await page.evaluate(() => inspectGoogleAioDom());
+      const organicResult = await page.evaluate(inspectGoogleAioDom as any);
       record('Organic SERP without AIO produces results_loaded with NO answer text', organicResult.state === 'results_loaded' && organicResult.rawAnswer === '');
     }
 

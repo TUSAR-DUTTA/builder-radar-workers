@@ -33,6 +33,23 @@ jobs:
           node-version: '20'
           cache: 'npm'
           
+      - name: Fetch private core (read-only, runtime only)
+        uses: actions/checkout@v4
+        with:
+          repository: TUSAR-DUTTA/Builder-Radar
+          ref: ${{ vars.PRIVATE_INGESTION_COMMIT || 'main' }}
+          token: ${{ secrets.CORE_REPO_PAT }}
+          path: _core
+      - name: Stage private core into src/ (never committed)
+        run: |
+          if [ -n "${{ vars.PRIVATE_INGESTION_COMMIT }}" ]; then
+            test "$(git -C _core rev-parse HEAD)" = "${{ vars.PRIVATE_INGESTION_COMMIT }}"
+          fi
+          node -e "const worker=require('./package.json'); const core=require('./_core/package.json'); const name='@builder-radar/evidence-contract'; if (worker.dependencies[name] && core.dependencies[name] && worker.dependencies[name] !== core.dependencies[name]) throw new Error('evidence-contract pins differ')"
+          cp -r _core/src/db src/db
+          cp -r _core/src/lib src/lib
+          if [ -d _core/src/types ]; then cp -r _core/src/types src/types; fi
+          rm -rf _core
       - name: Install dependencies
         run: npm ci
 
@@ -48,3 +65,4 @@ jobs:
           
       - name: Run Test Script
         run: npx tsx verify-single-worker.ts
+

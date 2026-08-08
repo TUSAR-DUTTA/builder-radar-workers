@@ -260,7 +260,7 @@ export async function waitForStableCorrelatedTurn(
     // This prevents short app-chrome from being accepted as an answer,
     // while still allowing providers like Perplexity that hide user queries.
     const effectiveStableChecks = inspection.promptMatched ? requiredStableChecks : Math.max(requiredStableChecks, 5);
-    const effectiveMinChars = inspection.promptMatched ? minimumChars : Math.max(minimumChars, 200);
+    const effectiveMinChars = inspection.promptMatched ? minimumChars : Math.max(minimumChars, 50);
     if (inspection.rawAnswer.trim().length < effectiveMinChars) {
       previousText = null;
       stableCount = 0;

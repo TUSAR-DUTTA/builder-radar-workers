@@ -47,4 +47,4 @@ jobs:
           fi
           
       - name: Run Test Script
-        run: npx tsx test-single-worker.ts
+        run: npx tsx verify-single-worker.ts

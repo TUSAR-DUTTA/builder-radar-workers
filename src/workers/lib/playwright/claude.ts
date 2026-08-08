@@ -51,8 +51,8 @@ export async function scrapeClaudePrompt(
     }
 
     const spec: ConversationDomSpec = {
-      userSelector: '[data-is-user="true"], [data-testid="user-message"], [class*="font-user-message"], .font-claude-message',
-      assistantSelector: '[data-is-user="false"], [data-testid="assistant-message"], [class*="font-claude-response"], div.prose',
+      userSelector: '[data-is-user="true"], [data-testid="user-message"], [class*="font-user-message"]',
+      assistantSelector: '[data-is-user="false"], [data-testid="assistant-message"], [class*="font-claude-response"]',
       streamingSelector: '[data-is-streaming="true"], [class*="streaming"], [class*="animate-pulse"]',
       loginSelector: 'form[action*="login"], [href*="/login"]',
       challengeSelector: 'iframe[src*="cloudflare"], #challenge-running',
@@ -100,7 +100,13 @@ export async function scrapeClaudePrompt(
       return el ? (el.textContent || (el as HTMLTextAreaElement).value || '').trim() : '';
     }).catch(() => '');
     if (composerText.length > 10) {
-      console.warn('[claude] Composer not cleared after submission — possible stuck state');
+      console.warn('[claude] Composer not cleared after submission — possible stuck state, retrying Enter');
+      // Attempt one more Enter press
+      const retryComposer = await firstVisibleLocator(page, '[contenteditable="true"], textarea, #prompt-textarea');
+      if (retryComposer) {
+        await retryComposer.press('Enter').catch(() => {});
+        await page.waitForTimeout(2000);
+      }
     }
 
     const { connectionMeta } = sharedClaudeBrowser!;
@@ -109,11 +115,11 @@ export async function scrapeClaudePrompt(
 
     const terminalProof: TerminalProof = {
       providerState: 'complete',
-      userTurnId: inspection.userNodeId || 'user-node',
-      assistantTurnId: inspection.assistantNodeId || 'assistant-node',
-      answerNodeId: inspection.assistantNodeId || 'answer-node',
-      terminalSignal: `correlated_stable_turn`,
-      stableChecks: 3,
+      userTurnId: inspection.userNodeId || `claude-user-${Date.now()}`,
+      assistantTurnId: inspection.assistantNodeId || `claude-assistant-${Date.now()}`,
+      answerNodeId: inspection.assistantNodeId || `claude-answer-${Date.now()}`,
+      terminalSignal: inspection.promptMatched ? 'correlated_stable_turn' : 'unbound_stable_turn',
+      stableChecks: inspection.promptMatched ? 3 : 5,
     };
 
     return { 

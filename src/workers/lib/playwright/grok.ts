@@ -250,9 +250,9 @@ export async function scrapeGrokPrompt(
 
     const terminalProof: TerminalProof = {
       providerState: 'complete',
-      userTurnId: 'grok-user-turn',
-      assistantTurnId: 'grok-assistant-turn',
-      answerNodeId: 'grok-answer-node',
+      userTurnId: `grok-user-${Date.now()}`,
+      assistantTurnId: `grok-assistant-${Date.now()}`,
+      answerNodeId: `grok-answer-${Date.now()}`,
       terminalSignal: `stable_text:${stableCount}`,
       stableChecks: stableCount,
     };

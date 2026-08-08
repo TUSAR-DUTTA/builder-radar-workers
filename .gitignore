@@ -32,3 +32,4 @@ update-secrets.js
 dump-*.ts
 playwright_*profile*/
 *.png
+.next/

@@ -102,6 +102,7 @@ export async function scrapeChatGPTPrompt(
       await page.goto('https://chatgpt.com/', { waitUntil: 'domcontentloaded', timeout: 45_000 });
       await page.waitForTimeout(2000);
     }
+    if (signal?.aborted) throw new Error('provider_deadline_aborted');
 
     // Wait until we are fully landed and stabilized on chatgpt.com workspace page
     console.log('[chatgpt] Waiting for workspace page to be loaded and stable...');
@@ -236,7 +237,7 @@ export async function scrapeChatGPTPrompt(
         if (!hasTerminalSignals && text.length < 120) return false;
 
         return text.length > 40;
-      }, { snapshot: turnSnapshot, expectedPrompt: prompt }, { timeout: 180_000 });
+      }, { snapshot: turnSnapshot, expectedPrompt: prompt }, { timeout: deadlineAt ? Math.max(5_000, deadlineAt - Date.now()) : 180_000 });
     } catch {
       await captureDebug(page, 'chatgpt', 'prompt-binding-timeout');
       throw new Error('prompt_identity_unverified:new_chatgpt_turn_not_bound_to_submitted_prompt');
@@ -247,7 +248,9 @@ export async function scrapeChatGPTPrompt(
     let lastObservedText = '';
     let data = { text: '', links: [] as { url: string; title?: string }[], assistantTurnId: null as string | null };
 
-    for (let s = 0; s < 10; s++) {
+    const chatgptDeadline = deadlineAt || (Date.now() + 180_000);
+    for (let i = 0; Date.now() < chatgptDeadline; i++) {
+      if (signal?.aborted) throw new Error('provider_deadline_aborted');
       await page.waitForTimeout(1000);
       data = await page.evaluate(() => {
         const assistantTurns = Array.from(document.querySelectorAll<HTMLElement>('section[data-testid^="conversation-turn-"][data-turn="assistant"]'));
@@ -276,7 +279,15 @@ export async function scrapeChatGPTPrompt(
         lastObservedText = data.text;
       }
     }
-    const userTurnId = turnSnapshot.lastUserId || 'user-turn';
+    // Capture the NEW user turn ID (post-submission), not the pre-submission one
+    const postSnapshot = await page.evaluate(() => {
+      const userTurns = document.querySelectorAll<HTMLElement>('[data-turn="user"]');
+      const last = userTurns[userTurns.length - 1];
+      return last ? (last.getAttribute('data-testid') || last.id || null) : null;
+    }).catch(() => null);
+    const userTurnId = (postSnapshot && postSnapshot !== turnSnapshot.lastUserId)
+      ? postSnapshot
+      : `chatgpt-user-${Date.now()}`;
 
     const postSendAuthFailures = chatGPTForbiddenUrls(forbidden);
     if (postSendAuthFailures.length) {
@@ -285,7 +296,7 @@ export async function scrapeChatGPTPrompt(
     }
     if (isBadChatGPTResponse(data.text)) {
       await captureDebug(page, 'chatgpt', 'bad-response', { forbidden: forbidden.slice(0, 12) });
-      console.error(`[DEBUG] ChatGPT data.text was: ${JSON.stringify(data.text)}`);
+      console.error(`[DEBUG] ChatGPT data.text length: ${data.text.length}`);
       throw new Error('ChatGPT did not render a real assistant answer; likely blocked or unauthenticated in browser automation');
     }
     if (!data.assistantTurnId || data.assistantTurnId === turnSnapshot.lastAssistantId) {
@@ -300,8 +311,8 @@ export async function scrapeChatGPTPrompt(
     const terminalProof: TerminalProof = {
       providerState: 'complete',
       userTurnId,
-      assistantTurnId: data.assistantTurnId || 'assistant-turn',
-      answerNodeId: data.assistantTurnId || 'assistant-node',
+      assistantTurnId: data.assistantTurnId || `chatgpt-assistant-${Date.now()}`,
+      answerNodeId: data.assistantTurnId || `chatgpt-answer-${Date.now()}`,
       terminalSignal: `stable_text:${stableCount}`,
       stableChecks: stableCount,
     };

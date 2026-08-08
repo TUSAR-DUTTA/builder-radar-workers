@@ -75,20 +75,23 @@ export function buildProvenance(
   overrides?: Partial<CaptureProvenance>,
   connectionMeta?: BrowserConnectionMetadata,
 ): CaptureProvenance {
+  if (!connectionMeta) {
+    throw new Error('connectionMeta is required to build provenance');
+  }
+
   const base: CaptureProvenance = {
-    requestedMarket: connectionMeta?.requestedMarket ?? 'US',
-    actualEgressRegion: connectionMeta?.actualRegion ?? null,
-    connectionMode: connectionMeta?.connectionMode ?? 'direct',
-    fallbackOccurred: connectionMeta?.fallbackUsed ?? false,
-    uiLocale: connectionMeta?.locale ?? 'en-US',
+    requestedMarket: connectionMeta.requestedMarket,
+    actualEgressRegion: connectionMeta.actualRegion,
+    connectionMode: connectionMeta.connectionMode,
+    fallbackOccurred: connectionMeta.fallbackUsed,
+    uiLocale: connectionMeta.locale,
     sessionType: 'persistent',
     adapterVersion: BROWSER_ADAPTER_VERSIONS[model] || 'unknown',
-    proxyRequested: connectionMeta?.proxyRequested ?? false,
-    proxyUsed: connectionMeta?.proxyUsed ?? false,
-    regionVerified: connectionMeta?.regionVerified ?? false,
+    proxyRequested: connectionMeta.proxyRequested,
+    proxyUsed: connectionMeta.proxyUsed,
+    regionVerified: connectionMeta.regionVerified,
+    connectionMetadata: connectionMeta,
   };
-  if (connectionMeta) {
-    base.connectionMetadata = connectionMeta;
-  }
+  
   return { ...base, ...overrides };
 }

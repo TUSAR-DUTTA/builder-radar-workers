@@ -52,8 +52,8 @@ export async function scrapePerplexityPrompt(
     }
 
     const spec: ConversationDomSpec = {
-      userSelector: '[data-testid="query-text"], [data-testid="user-query"], h1.font-display, div.whitespace-pre-wrap.select-text',
-      assistantSelector: '[data-testid="answer-text"], div[class*="answer-text"], .default.font-sans.select-text, div.prose.dark\\:prose-invert',
+      userSelector: '[data-testid="query-text"], [data-testid="user-query"], div.whitespace-pre-wrap.select-text',
+      assistantSelector: '[data-testid="answer-text"], div[class*="answer-text"], .default.font-sans.select-text',
       streamingSelector: '[data-is-streaming="true"], [class*="streaming"], [class*="animate-pulse"]',
       loginSelector: 'form[action*="login"]',
       challengeSelector: '#challenge-running',
@@ -88,11 +88,11 @@ export async function scrapePerplexityPrompt(
 
     const terminalProof: TerminalProof = {
       providerState: 'complete',
-      userTurnId: inspection.userNodeId || 'user-node',
-      assistantTurnId: inspection.assistantNodeId || 'assistant-node',
-      answerNodeId: inspection.assistantNodeId || 'answer-node',
-      terminalSignal: `correlated_stable_turn`,
-      stableChecks: 3,
+      userTurnId: inspection.userNodeId || `perplexity-user-${Date.now()}`,
+      assistantTurnId: inspection.assistantNodeId || `perplexity-assistant-${Date.now()}`,
+      answerNodeId: inspection.assistantNodeId || `perplexity-answer-${Date.now()}`,
+      terminalSignal: inspection.promptMatched ? 'correlated_stable_turn' : 'unbound_stable_turn',
+      stableChecks: inspection.promptMatched ? 3 : 5,
     };
 
     return { 

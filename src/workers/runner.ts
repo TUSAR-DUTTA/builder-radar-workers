@@ -17,10 +17,10 @@ import { oldestAttemptFirst } from '@/lib/worker-scheduling';
 
 import { 
   claimNextScanCell, completeScanCell, failScanCell, 
-  initializeScanJobCells, refreshScanJob, resumeCandidate,
+  initializeScanJobCells, refreshScanJob, resumeCandidate, createOrResumeScanJob,
 } from '@/lib/scan-job-store';
 import { sampleProjectPrompts } from '@/lib/geo/sample-run';
-import { SCAN_JOB_CONTRACT_VERSION, withProviderDeadline } from '@/lib/scan-job-contract';
+import { SCAN_JOB_CONTRACT_VERSION } from '@/lib/scan-job-contract';
 import type { EvidenceFailureCode } from '@builder-radar/evidence-contract';
 import {
   blockedIdentityCode,
@@ -67,8 +67,8 @@ interface GeoRunResult {
   primaryFailureCode: EvidenceFailureCode | null;
 }
 
-const CELL_LEASE_MS = 120_000;
-const PROVIDER_DEADLINE_MS = 240_000;
+const CELL_LEASE_MS = 300_000;
+const PROVIDER_DEADLINE_MS = 210_000;
 
 async function runGeoForProject(projectId: string, sources: string[]): Promise<GeoRunResult> {
   const models = sourcesToModels(sources).filter(isPlaywrightAnswerModel);
@@ -139,7 +139,7 @@ async function runGeoForProject(projectId: string, sources: string[]): Promise<G
     identityVersion: unknown;
     identityVerificationStatus: unknown;
     verifiedAt: unknown;
-    measurementBaselineVersion: unknown;
+    measurementBaselineVersion: string | null;
     marketProfile: unknown;
   } | undefined;
     
@@ -176,18 +176,18 @@ async function runGeoForProject(projectId: string, sources: string[]): Promise<G
   const router = getAIRouter();
   const jobKind = `worker:playwright:${[...models].sort().join(',')}`;
   
-  const existingJob = await resumeCandidate(project.id, jobKind);
-  const insertedJob = existingJob ? null : await db.insert(scanJobs).values({
-    projectId: project.id, status: 'queued', kind: jobKind,
+  const job = await createOrResumeScanJob({
+    projectId: project.id,
+    kind: jobKind,
     contractVersion: SCAN_JOB_CONTRACT_VERSION,
     deadlineAt: new Date(Date.now() + 3600_000),
-    metadata: { models, promptCount: prompts.length },
-  }).returning({ id: scanJobs.id }).then((r) => r[0]).catch((e) => {
-    if ((e as any).code === '23505') return null;
-    throw e;
+    metadata: { 
+      models, 
+      promptCount: prompts.length,
+      baselineId: factRow!.measurementBaselineVersion,
+    },
   });
   
-  const job = existingJob ?? insertedJob;
   if (!job) return { prompts: prompts.length, runs: 0, models, status: 'quota_exhausted', primaryFailureCode: null };
 
   await initializeScanJobCells({ jobId: job.id, projectId: project.id, prompts, models });
@@ -218,13 +218,21 @@ async function runGeoForProject(projectId: string, sources: string[]): Promise<G
           scanCellId: cell.id,
           scanCellClaimedBy: scanWorkerId,
           acquirePrompt: async (input) => {
+            const context = {
+              projectId: project.id,
+              baselineId: factRow!.measurementBaselineVersion,
+              scanJobId: job.id,
+              scanCellId: cell.id,
+              promptId: prompt.id,
+            };
             const res = await runPromptViaPlaywrightDetailed(
-              router, input.prompt.prompt, input.entities, input.models, controller.signal, deadlineAt
+              router, input.prompt.prompt, input.entities, input.models, context, controller.signal, deadlineAt
             );
             return {
               samples: res.samples,
               failures: res.outcomes,
-              acquisition: 'playwright'
+              acquisition: 'playwright',
+              adapterResults: res.adapterResults,
             };
           }
         });

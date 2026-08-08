@@ -255,12 +255,22 @@ export async function waitForStableCorrelatedTurn(
       stableCount = 0;
       continue;
     }
+    // When promptMatched is false (user query node not found in DOM), require
+    // stronger evidence: more stable checks and substantially longer text.
+    // This prevents short app-chrome from being accepted as an answer,
+    // while still allowing providers like Perplexity that hide user queries.
+    const effectiveStableChecks = inspection.promptMatched ? requiredStableChecks : Math.max(requiredStableChecks, 5);
+    const effectiveMinChars = inspection.promptMatched ? minimumChars : Math.max(minimumChars, 200);
+    if (inspection.rawAnswer.trim().length < effectiveMinChars) {
+      previousText = null;
+      stableCount = 0;
+      continue;
+    }
     if (inspection.rawAnswer === previousText) stableCount += 1;
     else stableCount = 1;
     previousText = inspection.rawAnswer;
-    if (stableCount >= requiredStableChecks) return inspection;
+    if (stableCount >= effectiveStableChecks) return inspection;
   }
-  const html = await page.evaluate(() => document.body.innerHTML);
-  console.log(`[${input.provider}] Turn timeout. Body HTML snippet:`, html.substring(0, 5000));
+  console.warn(`[${input.provider}] Turn timeout after ${Math.round((Date.now() - (deadline - (input.timeoutMs ?? 180_000))) / 1000)}s. Last state: ${lastStatus}`);
   throw new Error(`prompt_identity_unverified:${input.provider}_turn_timeout:last_state_${lastStatus}`);
 }

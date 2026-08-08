@@ -43,7 +43,15 @@ export function inspectGoogleAioDom(): GoogleAioInspection {
   const explicit = document.querySelectorAll<HTMLElement>(
     '[data-attrid*="SGE"], [data-attrid*="ai_overview"], [data-testid*="ai-overview"], [class*="ai-overview"], [aria-label*="AI Overview" i]',
   );
-  let container: HTMLElement | null = explicit.length ? explicit[explicit.length - 1] : null;
+  let container: HTMLElement | null = null;
+  for (let i = explicit.length - 1; i >= 0; i--) {
+    const el = explicit[i];
+    const style = window.getComputedStyle(el);
+    if (style.display !== 'none' && el.getClientRects().length > 0) {
+      container = el;
+      break;
+    }
+  }
   if (!container) {
     const candidates = document.querySelectorAll<HTMLElement>('section, [role="region"], div.MjjYud, div');
     let shortest = Number.POSITIVE_INFINITY;
@@ -54,6 +62,8 @@ export function inspectGoogleAioDom(): GoogleAioInspection {
       const text = candidate.innerText || candidate.textContent || '';
       if (!/(^|\n)\s*AI Overview\s*(\n|$)/i.test(text)) continue;
       if (text.length < 80 || text.length > 25_000 || text.length >= shortest) continue;
+      const style = window.getComputedStyle(candidate);
+      if (style.display === 'none' || candidate.getClientRects().length === 0) continue;
       shortest = text.length;
       container = candidate;
     }

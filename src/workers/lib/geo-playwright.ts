@@ -13,6 +13,7 @@ import { scrapeGrokPrompt, closeGrokBrowser } from './playwright/grok';
 
 import { isBrowserNoAnswerError, type BrowserCapture } from './playwright/capture-contract';
 import { classifySamplingFailure, type FailureClassification } from '@/lib/scan-job-contract';
+import type { AdapterResultV1, EvidenceFailureCode } from '@builder-radar/evidence-contract';
 
 const observedBrowserAnswers = new Map<string, string>();
 
@@ -72,6 +73,15 @@ export interface PlaywrightPromptResult {
   samples: AnswerSample[];
   attempts: PlaywrightAttempt[];
   outcomes: Partial<Record<AnswerModel, FailureClassification>>;
+  adapterResults: AdapterResultV1[];
+}
+
+export interface PlaywrightRunContext {
+  projectId: string;
+  baselineId: string | null;
+  scanJobId: string;
+  scanCellId: string;
+  promptId: string;
 }
 
 const PLAYWRIGHT_MODELS = new Set<AnswerModel>(['chatgpt-consumer', 'claude', 'perplexity', 'google-aio', 'grok']);
@@ -90,12 +100,14 @@ export async function runPromptViaPlaywrightDetailed(
   prompt: string,
   entities: string[],
   models: AnswerModel[],
+  context: PlaywrightRunContext,
   signal?: AbortSignal,
   deadlineAt?: number,
 ): Promise<PlaywrightPromptResult> {
   const samples: AnswerSample[] = [];
   const attempts: PlaywrightAttempt[] = [];
   const outcomes: Partial<Record<AnswerModel, FailureClassification>> = {};
+  const adapterResults: AdapterResultV1[] = [];
 
   for (const model of models) {
     const started = Date.now();
@@ -156,10 +168,38 @@ export async function runPromptViaPlaywrightDetailed(
         },
       });
       attempts.push({ model, status: 'succeeded', stage: 'complete', failureReason: null, latencyMs: Date.now() - started });
+
+      adapterResults.push({
+        contractVersion: '1.0.1',
+        schemaVersion: 'evidence_adapter_v1',
+        engine: model as any,
+        adapterVersion: res.provenance.adapterVersion,
+        projectId: context.projectId,
+        scanJobId: context.scanJobId,
+        scanCellId: context.scanCellId,
+        baselineId: context.baselineId ?? 'legacy_unversioned',
+        promptId: context.promptId,
+        submittedPrompt: prompt,
+        capturedPrompt: null,
+        rawAnswer: res.rawAnswer,
+        rawReceipt: { kind: 'object_store', uri: 'n/a', contentSha256: 'n/a', mediaType: 'text/html', immutable: true },
+        capturedAt: new Date().toISOString(),
+        captureStatus: 'accepted',
+        promptBindingStatus: 'verified',
+        completionStatus: 'terminal',
+        provenance: res.provenance as any,
+        primaryFailureCode: null,
+        diagnostics: {},
+      });
     } catch (error) {
       const reason = boundedFailureReason(error);
       console.warn(`[geo-playwright] ${model} failed for "${prompt.slice(0, 40)}": ${reason}`);
       
+      if (error instanceof Error && error.message?.includes('_aborted')) {
+        outcomes[model] = { category: 'acquisition_failure', retryable: false, code: 'provider_deadline_aborted' };
+        throw error;
+      }
+
       if (isPromptIdentityError(error)) {
         outcomes[model] = { category: 'identity_binding_failure', retryable: false, code: reason };
         throw error;
@@ -170,10 +210,33 @@ export async function runPromptViaPlaywrightDetailed(
         outcomes[model] = classifySamplingFailure(error);
       }
       attempts.push({ model, status: 'failed', stage: 'acquisition', failureReason: reason, latencyMs: Date.now() - started });
+      
+      adapterResults.push({
+        contractVersion: '1.0.1',
+        schemaVersion: 'evidence_adapter_v1',
+        engine: model as any,
+        adapterVersion: 'unknown',
+        projectId: context.projectId,
+        scanJobId: context.scanJobId,
+        scanCellId: context.scanCellId,
+        baselineId: context.baselineId ?? 'legacy_unversioned',
+        promptId: context.promptId,
+        submittedPrompt: prompt,
+        capturedPrompt: null,
+        rawAnswer: null,
+        rawReceipt: { kind: 'object_store', uri: 'n/a', contentSha256: 'n/a', mediaType: 'text/html', immutable: true },
+        capturedAt: new Date().toISOString(),
+        captureStatus: 'rejected',
+        promptBindingStatus: isPromptIdentityError(error) ? 'mismatch' : 'unverified',
+        completionStatus: 'incomplete',
+        provenance: {} as any,
+        primaryFailureCode: (outcomes[model]?.code as EvidenceFailureCode) || null,
+        diagnostics: { error: String(error) },
+      });
     }
   }
 
-  return { samples, attempts, outcomes };
+  return { samples, attempts, outcomes, adapterResults };
 }
 
 export async function runPromptViaPlaywright(
@@ -182,5 +245,12 @@ export async function runPromptViaPlaywright(
   entities: string[],
   models: AnswerModel[],
 ): Promise<AnswerSample[]> {
-  return (await runPromptViaPlaywrightDetailed(router, prompt, entities, models)).samples;
+  const dummyContext: PlaywrightRunContext = {
+    projectId: 'dummy-project',
+    baselineId: null,
+    scanJobId: 'dummy-job',
+    scanCellId: 'dummy-cell',
+    promptId: 'dummy-prompt',
+  };
+  return (await runPromptViaPlaywrightDetailed(router, prompt, entities, models, dummyContext)).samples;
 }

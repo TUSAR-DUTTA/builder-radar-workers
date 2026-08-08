@@ -35,7 +35,7 @@ export async function scrapeGoogleAioPrompt(
   try {
     if (signal?.aborted) throw new Error('provider_deadline_aborted');
 
-    await page.goto('https://www.google.com/', { waitUntil: 'domcontentloaded', timeout: 30_000 });
+    await page.goto('https://www.google.com/ncr', { waitUntil: 'domcontentloaded', timeout: 30_000 });
     await page.waitForTimeout(1000);
 
     const composer = await firstVisibleLocator(page, 'textarea[name="q"], input[name="q"]');
@@ -47,6 +47,14 @@ export async function scrapeGoogleAioPrompt(
     await composer.click({ timeout: 20_000, force: true }).catch(() => {});
     await composer.fill('');
     await page.keyboard.insertText(prompt);
+    
+    // Read back to verify
+    const typedText = await composer.inputValue().catch(() => '');
+    if (typedText.length < 5) {
+      await captureDebug(page, 'google-aio', 'composer-failed-to-fill');
+      throw new Error('Google search bar failed to accept input');
+    }
+
     await page.keyboard.press('Enter');
 
     let stableCount = 0;
@@ -124,9 +132,9 @@ export async function scrapeGoogleAioPrompt(
 
     const terminalProof: TerminalProof = {
       providerState: 'complete',
-      userTurnId: 'google-search-query',
-      assistantTurnId: finalInspection.containerIdentity || 'aio-container',
-      answerNodeId: finalInspection.containerIdentity || 'aio-container',
+      userTurnId: `google-query-${Date.now()}`,
+      assistantTurnId: finalInspection.containerIdentity || `google-aio-${Date.now()}`,
+      answerNodeId: finalInspection.containerIdentity || `google-aio-${Date.now()}`,
       terminalSignal: `aio_complete:stable_${stableCount}`,
       stableChecks: stableCount,
     };

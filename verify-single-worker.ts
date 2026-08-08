@@ -1,7 +1,7 @@
 import * as dotenv from 'dotenv';
 dotenv.config({ path: '.env.local' });
 import path from 'path';
-process.env.PLAYWRIGHT_SESSIONS_DIR = path.resolve(__dirname, 'playwright_sessions');
+process.env.PLAYWRIGHT_SESSIONS_DIR = process.env.PLAYWRIGHT_SESSIONS_DIR || path.resolve(__dirname, 'playwright_sessions');
 import { loadSessionsFromEnv } from './src/lib/session-loader';
 
 import { scrapeChatGPTPrompt, sharedChatGPTBrowser } from './src/workers/lib/playwright/chatgpt';

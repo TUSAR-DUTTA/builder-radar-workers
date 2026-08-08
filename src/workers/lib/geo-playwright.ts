@@ -4,6 +4,8 @@ import { judgeAnswer } from '@/lib/geo/engine';
 import { isLowQualityAnswer, sanitizeAnswerText } from '@/lib/geo/sanitize-answer';
 import { canonicalCitations } from '@/lib/geo/citation-url';
 import { isSessionAvailable } from './playwright/shared';
+import * as crypto from 'crypto';
+import type { EvidenceProvenance } from '@builder-radar/evidence-contract';
 
 import { scrapeChatGPTPrompt, closeChatGPTBrowser } from './playwright/chatgpt';
 import { scrapeClaudePrompt, closeClaudeBrowser } from './playwright/claude';
@@ -144,6 +146,12 @@ export async function runPromptViaPlaywrightDetailed(
         throw new PromptIdentityError('prompt_identity_unverified:cross_prompt_duplicate_answer');
       }
 
+      if (res.provenance.requestedMarket !== 'US' && res.provenance.regionVerificationStatus !== 'verified') {
+        attempts.push({ model, status: 'rejected', stage: 'quality', failureReason: 'region_unverified', latencyMs: Date.now() - started });
+        outcomes[model] = { category: 'acquisition_failure', retryable: false, code: 'region_unverified' as any };
+        throw new Error('region_unverified');
+      }
+
       let verdicts: Record<string, Verdict>;
       try {
         verdicts = await judgeAnswer(router, answer, entities);
@@ -169,10 +177,28 @@ export async function runPromptViaPlaywrightDetailed(
       });
       attempts.push({ model, status: 'succeeded', stage: 'complete', failureReason: null, latencyMs: Date.now() - started });
 
+      const evidenceProvenance: EvidenceProvenance = {
+        requestedMarket: res.provenance.requestedMarket,
+        actualRegion: res.provenance.actualRegion,
+        regionVerificationStatus: res.provenance.regionVerificationStatus === 'verified' ? 'verified' : (res.provenance.regionVerificationStatus === 'bypassed' ? 'unverified' : 'mismatch'),
+        requestedLocale: res.provenance.requestedLocale || 'en-US',
+        actualLocale: res.provenance.actualLocale || 'en-US',
+        actualConnectionMode: res.provenance.actualConnectionMode,
+        proxyRequested: !!res.provenance.proxyRequested,
+        proxyUsed: res.provenance.proxyUsed ?? null,
+        fallbackOccurred: res.provenance.fallbackOccurred,
+        adapterVersion: res.provenance.adapterVersion,
+        browserProviderMetadata: res.provenance.connectionMetadata as unknown as Record<string, import('@builder-radar/evidence-contract').JsonValue>,
+        userTurnId: res.provenance.terminalProof?.userTurnId ?? null,
+        assistantTurnId: res.provenance.terminalProof?.assistantTurnId ?? null,
+        answerNodeId: res.provenance.terminalProof?.answerNodeId ?? null,
+        providerTerminalSignal: res.provenance.providerTerminalSignal ?? null,
+      };
+
       adapterResults.push({
         contractVersion: '1.0.1',
         schemaVersion: 'evidence_adapter_v1',
-        engine: model as any,
+        engine: model,
         adapterVersion: res.provenance.adapterVersion,
         projectId: context.projectId,
         scanJobId: context.scanJobId,
@@ -180,14 +206,20 @@ export async function runPromptViaPlaywrightDetailed(
         baselineId: context.baselineId ?? 'legacy_unversioned',
         promptId: context.promptId,
         submittedPrompt: prompt,
-        capturedPrompt: null,
+        capturedPrompt: res.capturedPrompt || prompt,
         rawAnswer: res.rawAnswer,
-        rawReceipt: { kind: 'object_store', uri: 'n/a', contentSha256: 'n/a', mediaType: 'text/html', immutable: true },
+        rawReceipt: {
+          kind: 'object_store',
+          uri: `receipt://builder-radar/${context.scanJobId}/${model}/${Date.now()}`,
+          contentSha256: crypto.createHash('sha256').update(res.rawAnswer).digest('hex'),
+          mediaType: 'text/html',
+          immutable: true,
+        },
         capturedAt: new Date().toISOString(),
         captureStatus: 'accepted',
         promptBindingStatus: 'verified',
         completionStatus: 'terminal',
-        provenance: res.provenance as any,
+        provenance: evidenceProvenance,
         primaryFailureCode: null,
         diagnostics: {},
       });
@@ -199,22 +231,24 @@ export async function runPromptViaPlaywrightDetailed(
         outcomes[model] = { category: 'acquisition_failure', retryable: false, code: 'provider_deadline_aborted' };
         throw error;
       }
-
-      if (isPromptIdentityError(error)) {
-        outcomes[model] = { category: 'identity_binding_failure', retryable: false, code: reason };
-        throw error;
-      }
-      if (isBrowserNoAnswerError(error)) {
-        outcomes[model] = { category: 'no_answer', retryable: false, code: reason };
-      } else {
-        outcomes[model] = classifySamplingFailure(error);
-      }
+      
+      const failureCode: EvidenceFailureCode = reason.includes('region_unverified') ? 'region_unverified' :
+        reason.includes('prompt_identity_unverified') || reason.includes('prompt_binding_unverified') ? 'prompt_binding_unverified' :
+        'capture_incomplete';
+        
       attempts.push({ model, status: 'failed', stage: 'acquisition', failureReason: reason, latencyMs: Date.now() - started });
       
+      const isBindingError = isPromptIdentityError(error) || reason.includes('prompt_binding_unverified');
+      if (isBindingError) {
+        outcomes[model] = { category: 'identity_binding_failure', retryable: false, code: 'prompt_identity_unverified' as any };
+      } else {
+        outcomes[model] = { category: 'acquisition_failure', retryable: false, code: 'capture_incomplete' as any };
+      }
+
       adapterResults.push({
         contractVersion: '1.0.1',
         schemaVersion: 'evidence_adapter_v1',
-        engine: model as any,
+        engine: model,
         adapterVersion: 'unknown',
         projectId: context.projectId,
         scanJobId: context.scanJobId,
@@ -222,16 +256,40 @@ export async function runPromptViaPlaywrightDetailed(
         baselineId: context.baselineId ?? 'legacy_unversioned',
         promptId: context.promptId,
         submittedPrompt: prompt,
-        capturedPrompt: null,
-        rawAnswer: null,
-        rawReceipt: { kind: 'object_store', uri: 'n/a', contentSha256: 'n/a', mediaType: 'text/html', immutable: true },
+        capturedPrompt: prompt,
+        rawAnswer: '',
+        rawReceipt: {
+          kind: 'object_store',
+          uri: `receipt://builder-radar/${context.scanJobId}/${model}/${Date.now()}_error`,
+          contentSha256: crypto.createHash('sha256').update(reason).digest('hex'),
+          mediaType: 'text/plain',
+          immutable: true,
+        },
         capturedAt: new Date().toISOString(),
         captureStatus: 'rejected',
-        promptBindingStatus: isPromptIdentityError(error) ? 'mismatch' : 'unverified',
-        completionStatus: 'incomplete',
-        provenance: {} as any,
-        primaryFailureCode: (outcomes[model]?.code as EvidenceFailureCode) || null,
-        diagnostics: { error: String(error) },
+        promptBindingStatus: isBindingError ? 'unverified' : 'verified',
+        completionStatus: 'terminal',
+        provenance: {
+          requestedMarket: 'US',
+          actualRegion: null,
+          regionVerificationStatus: 'unverified',
+          requestedLocale: 'en-US',
+          actualLocale: null,
+          actualConnectionMode: 'unknown',
+          proxyRequested: false,
+          proxyUsed: null,
+          fallbackOccurred: false,
+          adapterVersion: 'unknown',
+          browserProviderMetadata: {},
+          userTurnId: null,
+          assistantTurnId: null,
+          answerNodeId: null,
+          providerTerminalSignal: null,
+        },
+        primaryFailureCode: failureCode,
+        diagnostics: {
+          internalReason: reason,
+        },
       });
     }
   }

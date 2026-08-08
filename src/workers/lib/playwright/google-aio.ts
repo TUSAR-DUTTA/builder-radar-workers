@@ -69,7 +69,7 @@ export async function scrapeGoogleAioPrompt(
       
       let inspection;
       try {
-        inspection = await page.evaluate(inspectGoogleAioDom);
+        inspection = await page.evaluate((p) => inspectGoogleAioDom(p), prompt);
       } catch {
         continue;
       }
@@ -130,16 +130,26 @@ export async function scrapeGoogleAioPrompt(
     const uiLocale = await page.evaluate(() => document.documentElement.lang || 'en-US').catch(() => 'en-US');
     connectionMeta.locale = uiLocale;
 
+    const userTurnId = await page.evaluate(() => {
+      const input = document.querySelector('textarea[name="q"], input[name="q"]');
+      return input ? input.id || input.getAttribute('name') : null;
+    });
+
+    if (!userTurnId || !finalInspection.containerIdentity) {
+      throw new Error('capture_rejected: missing stable provider IDs');
+    }
+
     const terminalProof: TerminalProof = {
       providerState: 'complete',
-      userTurnId: `google-query-${Date.now()}`,
-      assistantTurnId: finalInspection.containerIdentity || `google-aio-${Date.now()}`,
-      answerNodeId: finalInspection.containerIdentity || `google-aio-${Date.now()}`,
-      terminalSignal: `aio_complete:stable_${stableCount}`,
+      userTurnId,
+      assistantTurnId: finalInspection.containerIdentity,
+      answerNodeId: finalInspection.containerIdentity,
+      terminalSignal: finalInspection.state,
       stableChecks: stableCount,
     };
 
     return { 
+      capturedPrompt: prompt,
       rawAnswer: finalInspection.rawAnswer, 
       citations: finalInspection.links,
       provenance: buildProvenance('google-aio', { terminalProof }, connectionMeta)

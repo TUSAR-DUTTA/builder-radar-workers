@@ -33,7 +33,9 @@ export async function scrapePerplexityPrompt(
   const { page } = sharedPerplexityBrowser;
 
   try {
+    if (signal?.aborted) throw new Error('provider_deadline_aborted');
     await page.goto('https://www.perplexity.ai/', { waitUntil: 'domcontentloaded', timeout: 45_000 });
+    if (signal?.aborted) throw new Error('provider_deadline_aborted');
     await page.waitForTimeout(1000);
 
     let composer = await firstVisibleLocator(page, '#ask-input, textarea, [contenteditable="true"], [placeholder="Ask anything..."]');
@@ -66,6 +68,7 @@ export async function scrapePerplexityPrompt(
     await composer.click({ timeout: 20_000, force: true }).catch(() => {});
     await composer.fill('');
     await page.keyboard.insertText(`Use web search and answer this buyer question with citations:\n\n${prompt}`);
+    if (signal?.aborted) throw new Error('provider_deadline_aborted');
     await page.keyboard.press('Enter');
 
     const inspection = await waitForStableCorrelatedTurn(page, {
@@ -86,16 +89,21 @@ export async function scrapePerplexityPrompt(
     const uiLocale = await page.evaluate(() => document.documentElement.lang || 'en-US').catch(() => 'en-US');
     connectionMeta.locale = uiLocale;
 
+    if (!inspection.userNodeId || !inspection.assistantNodeId || !inspection.promptMatched) {
+      throw new Error('capture_rejected: missing stable provider IDs');
+    }
+
     const terminalProof: TerminalProof = {
       providerState: 'complete',
-      userTurnId: inspection.userNodeId || `perplexity-user-${Date.now()}`,
-      assistantTurnId: inspection.assistantNodeId || `perplexity-assistant-${Date.now()}`,
-      answerNodeId: inspection.assistantNodeId || `perplexity-answer-${Date.now()}`,
-      terminalSignal: inspection.promptMatched ? 'correlated_stable_turn' : 'unbound_stable_turn',
+      userTurnId: inspection.userNodeId,
+      assistantTurnId: inspection.assistantNodeId,
+      answerNodeId: inspection.assistantNodeId,
+      terminalSignal: inspection.status,
       stableChecks: inspection.promptMatched ? 3 : 5,
     };
 
     return { 
+      capturedPrompt: prompt,
       rawAnswer: inspection.rawAnswer, 
       citations: inspection.links,
       provenance: buildProvenance('perplexity', { terminalProof }, connectionMeta)

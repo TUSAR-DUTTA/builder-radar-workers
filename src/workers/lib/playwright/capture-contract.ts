@@ -21,7 +21,10 @@ export interface BrowserConnectionMetadata {
   requestedMarket: string;
   actualRegion: string | null;
   regionVerified: boolean;
+  regionVerificationStatus: 'verified' | 'unverified' | 'bypassed';
   locale: string;
+  actualLocale: string;
+  actualConnectionMode: 'direct' | 'proxy';
 }
 
 /** Evidence that the captured answer reached a genuine provider-specific terminal state. */
@@ -36,8 +39,11 @@ export interface TerminalProof {
 
 export interface CaptureProvenance {
   requestedMarket: string;
-  actualEgressRegion: string | null;
-  connectionMode: 'proxy' | 'direct';
+  actualRegion: string | null;
+  regionVerificationStatus: 'verified' | 'unverified' | 'bypassed';
+  requestedLocale: string;
+  actualLocale: string;
+  actualConnectionMode: 'proxy' | 'direct';
   fallbackOccurred: boolean;
   uiLocale: string;
   sessionType: string;
@@ -45,6 +51,7 @@ export interface CaptureProvenance {
   proxyRequested?: boolean;
   proxyUsed?: boolean;
   regionVerified?: boolean;
+  providerTerminalSignal?: string;
   terminalProof?: TerminalProof;
   connectionMetadata?: BrowserConnectionMetadata;
 }
@@ -52,6 +59,7 @@ export interface CaptureProvenance {
 export interface BrowserCapture {
   /** Untouched visible text from the answer node. Sanitization happens after this boundary. */
   rawAnswer: string;
+  capturedPrompt: string;
   citations: { url: string; title?: string }[];
   provenance: CaptureProvenance;
 }
@@ -81,8 +89,11 @@ export function buildProvenance(
 
   const base: CaptureProvenance = {
     requestedMarket: connectionMeta.requestedMarket,
-    actualEgressRegion: connectionMeta.actualRegion,
-    connectionMode: connectionMeta.connectionMode,
+    actualRegion: connectionMeta.actualRegion,
+    regionVerificationStatus: connectionMeta.regionVerificationStatus,
+    requestedLocale: connectionMeta.locale,
+    actualLocale: connectionMeta.actualLocale,
+    actualConnectionMode: connectionMeta.actualConnectionMode,
     fallbackOccurred: connectionMeta.fallbackUsed,
     uiLocale: connectionMeta.locale,
     sessionType: 'persistent',
@@ -90,6 +101,7 @@ export function buildProvenance(
     proxyRequested: connectionMeta.proxyRequested,
     proxyUsed: connectionMeta.proxyUsed,
     regionVerified: connectionMeta.regionVerified,
+    providerTerminalSignal: overrides?.terminalProof?.terminalSignal,
     connectionMetadata: connectionMeta,
   };
   

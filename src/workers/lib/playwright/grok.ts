@@ -20,6 +20,7 @@ export async function scrapeGrokPrompt(
     const runtime = await launchSeededPersistentContext('grok');
     const ctx = runtime.context;
     const page = await ctx.newPage();
+    if (signal?.aborted) throw new Error('provider_deadline_aborted');
     await page.goto('https://grok.com/', { waitUntil: 'domcontentloaded', timeout: 45_000 });
     await page.waitForTimeout(2500);
     sharedGrokBrowser = { runtime, page, connectionMeta: runtime.connectionMeta };
@@ -28,7 +29,9 @@ export async function scrapeGrokPrompt(
   const { page } = sharedGrokBrowser;
 
   try {
+    if (signal?.aborted) throw new Error('provider_deadline_aborted');
     await page.goto('https://grok.com/', { waitUntil: 'domcontentloaded', timeout: 45_000 });
+    if (signal?.aborted) throw new Error('provider_deadline_aborted');
     await page.waitForTimeout(1000);
 
     if (page.url().includes('login') || await page.locator('text="Sign in"').isVisible().catch(() => false)) {
@@ -104,7 +107,7 @@ export async function scrapeGrokPrompt(
 
     // Wait for response to stream and stabilize
     let stableCount = 0;
-    let finalData = { text: '', links: [] as any[] };
+    let finalData = { text: '', links: [] as any[], userTurnId: null as string | null, assistantTurnId: null as string | null, completionState: 'streaming' };
     let previousText = '';
     const deadline = deadlineAt || (Date.now() + 180_000);
     
@@ -217,7 +220,10 @@ export async function scrapeGrokPrompt(
             busy,
             promptBound: matchingUserNode !== null,
           },
-          links
+          links,
+          userTurnId: matchingUserNode ? matchingUserNode.id || matchingUserNode.getAttribute('data-testid') || null : null,
+          assistantTurnId: targetAssistant ? targetAssistant.id || targetAssistant.getAttribute('data-testid') || null : null,
+          completionState: busy ? 'streaming' : 'complete'
         };
       }, prompt);
 
@@ -231,7 +237,7 @@ export async function scrapeGrokPrompt(
 
       if (candidate.text.length >= 80 && candidate.text === previousText && !candidate.busy) {
         stableCount++;
-        finalData = { text: candidate.text, links };
+        finalData = { text: candidate.text, links, userTurnId: data.userTurnId, assistantTurnId: data.assistantTurnId, completionState: data.completionState };
         if (stableCount >= 3) break; // stable for 3 seconds
       } else {
         stableCount = 0;
@@ -248,16 +254,21 @@ export async function scrapeGrokPrompt(
     const uiLocale = await page.evaluate(() => document.documentElement.lang || 'en-US').catch(() => 'en-US');
     connectionMeta.locale = uiLocale;
 
+    if (!finalData.userTurnId || !finalData.assistantTurnId) {
+      throw new Error('capture_rejected: missing stable provider IDs');
+    }
+
     const terminalProof: TerminalProof = {
       providerState: 'complete',
-      userTurnId: `grok-user-${Date.now()}`,
-      assistantTurnId: `grok-assistant-${Date.now()}`,
-      answerNodeId: `grok-answer-${Date.now()}`,
-      terminalSignal: `stable_text:${stableCount}`,
+      userTurnId: finalData.userTurnId,
+      assistantTurnId: finalData.assistantTurnId,
+      answerNodeId: finalData.assistantTurnId,
+      terminalSignal: finalData.completionState || 'complete',
       stableChecks: stableCount,
     };
 
     return { 
+      capturedPrompt: prompt,
       rawAnswer: finalData.text, 
       citations: finalData.links,
       provenance: buildProvenance('grok', { terminalProof }, connectionMeta)

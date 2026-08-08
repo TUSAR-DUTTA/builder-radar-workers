@@ -121,14 +121,37 @@ export async function launchSeededPersistentContext(model: AnswerModel): Promise
 
   const connectionMeta: BrowserConnectionMetadata = {
     connectionMode: proxyUsed ? 'proxy' : 'direct',
+    actualConnectionMode: proxyUsed ? 'proxy' : 'direct',
     proxyRequested,
     proxyUsed,
     fallbackUsed: false,
     requestedMarket,
     actualRegion: null,
     regionVerified: false,
+    regionVerificationStatus: 'unverified',
     locale: 'en-US',
+    actualLocale: 'en-US',
   };
+
+  // Perform egress region verification for regional proxies
+  if (proxyUsed) {
+    try {
+      const resp = await context.request.get('https://1.1.1.1/cdn-cgi/trace', { timeout: 3000 });
+      if (resp.ok()) {
+        const text = await resp.text();
+        const locMatch = text.match(/loc=([A-Z]{2})/i);
+        if (locMatch) {
+          connectionMeta.actualRegion = locMatch[1].toUpperCase();
+          connectionMeta.regionVerified = true;
+          connectionMeta.regionVerificationStatus = 'verified';
+        }
+      }
+    } catch {
+      // Ignored
+    }
+  } else {
+    connectionMeta.regionVerificationStatus = 'bypassed';
+  }
 
   return {
     context,
@@ -195,14 +218,36 @@ export async function launchSeededContext(model: AnswerModel): Promise<Playwrigh
 
   const connectionMeta: BrowserConnectionMetadata = {
     connectionMode: proxyUsed ? 'proxy' : 'direct',
+    actualConnectionMode: proxyUsed ? 'proxy' : 'direct',
     proxyRequested,
     proxyUsed,
     fallbackUsed: false,
     requestedMarket,
     actualRegion: null,
     regionVerified: false,
+    regionVerificationStatus: 'unverified',
     locale: 'en-US',
+    actualLocale: 'en-US',
   };
+
+  if (proxyUsed) {
+    try {
+      const resp = await context.request.get('https://1.1.1.1/cdn-cgi/trace', { timeout: 3000 });
+      if (resp.ok()) {
+        const text = await resp.text();
+        const locMatch = text.match(/loc=([A-Z]{2})/i);
+        if (locMatch) {
+          connectionMeta.actualRegion = locMatch[1].toUpperCase();
+          connectionMeta.regionVerified = true;
+          connectionMeta.regionVerificationStatus = 'verified';
+        }
+      }
+    } catch {
+      // Ignored
+    }
+  } else {
+    connectionMeta.regionVerificationStatus = 'bypassed';
+  }
 
   return {
     context,
@@ -239,7 +284,7 @@ export async function captureDebug(
     .replace(/"sessionToken":"[^"]+"/g, '"sessionToken":"[redacted]"')
     .replace(/"email":"[^"]+"/g, '"email":"[redacted]"');
 
-  const rawHtml = await page.innerHTML('body').catch(() => '');
+  const rawHtml = "[Redacted from debug output]";
 
   console.log(`[DEBUG-INFO] ${model} at ${stage}: URL=${url.replace(/[?#].*/, '')} (debug files saved)`);
   const screenshotBuffer = await page.screenshot({ fullPage: true }).catch(() => null);

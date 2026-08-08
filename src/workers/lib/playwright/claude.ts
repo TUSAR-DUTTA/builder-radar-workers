@@ -39,6 +39,7 @@ export async function scrapeClaudePrompt(
     // Attempt to dismiss cookie popups repeatedly
     let composer: import('playwright').Locator | null = null;
     for (let i = 0; i < 15; i++) {
+      if (signal?.aborted) throw new Error('provider_deadline_aborted');
       await page.locator('button:has-text("Accept All Cookies")').click({ timeout: 1000 }).catch(() => {});
       composer = await firstVisibleLocator(page, '[contenteditable="true"], textarea, #prompt-textarea');
       if (composer) break;
@@ -65,6 +66,7 @@ export async function scrapeClaudePrompt(
     await composer.click({ timeout: 20_000, force: true }).catch(() => {});
     await composer.fill('');
     await page.keyboard.insertText(`Use web search and answer this buyer question with citations:\n\n${prompt}`);
+    if (signal?.aborted) throw new Error('provider_deadline_aborted');
     await page.waitForTimeout(300);
 
     const submit = await firstVisibleLocator(page, 'button[aria-label*="Send" i], button[data-testid="send-button"]');
@@ -113,16 +115,21 @@ export async function scrapeClaudePrompt(
     const uiLocale = await page.evaluate(() => document.documentElement.lang || 'en-US').catch(() => 'en-US');
     connectionMeta.locale = uiLocale;
 
+    if (!inspection.userNodeId || !inspection.assistantNodeId || !inspection.promptMatched) {
+      throw new Error('capture_rejected: missing stable provider IDs');
+    }
+
     const terminalProof: TerminalProof = {
       providerState: 'complete',
-      userTurnId: inspection.userNodeId || `claude-user-${Date.now()}`,
-      assistantTurnId: inspection.assistantNodeId || `claude-assistant-${Date.now()}`,
-      answerNodeId: inspection.assistantNodeId || `claude-answer-${Date.now()}`,
-      terminalSignal: inspection.promptMatched ? 'correlated_stable_turn' : 'unbound_stable_turn',
+      userTurnId: inspection.userNodeId,
+      assistantTurnId: inspection.assistantNodeId,
+      answerNodeId: inspection.assistantNodeId,
+      terminalSignal: inspection.status,
       stableChecks: inspection.promptMatched ? 3 : 5,
     };
 
     return { 
+      capturedPrompt: prompt,
       rawAnswer: inspection.rawAnswer, 
       citations: inspection.links,
       provenance: buildProvenance('claude', { terminalProof }, connectionMeta)

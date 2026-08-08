@@ -19,7 +19,8 @@ export type CorrelatedTurnStatus =
   | 'ready'
   | 'login'
   | 'challenge'
-  | 'rate_limit';
+  | 'rate_limit'
+  | 'prompt_binding_unverified';
 
 export interface CorrelatedTurnInspection {
   status: CorrelatedTurnStatus;
@@ -144,39 +145,34 @@ export function inspectCorrelatedConversationTurn(input: {
   let matchingAssistant: HTMLElement | null = null;
   let matchingAssistantId: string | null = null;
 
-  if (matchingUser) {
-    for (let index = 0; index < assistants.length; index += 1) {
-      const node = assistants[index];
-      let identity = node.getAttribute('data-builderradar-node-id')
-        || node.getAttribute('data-message-id')
-        || node.id;
-      if (!identity) {
-        counter += 1;
-        identity = `assistant-${counter}`;
-        node.setAttribute('data-builderradar-node-id', identity);
-      }
-      if (oldAssistants.has(identity)) continue;
-      if (!(matchingUser.compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING)) continue;
-      matchingAssistant = node;
-      matchingAssistantId = identity;
-      break;
+  if (!matchingUser) {
+    root.setAttribute('data-builderradar-node-counter', String(counter));
+    return {
+      status: 'prompt_binding_unverified',
+      rawAnswer: '',
+      links: [],
+      userNodeId: null,
+      assistantNodeId: null,
+      promptMatched: false,
+      assistantFollowsUser: false,
+    };
+  }
+
+  for (let index = 0; index < assistants.length; index += 1) {
+    const node = assistants[index];
+    let identity = node.getAttribute('data-builderradar-node-id')
+      || node.getAttribute('data-message-id')
+      || node.id;
+    if (!identity) {
+      counter += 1;
+      identity = `assistant-${counter}`;
+      node.setAttribute('data-builderradar-node-id', identity);
     }
-  } else {
-    for (let index = assistants.length - 1; index >= 0; index -= 1) {
-      const node = assistants[index];
-      let identity = node.getAttribute('data-builderradar-node-id')
-        || node.getAttribute('data-message-id')
-        || node.id;
-      if (!identity) {
-        counter += 1;
-        identity = `assistant-${counter}`;
-        node.setAttribute('data-builderradar-node-id', identity);
-      }
-      if (oldAssistants.has(identity)) continue;
-      matchingAssistant = node;
-      matchingAssistantId = identity;
-      break;
-    }
+    if (oldAssistants.has(identity)) continue;
+    if (!(matchingUser.compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING)) continue;
+    matchingAssistant = node;
+    matchingAssistantId = identity;
+    break;
   }
   
   root.setAttribute('data-builderradar-node-counter', String(counter));
@@ -250,6 +246,7 @@ export async function waitForStableCorrelatedTurn(
     if (inspection.status === 'login') throw new Error(`${input.provider} authentication required`);
     if (inspection.status === 'challenge') throw new Error(`${input.provider} challenge page blocked acquisition`);
     if (inspection.status === 'rate_limit') throw Object.assign(new Error(`${input.provider} rate limit`), { status: 429 });
+    if (inspection.status === 'prompt_binding_unverified') throw new Error(`prompt_binding_unverified:${input.provider}`);
     if (inspection.status !== 'ready' || inspection.rawAnswer.trim().length < minimumChars) {
       previousText = null;
       stableCount = 0;

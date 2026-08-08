@@ -27,7 +27,15 @@ export interface GoogleAioInspection {
 }
 
 /** Browser callback. It never returns page/body text; evidence is scoped to one AIO container. */
-export function inspectGoogleAioDom(): GoogleAioInspection {
+export function inspectGoogleAioDom(expectedPrompt?: string): GoogleAioInspection {
+  if (expectedPrompt) {
+    const input = document.querySelector<HTMLInputElement | HTMLTextAreaElement>('textarea[name="q"], input[name="q"]');
+    const currentValue = (input?.value || '').normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim();
+    const expected = expectedPrompt.normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim();
+    if (!input || !currentValue.includes(expected)) {
+      return { state: 'search_submitted', rawAnswer: '', links: [], containerIdentity: null };
+    }
+  }
   if (location.hostname.includes('consent.google.com')) {
     return { state: 'consent', rawAnswer: '', links: [], containerIdentity: null };
   }
@@ -102,16 +110,18 @@ export function inspectGoogleAioDom(): GoogleAioInspection {
       pageSignals,
     };
   }
-  let identity = container.getAttribute('data-builderradar-node-id')
+  const identity = container.getAttribute('data-builderradar-node-id')
     || container.getAttribute('data-attrid')
     || container.getAttribute('data-testid')
-    || container.id;
-  if (!identity) {
-    identity = 'google-aio-active-container';
-    container.setAttribute('data-builderradar-node-id', identity);
-  }
+    || container.id
+    || null;
   const streaming = container.matches('[aria-busy="true"], [data-is-streaming="true"], [class*="loading"], [class*="generating"]')
     || Boolean(container.querySelector('[aria-busy="true"], [data-is-streaming="true"], [class*="loading"], [class*="generating"], [role="progressbar"]'));
+    
+  const terminalIndicator = container.matches('[data-is-streaming="false"]')
+    || Boolean(container.querySelector('button[aria-label*="thumbs" i], button[aria-label*="Thumbs" i], button[aria-label*="copy" i], button[aria-label*="Copy" i], button[aria-label*="listen" i], button[aria-label*="Listen" i]'));
+    
+  const isComplete = !streaming && terminalIndicator;
   const rawAnswer = container.innerText || container.textContent || '';
   const links: { url: string; title?: string }[] = [];
   const anchors = container.querySelectorAll<HTMLAnchorElement>('a[href]');
@@ -121,7 +131,7 @@ export function inspectGoogleAioDom(): GoogleAioInspection {
     links.push({ url: anchor.href, title: (anchor.textContent ?? '').trim() || undefined });
   }
   return {
-    state: streaming ? 'aio_rendering' : 'aio_complete',
+    state: isComplete ? 'aio_complete' : 'aio_rendering',
     rawAnswer,
     links,
     containerIdentity: identity,

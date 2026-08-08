@@ -246,7 +246,7 @@ export async function scrapeChatGPTPrompt(
     // Verify stability over consecutive checks instead of a blind sleep
     let stableCount = 0;
     let lastObservedText = '';
-    let data = { text: '', links: [] as { url: string; title?: string }[], assistantTurnId: null as string | null };
+    let data = { text: '', links: [] as { url: string; title?: string }[], assistantTurnId: null as string | null, completionState: null as string | null };
 
     const chatgptDeadline = deadlineAt || (Date.now() + 180_000);
     for (let i = 0; Date.now() < chatgptDeadline; i++) {
@@ -257,18 +257,21 @@ export async function scrapeChatGPTPrompt(
         const last = assistantTurns.at(-1);
 
         if (!last) {
-          return { text: '', links: [], assistantTurnId: null };
+          return { text: '', links: [], assistantTurnId: null, completionState: 'streaming' };
         }
 
         const markdownEl = last.querySelector<HTMLElement>('.markdown, [data-message-author-role="assistant"] .markdown, .prose');
         const target = markdownEl || last;
         const text = target.innerText || target.textContent || '';
 
+        const terminalStateNode = last.querySelector('button[data-testid="copy-turn-action-button"], button[aria-label*="Copy" i], [data-testid="thumbs-up"], [data-testid="thumbs-down"]');
+        const completionState = terminalStateNode ? 'complete' : 'streaming';
+
         const links = Array.from(last.querySelectorAll<HTMLAnchorElement>('a[href]'))
           .map((a) => ({ url: a.href, title: (a.textContent ?? '').trim() || undefined }))
           .filter((a) => /^https?:\/\//i.test(a.url) && !a.url.includes('chatgpt.com') && !a.url.includes('openai.com'))
           .slice(0, 12);
-        return { text, links, assistantTurnId: last.getAttribute('data-testid') || last.id || null };
+        return { text, links, assistantTurnId: last.getAttribute('data-testid') || last.id || null, completionState };
       });
 
       if (data.text.length >= 40 && data.text === lastObservedText) {
@@ -287,7 +290,11 @@ export async function scrapeChatGPTPrompt(
     }).catch(() => null);
     const userTurnId = (postSnapshot && postSnapshot !== turnSnapshot.lastUserId)
       ? postSnapshot
-      : `chatgpt-user-${Date.now()}`;
+      : null;
+
+    if (!userTurnId) {
+      throw new Error('capture_rejected: missing stable provider IDs');
+    }
 
     const postSendAuthFailures = chatGPTForbiddenUrls(forbidden);
     if (postSendAuthFailures.length) {
@@ -308,16 +315,21 @@ export async function scrapeChatGPTPrompt(
     const uiLocale = await page.evaluate(() => document.documentElement.lang || 'en-US').catch(() => 'en-US');
     connectionMeta.locale = uiLocale;
 
+    if (!data.assistantTurnId) {
+      throw new Error('capture_rejected: missing stable provider IDs');
+    }
+
     const terminalProof: TerminalProof = {
       providerState: 'complete',
       userTurnId,
-      assistantTurnId: data.assistantTurnId || `chatgpt-assistant-${Date.now()}`,
-      answerNodeId: data.assistantTurnId || `chatgpt-answer-${Date.now()}`,
-      terminalSignal: `stable_text:${stableCount}`,
+      assistantTurnId: data.assistantTurnId,
+      answerNodeId: data.assistantTurnId,
+      terminalSignal: data.completionState || 'complete',
       stableChecks: stableCount,
     };
 
-    return { 
+    return {
+      capturedPrompt: prompt,
       rawAnswer: data.text, 
       citations: data.links,
       provenance: buildProvenance('chatgpt-consumer', { terminalProof }, connectionMeta)

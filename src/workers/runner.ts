@@ -116,7 +116,7 @@ async function runGeoForProject(projectId: string, sources: string[]): Promise<G
       bf.identity_version AS "identityVersion",
       bf.identity_verification_status AS "identityVerificationStatus",
       bf.verified_at AS "verifiedAt",
-      p.measurement_baseline_version AS "measurementBaselineVersion",
+      (SELECT id FROM measurement_baselines WHERE project_id = p.id AND status = 'approved' ORDER BY created_at DESC LIMIT 1) AS "measurementBaselineVersion",
       p.market_profile AS "marketProfile"
     FROM projects p
     LEFT JOIN brand_facts bf ON bf.project_id = p.id
@@ -244,7 +244,9 @@ async function runGeoForProject(projectId: string, sources: string[]): Promise<G
         }
       } catch (cellError: any) {
         if (cellError.message && cellError.message.includes('_aborted')) {
-          await failScanCell(cell.id, scanWorkerId, new Error('provider_deadline_exceeded_after_240000ms'));
+          await failScanCell(cell.id, scanWorkerId, new Error(`provider_deadline_exceeded_after_${PROVIDER_DEADLINE_MS}ms`));
+          // Ensure a timed-out provider cannot continue operating after the cell lease expires
+          await closeSharedBrowser().catch(() => {});
         } else {
           await failScanCell(cell.id, scanWorkerId, cellError);
         }

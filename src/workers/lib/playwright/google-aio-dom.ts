@@ -66,7 +66,7 @@ export function inspectGoogleAioDom(expectedPrompt?: string): GoogleAioInspectio
     for (let index = 0; index < candidates.length; index += 1) {
       const candidate = candidates[index];
       if (candidate.id === 'rso' || candidate.id === 'search' || candidate.id === 'rcnt' || candidate.tagName === 'BODY' || candidate.tagName === 'MAIN') continue;
-      if (candidate.closest('[data-attrid="PAA"], [class*="related-questions"], [role="complementary"], #kp-wp-tab-overview')) continue;
+      if (candidate.closest('[data-attrid="PAA"], [class*="related-questions"], [role="complementary"]')) continue;
       const text = candidate.innerText || candidate.textContent || '';
       if (!/(^|\n)\s*AI Overview\s*(\n|$)/i.test(text)) continue;
       if (text.length < 80 || text.length > 25_000 || text.length >= shortest) continue;

@@ -90,6 +90,24 @@ async function main(): Promise<void> {
       const answerCandidates = Array.from(document.querySelectorAll<HTMLElement>(
         'article, [role="tabpanel"], [data-testid*="answer" i], [class*="prose"], [class*="markdown"]',
       )).filter((node) => (node.innerText || node.textContent || '').length >= 80).slice(0, 30);
+      const answerProseRoots = Array.from(document.querySelectorAll<HTMLElement>('[role="tabpanel"][id] .prose'))
+        .filter((node) => node.classList.contains('prose'));
+      const citationCandidates = answerProseRoots.flatMap((root) => Array.from(root.querySelectorAll<HTMLAnchorElement>('a[href]')))
+        .slice(0, 40).map((anchor) => {
+          let hostname: string | null = null;
+          let pathDepth = 0;
+          let providerOwned = false;
+          try {
+            const parsed = new URL(anchor.href);
+            hostname = parsed.hostname;
+            pathDepth = parsed.pathname.split('/').filter(Boolean).length;
+            providerOwned = parsed.hostname === 'www.perplexity.ai' || parsed.hostname === 'perplexity.ai';
+          } catch {}
+          return {
+            signature: signature(anchor), hostname, pathDepth, providerOwned,
+            rel: anchor.rel || null, target: anchor.target || null,
+          };
+        });
       const completed = all.find((node) => /^Completed \d+ steps$/i.test((node.textContent || '').trim())) ?? null;
       const sources = all.find((node) => /^Sources(?:\s+\d+)?$/i.test((node.textContent || '').trim())) ?? null;
       return Promise.all(relevantControls.map(async (node) => ({
@@ -101,6 +119,8 @@ async function main(): Promise<void> {
         promptMatches: promptMatches.map((node) => ({ signature: signature(node), path: path(node) })),
         controls,
         answerCandidates: answerCandidates.map((node) => ({ signature: signature(node), path: path(node) })),
+        answerProseCount: answerProseRoots.length,
+        citationCandidates,
         completedPath: path(completed),
         sourcesPath: path(sources),
         stopVisible: Array.from(document.querySelectorAll<HTMLElement>('button, [role="button"]')).some((node) => {
@@ -112,8 +132,8 @@ async function main(): Promise<void> {
 
     const safe = {
       mode: 'existing_thread_selector_diagnostic',
-      workerSha: runtime.workerRuntimeSha,
-      privateSha: runtime.privateIngestionCommit,
+      workerSha: runtime.workerSha,
+      privateSha: runtime.privateSha,
       projectId,
       promptId,
       promptSha256: createHash('sha256').update(binding.prompt, 'utf8').digest('hex'),

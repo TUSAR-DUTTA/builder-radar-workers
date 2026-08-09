@@ -17,5 +17,5 @@ jobs:
       engine: google-aio
       project_id: ${{ inputs.project_id }}
       prompt_id: ${{ inputs.prompt_id }}
+      preflight_only: true
     secrets: inherit
-

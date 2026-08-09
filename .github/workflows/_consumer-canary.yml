@@ -14,6 +14,10 @@ on:
         required: false
         type: string
         default: ''
+      preflight_only:
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -105,7 +109,16 @@ jobs:
           else echo "selected provider session is unavailable"; exit 1
           fi
 
-      - name: Run one exact provider/project/prompt canary
+      - name: Run one exact provider acquisition preflight
+        if: inputs.preflight_only
+        env:
+          PREFLIGHT_ENGINE: ${{ inputs.engine }}
+          SCRAPE_PROJECT_ID: ${{ inputs.project_id }}
+          SCRAPE_PROMPT_ID: ${{ inputs.prompt_id }}
+        run: xvfb-run -a npx tsx scripts/run-consumer-adapter-preflight.ts
+
+      - name: Run one exact provider/project/prompt persistence canary
+        if: ${{ !inputs.preflight_only }}
         env:
           SCRAPE_PROJECT_ID: ${{ inputs.project_id }}
           SCRAPE_PROMPT_ID: ${{ inputs.prompt_id }}
@@ -120,6 +133,7 @@ jobs:
           ENGINE: ${{ inputs.engine }}
           PROJECT_ID: ${{ inputs.project_id }}
           PROMPT_ID: ${{ inputs.prompt_id }}
+          PREFLIGHT_ONLY: ${{ inputs.preflight_only }}
         run: |
           {
             echo "## Consumer evidence canary"
@@ -128,6 +142,7 @@ jobs:
             echo "- engine: $ENGINE"
             echo "- project_id: $PROJECT_ID"
             echo "- prompt_id: $PROMPT_ID"
+            echo "- mode: $([ "$PREFLIGHT_ONLY" = "true" ] && echo acquisition_only_preflight || echo persistence_canary)"
             echo "- acquisition_limit: 1"
           } >> "$GITHUB_STEP_SUMMARY"
 

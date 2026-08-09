@@ -12,12 +12,13 @@ import { eq, and, inArray, sql } from 'drizzle-orm';
 
 import type { AnswerModel, BrandFact } from '@/lib/geo/types';
 import { runPromptViaPlaywrightDetailed, closeSharedBrowser, isPlaywrightAnswerModel } from './lib/geo-playwright';
+import { assertRuntimeCommitShas } from './lib/playwright/capture-contract';
 import { runSocialScrapesForProject, runScheduledSocialScrapes } from './social';
 import { oldestAttemptFirst } from '@/lib/worker-scheduling';
 
 import { 
   claimNextScanCell, completeScanCell, failScanCell, 
-  initializeScanJobCells, refreshScanJob, resumeCandidate, createOrResumeScanJob,
+  initializeScanJobCells, refreshScanJob, createOrResumeScanJob,
 } from '@/lib/scan-job-store';
 import { sampleProjectPrompts } from '@/lib/geo/sample-run';
 import { SCAN_JOB_CONTRACT_VERSION } from '@/lib/scan-job-contract';
@@ -71,8 +72,15 @@ const CELL_LEASE_MS = 300_000;
 const PROVIDER_DEADLINE_MS = 210_000;
 
 async function runGeoForProject(projectId: string, sources: string[]): Promise<GeoRunResult> {
+  const runtimeShas = assertRuntimeCommitShas();
   const models = sourcesToModels(sources).filter(isPlaywrightAnswerModel);
   if (models.length === 0) return { prompts: 0, runs: 0, models: [], status: 'no_models', primaryFailureCode: null };
+  const canary = process.env.EVIDENCE_CANARY === '1';
+  const explicitPromptId = process.env.SCRAPE_PROMPT_ID?.trim() || null;
+  if (canary && (models.length !== 1 || !explicitPromptId)) {
+    throw new Error('canary_contract_invalid:exactly_one_engine_and_prompt_id_required');
+  }
+  console.log(`[runtime] worker_sha=${runtimeShas.workerSha} private_sha=${runtimeShas.privateSha} models=${models.join(',')}`);
 
   const [project] = await withDbRetry('runGeoForProject', () => db
     .select({
@@ -93,9 +101,17 @@ async function runGeoForProject(projectId: string, sources: string[]): Promise<G
   const prompts = await withDbRetry('runGeoForProject.prompts', () => db
     .select({ id: promptSets.id, prompt: promptSets.prompt })
     .from(promptSets)
-    .where(and(eq(promptSets.projectId, project.id), eq(promptSets.active, true))));
+    .where(and(
+      eq(promptSets.projectId, project.id),
+      eq(promptSets.active, true),
+      explicitPromptId ? eq(promptSets.id, explicitPromptId) : undefined,
+    )));
 
-  if (prompts.length === 0) return { prompts: 0, runs: 0, models, status: 'no_prompts', primaryFailureCode: null };
+  if (prompts.length === 0) {
+    if (explicitPromptId) throw new Error('canary_prompt_not_found_or_inactive');
+    return { prompts: 0, runs: 0, models, status: 'no_prompts', primaryFailureCode: null };
+  }
+  if (canary && prompts.length !== 1) throw new Error('canary_contract_invalid:prompt_selection_not_unique');
   
   // Raw SQL is deliberate at this boundary: public workers compile against staged private runtime
   // sources of different ages, while the database contract must load every current identity field.
@@ -174,7 +190,10 @@ async function runGeoForProject(projectId: string, sources: string[]): Promise<G
   const competitors = completeIdentity.competitors.map((competitor) => competitor.canonicalName);
 
   const router = getAIRouter();
-  const jobKind = `worker:playwright:${[...models].sort().join(',')}`;
+  const canaryRunIdentity = process.env.GITHUB_RUN_ID?.trim();
+  const jobKind = canary
+    ? `worker:playwright:canary:${canaryRunIdentity ?? 'missing-run-id'}:${models[0]}:${explicitPromptId}`
+    : `worker:playwright:${[...models].sort().join(',')}`;
   
   const job = await createOrResumeScanJob({
     projectId: project.id,
@@ -380,6 +399,9 @@ async function runScheduledScrapes(): Promise<void> {
 export { runGeoForProject, runScheduledScrapes };
 
 async function main() {
+  // Every evidence-producing mode, including social acquisition, fails before network/provider work
+  // unless both running repository identities are exact immutable commits.
+  assertRuntimeCommitShas();
   loadSessionsFromEnv();
 
   if (process.env.SOCIAL_SCRAPE === '1') {

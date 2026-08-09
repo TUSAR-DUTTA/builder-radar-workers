@@ -1,0 +1,141 @@
+name: Reusable consumer evidence canary
+
+on:
+  workflow_call:
+    inputs:
+      engine:
+        required: true
+        type: string
+      project_id:
+        required: false
+        type: string
+        default: ''
+      prompt_id:
+        required: false
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  canary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      PRIVATE_INGESTION_COMMIT: ${{ vars.PRIVATE_INGESTION_COMMIT }}
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      GROQ_8B_KEY_1: ${{ secrets.GROQ_8B_KEY_1 }}
+      GROQ_8B_KEY_2: ${{ secrets.GROQ_8B_KEY_2 }}
+      GROQ_8B_KEY_3: ${{ secrets.GROQ_8B_KEY_3 }}
+      GROQ_8B_KEY_4: ${{ secrets.GROQ_8B_KEY_4 }}
+      GROQ_70B_KEY_1: ${{ secrets.GROQ_70B_KEY_1 }}
+      GROQ_70B_KEY_2: ${{ secrets.GROQ_70B_KEY_2 }}
+      GROQ_70B_KEY_3: ${{ secrets.GROQ_70B_KEY_3 }}
+      PLAYWRIGHT_BROWSER_CHANNEL: chrome
+      PLAYWRIGHT_HEADLESS: '0'
+      PLAYWRIGHT_MARKET: US
+      PLAYWRIGHT_PROXY_SERVER: ${{ secrets.PLAYWRIGHT_PROXY_SERVER }}
+      PLAYWRIGHT_PROXY_USERNAME: ${{ secrets.PLAYWRIGHT_PROXY_USERNAME }}
+      PLAYWRIGHT_PROXY_PASSWORD: ${{ secrets.PLAYWRIGHT_PROXY_PASSWORD }}
+      PLAYWRIGHT_SESSIONS_DIR: /tmp/playwright_sessions
+      PLAYWRIGHT_DEBUG_DIR: /tmp/playwright_debug
+      SESSION_CHATGPT_GZ: ${{ secrets.CHATGPT_SESSION_GZ_B64 }}
+      SESSION_CHATGPT: ${{ secrets.CHATGPT_SESSION_B64 }}
+      SESSION_CLAUDE_GZ: ${{ secrets.CLAUDE_SESSION_GZ_B64 }}
+      SESSION_CLAUDE: ${{ secrets.CLAUDE_SESSION_B64 }}
+      SESSION_PERPLEXITY_GZ: ${{ secrets.PERPLEXITY_SESSION_GZ_B64 }}
+      SESSION_PERPLEXITY: ${{ secrets.PERPLEXITY_SESSION_B64 }}
+      SESSION_GROK_GZ: ''
+      SESSION_GROK: ${{ secrets.GROK_SESSION_B64_1 }}
+      SESSION_GOOGLE_GZ: ${{ secrets.GOOGLE_SESSION_GZ_B64 }}
+      SESSION_GOOGLE: ${{ secrets.GOOGLE_SESSION_B64 }}
+
+    steps:
+      - name: Check out worker commit
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Validate and stage exact private runtime
+        uses: ./.github/actions/stage-private-runtime
+        with:
+          private_commit: ${{ vars.PRIVATE_INGESTION_COMMIT }}
+          core_token: ${{ secrets.CORE_REPO_PAT }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install and validate deterministic gates
+        run: |
+          npm ci
+          npm run verify:evidence-contract
+          npm run typecheck:workers
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Restore only the selected provider session
+        shell: bash
+        env:
+          ENGINE: ${{ inputs.engine }}
+        run: |
+          mkdir -p /tmp/playwright_sessions /tmp/playwright_debug
+          case "$ENGINE" in
+            chatgpt)
+              target=chatgpt_auth_state.json; gz="$SESSION_CHATGPT_GZ"; plain="$SESSION_CHATGPT" ;;
+            claude)
+              target=claude_auth_state.json; gz="$SESSION_CLAUDE_GZ"; plain="$SESSION_CLAUDE" ;;
+            perplexity)
+              target=perplexity_auth_state.json; gz="$SESSION_PERPLEXITY_GZ"; plain="$SESSION_PERPLEXITY" ;;
+            grok)
+              target=grok_auth_state.json; gz="$SESSION_GROK_GZ"; plain="$SESSION_GROK" ;;
+            google-aio)
+              target=google_auth_state.json; gz="$SESSION_GOOGLE_GZ"; plain="$SESSION_GOOGLE" ;;
+            *) echo "unsupported canary engine"; exit 1 ;;
+          esac
+          if [ -n "$gz" ]; then printf '%s' "$gz" | base64 -d | gunzip > "/tmp/playwright_sessions/$target"
+          elif [ -n "$plain" ]; then printf '%s' "$plain" | base64 -d > "/tmp/playwright_sessions/$target"
+          else echo "selected provider session is unavailable"; exit 1
+          fi
+
+      - name: Run one exact provider/project/prompt canary
+        env:
+          SCRAPE_PROJECT_ID: ${{ inputs.project_id }}
+          SCRAPE_PROMPT_ID: ${{ inputs.prompt_id }}
+          SCRAPE_SOURCES: ${{ inputs.engine }}
+          EVIDENCE_CANARY: ${{ inputs.project_id != '' && '1' || '0' }}
+        run: xvfb-run -a npx tsx src/workers/runner.ts
+
+      - name: Write safe execution summary
+        if: always()
+        shell: bash
+        env:
+          ENGINE: ${{ inputs.engine }}
+          PROJECT_ID: ${{ inputs.project_id }}
+          PROMPT_ID: ${{ inputs.prompt_id }}
+        run: |
+          {
+            echo "## Consumer evidence canary"
+            echo "- worker_sha: $GITHUB_SHA"
+            echo "- private_sha: $PRIVATE_INGESTION_COMMIT"
+            echo "- engine: $ENGINE"
+            echo "- project_id: $PROJECT_ID"
+            echo "- prompt_id: $PROMPT_ID"
+            echo "- acquisition_limit: 1"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload bounded redacted diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: consumer-canary-${{ inputs.engine }}-${{ github.run_id }}
+          path: /tmp/playwright_debug
+          if-no-files-found: ignore
+          retention-days: 3

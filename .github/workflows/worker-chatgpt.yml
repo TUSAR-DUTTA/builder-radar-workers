@@ -1,151 +1,27 @@
 name: BuilderRadar Worker - ChatGPT
-
 on:
   schedule:
-    # Daily, staggered ≥2h from the other engines: runScheduledScrapes gates on a shared
-    # projects.lastScrapeAt (~115min starter / 75min pro), so tighter spacing makes later
-    # engines skip projects an earlier engine already marked scraped. Keep ≥2h apart and clear
-    # of the 06:00 social-worker window. Order: chatgpt 01 → claude 03 → perplexity 09 → google-aio 13.
-    - cron: '0 1 * * *'        # 01:00 UTC
+    - cron: '0 1 * * *'
   repository_dispatch:
     types: [run-workers]
   workflow_dispatch:
     inputs:
       project_id:
-        description: 'Project ID for on-demand answer sampling (leave empty = scheduled full run)'
-        required: false
-        default: ''
-      sources:
-        description: 'Comma-separated answer engines (chatgpt)'
-        required: false
-        default: 'chatgpt'
-
+        description: Exact project UUID for a one-cell canary
+        required: true
+        type: string
+      prompt_id:
+        description: Exact active prompt UUID for a one-cell canary
+        required: true
+        type: string
 concurrency:
-  group: ${{ github.event.inputs.project_id && format('builderradar-seed-{0}-chatgpt', github.event.inputs.project_id) || 'builderradar-worker-chatgpt' }}
+  group: builderradar-chatgpt-${{ inputs.project_id || 'scheduled' }}
   cancel-in-progress: false
-
 jobs:
-  run-workers:
-    runs-on: ubuntu-latest
-    timeout-minutes: ${{ github.event.inputs.project_id && 45 || 60 }}
-
-    env:
-      DATABASE_URL: ${{ secrets.DATABASE_URL }}
-      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
-      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-      NEXT_PUBLIC_APP_URL: ${{ secrets.NEXT_PUBLIC_APP_URL }}
-      WORKER_SECRET: ${{ secrets.WORKER_SECRET }}
-      PLAYWRIGHT_BROWSER_CHANNEL: chrome
-      PLAYWRIGHT_HEADLESS: '0'
-      PLAYWRIGHT_DEBUG_DIR: /tmp/playwright_debug
-      RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
-      RESEND_FROM_EMAIL: ${{ secrets.RESEND_FROM_EMAIL }}
-      ADMIN_ALERT_EMAIL: ${{ secrets.ADMIN_ALERT_EMAIL }}
-      GROQ_8B_KEY_1: ${{ secrets.GROQ_8B_KEY_1 }}
-      GROQ_8B_KEY_2: ${{ secrets.GROQ_8B_KEY_2 }}
-      GROQ_8B_KEY_3: ${{ secrets.GROQ_8B_KEY_3 }}
-      GROQ_8B_KEY_4: ${{ secrets.GROQ_8B_KEY_4 }}
-      GROQ_70B_KEY_1: ${{ secrets.GROQ_70B_KEY_1 }}
-      GROQ_70B_KEY_2: ${{ secrets.GROQ_70B_KEY_2 }}
-      GROQ_70B_KEY_3: ${{ secrets.GROQ_70B_KEY_3 }}
-      GEMINI_KEY_1: ${{ secrets.GEMINI_KEY_1 }}
-      GEMINI_KEY_2: ${{ secrets.GEMINI_KEY_2 }}
-      GEMINI_KEY_3: ${{ secrets.GEMINI_KEY_3 }}
-      GEMINI_KEY_4: ${{ secrets.GEMINI_KEY_4 }}
-      GEMINI_KEY_5: ${{ secrets.GEMINI_KEY_5 }}
-      GEMINI_KEY_6: ${{ secrets.GEMINI_KEY_6 }}
-      COHERE_KEY_1: ${{ secrets.COHERE_KEY_1 }}
-      COHERE_KEY_2: ${{ secrets.COHERE_KEY_2 }}
-      COHERE_KEY_3: ${{ secrets.COHERE_KEY_3 }}
-      COHERE_KEY_4: ${{ secrets.COHERE_KEY_4 }}
-      COHERE_KEY_5: ${{ secrets.COHERE_KEY_5 }}
-      COHERE_KEY_6: ${{ secrets.COHERE_KEY_6 }}
-      COHERE_KEY_7: ${{ secrets.COHERE_KEY_7 }}
-      OPENROUTER_KEY_1: ${{ secrets.OPENROUTER_KEY_1 }}
-      OPENROUTER_KEY_2: ${{ secrets.OPENROUTER_KEY_2 }}
-      OPENROUTER_KEY_3: ${{ secrets.OPENROUTER_KEY_3 }}
-      OPENROUTER_KEY_4: ${{ secrets.OPENROUTER_KEY_4 }}
-      OPENROUTER_KEY_5: ${{ secrets.OPENROUTER_KEY_5 }}
-      OPENROUTER_KEY_6: ${{ secrets.OPENROUTER_KEY_6 }}
-      OPENROUTER_KEY_7: ${{ secrets.OPENROUTER_KEY_7 }}
-      HF_KEY_1: ${{ secrets.HF_KEY_1 }}
-      HF_KEY_2: ${{ secrets.HF_KEY_2 }}
-      HF_KEY_3: ${{ secrets.HF_KEY_3 }}
-      HF_KEY_4: ${{ secrets.HF_KEY_4 }}
-      GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
-      STACKEXCHANGE_KEY: ${{ secrets.STACKEXCHANGE_KEY }}
-      DEVTO_API_KEY: ${{ secrets.DEVTO_API_KEY }}
-      PRODUCTHUNT_TOKEN: ${{ secrets.PRODUCTHUNT_TOKEN }}
-      YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
-      GOOGLE_CSE_KEY: ${{ secrets.GOOGLE_CSE_KEY }}
-      GOOGLE_CSE_ID: ${{ secrets.GOOGLE_CSE_ID }}
-      SOCIALDATA_KEY: ${{ secrets.SOCIALDATA_KEY }}
-      REDDIT_CLIENT_ID: ${{ secrets.REDDIT_CLIENT_ID }}
-      REDDIT_CLIENT_SECRET: ${{ secrets.REDDIT_CLIENT_SECRET }}
-      PLAYWRIGHT_PROXY_SERVER: ${{ secrets.PLAYWRIGHT_PROXY_SERVER }}
-      PLAYWRIGHT_PROXY_USERNAME: ${{ secrets.PLAYWRIGHT_PROXY_USERNAME }}
-      PLAYWRIGHT_PROXY_PASSWORD: ${{ secrets.PLAYWRIGHT_PROXY_PASSWORD }}
-      PLAYWRIGHT_SESSIONS_DIR: /tmp/playwright_sessions
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Verify evidence-contract version and integrity
-        run: npm run verify:evidence-contract
-
-      - name: Fetch private core (read-only, runtime only)
-        uses: actions/checkout@v4
-        with:
-          repository: TUSAR-DUTTA/Builder-Radar
-          ref: ${{ vars.PRIVATE_INGESTION_COMMIT || 'main' }}
-          token: ${{ secrets.CORE_REPO_PAT }}
-          path: _core
-      - name: Stage private core into src/ (never committed)
-        run: |
-          if [ -n "${{ vars.PRIVATE_INGESTION_COMMIT }}" ]; then
-            test "$(git -C _core rev-parse HEAD)" = "${{ vars.PRIVATE_INGESTION_COMMIT }}"
-          fi
-          node -e "const worker=require('./package.json'); const core=require('./_core/package.json'); const name='@builder-radar/evidence-contract'; if (worker.dependencies[name] && core.dependencies[name] && worker.dependencies[name] !== core.dependencies[name]) throw new Error('evidence-contract pins differ')"
-          cp -r _core/src/db src/db
-          cp -r _core/src/lib src/lib
-          if [ -d _core/src/types ]; then cp -r _core/src/types src/types; fi
-          rm -rf _core
-
-      - name: Run contract and typecheck tests
-        run: npm run test:worker-contracts
-      - name: Install Playwright browsers and dependencies
-        run: npx playwright install --with-deps chromium
-
-      - name: Log browser runtime
-        run: |
-          google-chrome --version
-          npx playwright --version
-
-      - name: Restore sessions from secrets
-        run: |
-          mkdir -p /tmp/playwright_sessions
-          mkdir -p /tmp/playwright_debug
-          if [ -n "${{ secrets.CHATGPT_SESSION_GZ_B64 }}" ]; then
-            echo "${{ secrets.CHATGPT_SESSION_GZ_B64 }}" | base64 -d | gunzip > /tmp/playwright_sessions/chatgpt_auth_state.json
-            echo "ChatGPT gzipped session restored"
-          elif [ -n "${{ secrets.CHATGPT_SESSION_B64 }}" ]; then
-            echo "${{ secrets.CHATGPT_SESSION_B64 }}" | base64 -d > /tmp/playwright_sessions/chatgpt_auth_state.json
-            echo "ChatGPT session restored"
-          fi
-
-      - name: Run workers
-        env:
-          SCRAPE_PROJECT_ID: ${{ github.event.inputs.project_id }}
-          SCRAPE_SOURCES: ${{ github.event.inputs.sources || 'chatgpt' }}
-        run: xvfb-run -a npx tsx src/workers/runner.ts
+  run:
+    uses: ./.github/workflows/_consumer-canary.yml
+    with:
+      engine: chatgpt
+      project_id: ${{ inputs.project_id || github.event.client_payload.project_id || '' }}
+      prompt_id: ${{ inputs.prompt_id || github.event.client_payload.prompt_id || '' }}
+    secrets: inherit

@@ -1,26 +1,43 @@
+import type { BrowserTerminalSignal } from './capture-contract';
+
 export interface ConversationDomSpec {
   userSelector: string;
   assistantSelector: string;
+  answerSelector: string;
+  terminalSelector: string;
   streamingSelector: string;
+  globalStopSelector: string;
   loginSelector: string;
   challengeSelector: string;
   rateLimitSelector: string;
+  interstitialSelector: string;
   providerOrigin: string;
+  userIdentityAttributes: string[];
+  assistantIdentityAttributes: string[];
+  terminalSignal: BrowserTerminalSignal;
 }
 
 export interface ConversationTurnSnapshot {
   userNodeIds: string[];
   assistantNodeIds: string[];
+  userCount: number;
+  assistantCount: number;
 }
 
 export type CorrelatedTurnStatus =
   | 'waiting'
   | 'streaming'
-  | 'ready'
-  | 'login'
-  | 'challenge'
-  | 'rate_limit'
-  | 'prompt_binding_unverified';
+  | 'terminal'
+  | 'login_required'
+  | 'provider_challenge'
+  | 'rate_limited'
+  | 'provider_interstitial'
+  | 'provider_refusal'
+  | 'provider_no_answer'
+  | 'prompt_binding_unverified'
+  | 'provider_identity_missing'
+  | 'duplicate_current_turn'
+  | 'terminal_signal_missing';
 
 export interface CorrelatedTurnInspection {
   status: CorrelatedTurnStatus;
@@ -28,8 +45,10 @@ export interface CorrelatedTurnInspection {
   links: { url: string; title?: string }[];
   userNodeId: string | null;
   assistantNodeId: string | null;
+  answerNodeId: string | null;
   promptMatched: boolean;
   assistantFollowsUser: boolean;
+  terminalSignal: BrowserTerminalSignal | null;
 }
 
 export function renderedTextContainsPrompt(renderedText: string, expectedPrompt: string): boolean {
@@ -44,175 +63,166 @@ export function renderedTextContainsPrompt(renderedText: string, expectedPrompt:
   return Boolean(expected && rendered.includes(expected));
 }
 
-/**
- * Browser callback: snapshot durable DOM node identities before submitting a prompt.
- * It deliberately assigns private data attributes when a provider does not expose an id.
- */
+/** Browser callback. It records provider-emitted identities only and never invents DOM ids. */
 export function snapshotConversationDom(spec: ConversationDomSpec): ConversationTurnSnapshot {
-  const root = document.documentElement;
-  let counter = Number(root.getAttribute('data-builderradar-node-counter') ?? '0');
-  const users = document.querySelectorAll<HTMLElement>(spec.userSelector);
-  const assistants = document.querySelectorAll<HTMLElement>(spec.assistantSelector);
-  const userNodeIds: string[] = [];
-  const assistantNodeIds: string[] = [];
-
-  for (let index = 0; index < users.length; index += 1) {
-    const node = users[index];
-    let identity = node.getAttribute('data-builderradar-node-id')
-      || node.getAttribute('data-message-id')
-      || node.id;
-    if (!identity) {
-      counter += 1;
-      identity = `user-${counter}`;
-      node.setAttribute('data-builderradar-node-id', identity);
+  const identity = (node: HTMLElement, attributes: string[]): string | null => {
+    for (const attribute of attributes) {
+      const value = attribute === 'id' ? node.id : node.getAttribute(attribute);
+      if (value?.trim()) return `${attribute}:${value.trim()}`;
     }
-    userNodeIds.push(identity);
-  }
-  for (let index = 0; index < assistants.length; index += 1) {
-    const node = assistants[index];
-    let identity = node.getAttribute('data-builderradar-node-id')
-      || node.getAttribute('data-message-id')
-      || node.id;
-    if (!identity) {
-      counter += 1;
-      identity = `assistant-${counter}`;
-      node.setAttribute('data-builderradar-node-id', identity);
-    }
-    assistantNodeIds.push(identity);
-  }
-  root.setAttribute('data-builderradar-node-counter', String(counter));
-  return { userNodeIds, assistantNodeIds };
+    return null;
+  };
+  const users = Array.from(document.querySelectorAll<HTMLElement>(spec.userSelector));
+  const assistants = Array.from(document.querySelectorAll<HTMLElement>(spec.assistantSelector));
+  return {
+    userNodeIds: users.map((node) => identity(node, spec.userIdentityAttributes)).filter((value): value is string => Boolean(value)),
+    assistantNodeIds: assistants.map((node) => identity(node, spec.assistantIdentityAttributes)).filter((value): value is string => Boolean(value)),
+    userCount: users.length,
+    assistantCount: assistants.length,
+  };
 }
 
-/**
- * Browser callback: locate only a new assistant node following a new, prompt-matching user node.
- * Returned answer text is untouched; callers sanitize only after capture.
- */
+/** Browser callback. It selects exactly one new assistant immediately associated with one new prompt turn. */
 export function inspectCorrelatedConversationTurn(input: {
   spec: ConversationDomSpec;
   snapshot: ConversationTurnSnapshot;
   expectedPrompt: string;
 }): CorrelatedTurnInspection {
-  const challengeNode = document.querySelector<HTMLElement>(input.spec.challengeSelector);
-  if (challengeNode && challengeNode.getClientRects().length > 0) {
-    return { status: 'challenge', rawAnswer: '', links: [], userNodeId: null, assistantNodeId: null, promptMatched: false, assistantFollowsUser: false };
-  }
-  const rateLimitNode = document.querySelector<HTMLElement>(input.spec.rateLimitSelector);
-  if (rateLimitNode && rateLimitNode.getClientRects().length > 0) {
-    return { status: 'rate_limit', rawAnswer: '', links: [], userNodeId: null, assistantNodeId: null, promptMatched: false, assistantFollowsUser: false };
-  }
-  const loginNode = document.querySelector<HTMLElement>(input.spec.loginSelector);
-  if (loginNode && loginNode.getClientRects().length > 0) {
-    return { status: 'login', rawAnswer: '', links: [], userNodeId: null, assistantNodeId: null, promptMatched: false, assistantFollowsUser: false };
-  }
+  const empty = (status: CorrelatedTurnStatus): CorrelatedTurnInspection => ({
+    status,
+    rawAnswer: '',
+    links: [],
+    userNodeId: null,
+    assistantNodeId: null,
+    answerNodeId: null,
+    promptMatched: false,
+    assistantFollowsUser: false,
+    terminalSignal: null,
+  });
+  const visible = (selector: string): boolean => {
+    if (!selector) return false;
+    return Array.from(document.querySelectorAll<HTMLElement>(selector)).some((node) => {
+      const style = window.getComputedStyle(node);
+      return style.display !== 'none' && style.visibility !== 'hidden' && !node.hasAttribute('hidden');
+    });
+  };
+  const identity = (node: HTMLElement, attributes: string[]): string | null => {
+    for (const attribute of attributes) {
+      const value = attribute === 'id' ? node.id : node.getAttribute(attribute);
+      if (value?.trim()) return `${attribute}:${value.trim()}`;
+    }
+    return null;
+  };
+  const normalize = (value: string): string => value.normalize('NFKC').toLocaleLowerCase('en-US')
+    .replace(/[\u200B-\u200D\uFEFF]/g, '').replace(/\s+/g, ' ').trim();
 
-  const root = document.documentElement;
-  let counter = Number(root.getAttribute('data-builderradar-node-counter') ?? '0');
-  const users = document.querySelectorAll<HTMLElement>(input.spec.userSelector);
-  const assistants = document.querySelectorAll<HTMLElement>(input.spec.assistantSelector);
+  if (visible(input.spec.challengeSelector)) return empty('provider_challenge');
+  if (visible(input.spec.rateLimitSelector)) return empty('rate_limited');
+  if (visible(input.spec.loginSelector)) return empty('login_required');
+  if (visible(input.spec.interstitialSelector)) return empty('provider_interstitial');
+
+  const users = Array.from(document.querySelectorAll<HTMLElement>(input.spec.userSelector));
+  const assistants = Array.from(document.querySelectorAll<HTMLElement>(input.spec.assistantSelector));
   const oldUsers = new Set(input.snapshot.userNodeIds);
   const oldAssistants = new Set(input.snapshot.assistantNodeIds);
-  const wanted = input.expectedPrompt.normalize('NFKC').toLocaleLowerCase('en-US')
-    .replace(/[\u200B-\u200D\uFEFF]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
+  const wanted = normalize(input.expectedPrompt);
   let matchingUser: HTMLElement | null = null;
   let matchingUserId: string | null = null;
+  let matchingUserIndex = -1;
 
-  for (let index = 0; index < users.length; index += 1) {
+  for (let index = users.length - 1; index >= input.snapshot.userCount; index -= 1) {
     const node = users[index];
-    let identity = node.getAttribute('data-builderradar-node-id')
-      || node.getAttribute('data-message-id')
-      || node.id;
-    if (!identity) {
-      counter += 1;
-      identity = `user-${counter}`;
-      node.setAttribute('data-builderradar-node-id', identity);
-    }
-    if (oldUsers.has(identity)) continue;
-    const rendered = (node.innerText || node.textContent || '')
-      .normalize('NFKC').toLocaleLowerCase('en-US')
-      .replace(/[\u200B-\u200D\uFEFF]/g, '')
-      .replace(/\s+/g, ' ')
-      .trim();
+    const nodeIdentity = identity(node, input.spec.userIdentityAttributes);
+    const rendered = normalize(node.innerText || node.textContent || '');
     if (wanted && rendered.includes(wanted)) {
+      if (!nodeIdentity) return empty('provider_identity_missing');
+      if (oldUsers.has(nodeIdentity)) continue;
       matchingUser = node;
-      matchingUserId = identity;
+      matchingUserId = nodeIdentity;
+      matchingUserIndex = index;
       break;
     }
   }
+  if (!matchingUser) return empty('prompt_binding_unverified');
+  if (!matchingUserId) return empty('provider_identity_missing');
 
-  let matchingAssistant: HTMLElement | null = null;
-  let matchingAssistantId: string | null = null;
+  const nextUser = users.slice(matchingUserIndex + 1).find((node) =>
+    Boolean(matchingUser!.compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING));
+  const candidates = assistants.filter((node, index) => {
+    if (index < input.snapshot.assistantCount) return false;
+    const nodeIdentity = identity(node, input.spec.assistantIdentityAttributes);
+    if (!nodeIdentity || oldAssistants.has(nodeIdentity)) return false;
+    if (!(matchingUser!.compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING)) return false;
+    return !nextUser || Boolean(node.compareDocumentPosition(nextUser) & Node.DOCUMENT_POSITION_FOLLOWING);
+  });
+  if (candidates.length === 0) {
+    return { ...empty('waiting'), userNodeId: matchingUserId, promptMatched: true };
+  }
+  if (candidates.length !== 1) {
+    return { ...empty('duplicate_current_turn'), userNodeId: matchingUserId, promptMatched: true };
+  }
 
-  if (!matchingUser) {
-    root.setAttribute('data-builderradar-node-counter', String(counter));
+  const assistant = candidates[0];
+  const assistantNodeId = identity(assistant, input.spec.assistantIdentityAttributes);
+  if (!assistantNodeId) {
+    return { ...empty('provider_identity_missing'), userNodeId: matchingUserId, promptMatched: true };
+  }
+  const answer = assistant.matches(input.spec.answerSelector)
+    ? assistant
+    : assistant.querySelector<HTMLElement>(input.spec.answerSelector);
+  if (!answer) {
     return {
-      status: 'prompt_binding_unverified',
-      rawAnswer: '',
-      links: [],
-      userNodeId: null,
-      assistantNodeId: null,
-      promptMatched: false,
-      assistantFollowsUser: false,
+      ...empty('provider_no_answer'), userNodeId: matchingUserId, assistantNodeId,
+      promptMatched: true, assistantFollowsUser: true,
     };
   }
-
-  for (let index = 0; index < assistants.length; index += 1) {
-    const node = assistants[index];
-    let identity = node.getAttribute('data-builderradar-node-id')
-      || node.getAttribute('data-message-id')
-      || node.id;
-    if (!identity) {
-      counter += 1;
-      identity = `assistant-${counter}`;
-      node.setAttribute('data-builderradar-node-id', identity);
-    }
-    if (oldAssistants.has(identity)) continue;
-    if (!(matchingUser.compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING)) continue;
-    matchingAssistant = node;
-    matchingAssistantId = identity;
-    break;
-  }
-  
-  root.setAttribute('data-builderradar-node-counter', String(counter));
-
-  if (!matchingAssistant) {
+  const answerNodeId = identity(answer, input.spec.assistantIdentityAttributes) ?? assistantNodeId;
+  const rawAnswer = answer.innerText || answer.textContent || '';
+  const normalizedAnswer = normalize(rawAnswer);
+  const refused = /^(?:i (?:can(?:not|'t)|won't)|sorry[, ]|i'm sorry|i am sorry|this request (?:cannot|can't)|unable to (?:help|comply))/i.test(normalizedAnswer);
+  if (refused) {
     return {
-      status: 'waiting',
-      rawAnswer: '',
-      links: [],
-      userNodeId: matchingUserId,
-      assistantNodeId: null,
-      promptMatched: true,
-      assistantFollowsUser: false,
+      ...empty('provider_refusal'), rawAnswer, userNodeId: matchingUserId, assistantNodeId, answerNodeId,
+      promptMatched: true, assistantFollowsUser: true,
     };
   }
-
-  const streaming = matchingAssistant.matches(input.spec.streamingSelector)
-    || Boolean(matchingAssistant.querySelector(input.spec.streamingSelector))
-    || Boolean(matchingAssistant.closest(input.spec.streamingSelector));
-  const rawAnswer = matchingAssistant.innerText || matchingAssistant.textContent || '';
+  if (!normalizedAnswer || /^(?:no answer|answer unavailable|something went wrong|try again)$/i.test(normalizedAnswer)) {
+    return {
+      ...empty('provider_no_answer'), rawAnswer, userNodeId: matchingUserId, assistantNodeId, answerNodeId,
+      promptMatched: true, assistantFollowsUser: true,
+    };
+  }
+  const streaming = assistant.matches(input.spec.streamingSelector)
+    || Boolean(assistant.querySelector(input.spec.streamingSelector))
+    || visible(input.spec.globalStopSelector);
+  if (streaming) {
+    return {
+      ...empty('streaming'), rawAnswer, userNodeId: matchingUserId, assistantNodeId, answerNodeId,
+      promptMatched: true, assistantFollowsUser: true,
+    };
+  }
+  const terminal = assistant.matches(input.spec.terminalSelector)
+    || Boolean(assistant.querySelector(input.spec.terminalSelector));
   const links: { url: string; title?: string }[] = [];
-  const anchors = matchingAssistant.querySelectorAll<HTMLAnchorElement>('a[href]');
-  for (let index = 0; index < anchors.length && links.length < 12; index += 1) {
-    const anchor = anchors[index];
-    if (!/^https?:\/\//i.test(anchor.href)) continue;
-    if (input.spec.providerOrigin && anchor.href.startsWith(input.spec.providerOrigin)) continue;
+  for (const anchor of Array.from(answer.querySelectorAll<HTMLAnchorElement>('a[href]'))) {
+    if (links.length >= 12) break;
+    if (!/^https?:\/\//i.test(anchor.href) || anchor.href.startsWith(input.spec.providerOrigin)) continue;
     links.push({ url: anchor.href, title: (anchor.textContent ?? '').trim() || undefined });
   }
   return {
-    status: streaming ? 'streaming' : 'ready',
+    status: terminal ? 'terminal' : 'terminal_signal_missing',
     rawAnswer,
     links,
     userNodeId: matchingUserId,
-    assistantNodeId: matchingAssistantId,
-    promptMatched: Boolean(matchingUser),
-    assistantFollowsUser: Boolean(matchingUser),
+    assistantNodeId,
+    answerNodeId,
+    promptMatched: true,
+    assistantFollowsUser: true,
+    terminalSignal: terminal ? input.spec.terminalSignal : null,
   };
 }
 
-export async function waitForStableCorrelatedTurn(
+export async function waitForTerminalCorrelatedTurn(
   page: import('playwright').Page,
   input: {
     spec: ConversationDomSpec;
@@ -224,7 +234,7 @@ export async function waitForStableCorrelatedTurn(
     stableChecks?: number;
     signal?: AbortSignal;
   },
-): Promise<CorrelatedTurnInspection> {
+): Promise<CorrelatedTurnInspection & { observedStableChecks: number }> {
   const deadline = Date.now() + (input.timeoutMs ?? 180_000);
   const requiredStableChecks = input.stableChecks ?? 3;
   const minimumChars = input.minimumChars ?? 40;
@@ -233,9 +243,7 @@ export async function waitForStableCorrelatedTurn(
   let lastStatus: CorrelatedTurnStatus = 'waiting';
 
   while (Date.now() < deadline) {
-    if (input.signal?.aborted) {
-      throw new Error(`provider_deadline:${input.provider}_aborted`);
-    }
+    if (input.signal?.aborted) throw new Error(`provider_deadline:${input.provider}_aborted`);
     await page.waitForTimeout(1_000);
     const inspection = await page.evaluate(inspectCorrelatedConversationTurn, {
       spec: input.spec,
@@ -243,31 +251,19 @@ export async function waitForStableCorrelatedTurn(
       expectedPrompt: input.expectedPrompt,
     });
     lastStatus = inspection.status;
-    if (inspection.status === 'login') throw new Error(`${input.provider} authentication required`);
-    if (inspection.status === 'challenge') throw new Error(`${input.provider} challenge page blocked acquisition`);
-    if (inspection.status === 'rate_limit') throw Object.assign(new Error(`${input.provider} rate limit`), { status: 429 });
-    if (inspection.status === 'prompt_binding_unverified') throw new Error(`prompt_binding_unverified:${input.provider}`);
-    if (inspection.status !== 'ready' || inspection.rawAnswer.trim().length < minimumChars) {
+    if (['login_required', 'provider_challenge', 'rate_limited', 'provider_interstitial',
+      'provider_refusal', 'provider_no_answer', 'prompt_binding_unverified', 'provider_identity_missing',
+      'duplicate_current_turn'].includes(inspection.status)) {
+      throw new Error(`${inspection.status}:${input.provider}`);
+    }
+    if (inspection.status !== 'terminal' || inspection.rawAnswer.length < minimumChars) {
       previousText = null;
       stableCount = 0;
       continue;
     }
-    // When promptMatched is false (user query node not found in DOM), require
-    // stronger evidence: more stable checks and substantially longer text.
-    // This prevents short app-chrome from being accepted as an answer,
-    // while still allowing providers like Perplexity that hide user queries.
-    const effectiveStableChecks = inspection.promptMatched ? requiredStableChecks : Math.max(requiredStableChecks, 5);
-    const effectiveMinChars = inspection.promptMatched ? minimumChars : Math.max(minimumChars, 50);
-    if (inspection.rawAnswer.trim().length < effectiveMinChars) {
-      previousText = null;
-      stableCount = 0;
-      continue;
-    }
-    if (inspection.rawAnswer === previousText) stableCount += 1;
-    else stableCount = 1;
+    stableCount = inspection.rawAnswer === previousText ? stableCount + 1 : 1;
     previousText = inspection.rawAnswer;
-    if (stableCount >= effectiveStableChecks) return inspection;
+    if (stableCount >= requiredStableChecks) return { ...inspection, observedStableChecks: stableCount };
   }
-  console.warn(`[${input.provider}] Turn timeout after ${Math.round((Date.now() - (deadline - (input.timeoutMs ?? 180_000))) / 1000)}s. Last state: ${lastStatus}`);
-  throw new Error(`prompt_identity_unverified:${input.provider}_turn_timeout:last_state_${lastStatus}`);
+  throw new Error(`provider_not_terminal:${input.provider}:last_state_${lastStatus}`);
 }

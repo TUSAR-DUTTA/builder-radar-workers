@@ -1,70 +1,21 @@
 name: Test Single Worker - Perplexity
-
 on:
   workflow_dispatch:
     inputs:
-      prompt:
-        description: 'The single prompt to test'
+      project_id:
+        description: Exact project UUID
         required: true
-        default: 'What is Builder Radar and what are its features?'
-
+        type: string
+      prompt_id:
+        description: Exact active prompt UUID
+        required: true
+        type: string
 jobs:
-  test-perplexity:
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    
-    env:
-      PLAYWRIGHT_BROWSER_CHANNEL: chrome
-      PLAYWRIGHT_HEADLESS: '0'
-      PLAYWRIGHT_PROXY_SERVER: ${{ secrets.PLAYWRIGHT_PROXY_SERVER }}
-      PLAYWRIGHT_PROXY_USERNAME: ${{ secrets.PLAYWRIGHT_PROXY_USERNAME }}
-      PLAYWRIGHT_PROXY_PASSWORD: ${{ secrets.PLAYWRIGHT_PROXY_PASSWORD }}
-      PLAYWRIGHT_SESSIONS_DIR: /tmp/playwright_sessions
-      TEST_WORKER: perplexity
-      TEST_PROMPT: ${{ github.event.inputs.prompt }}
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-          
-      - name: Fetch private core (read-only, runtime only)
-        uses: actions/checkout@v4
-        with:
-          repository: TUSAR-DUTTA/Builder-Radar
-          ref: ${{ vars.PRIVATE_INGESTION_COMMIT || 'main' }}
-          token: ${{ secrets.CORE_REPO_PAT }}
-          path: _core
-      - name: Stage private core into src/ (never committed)
-        run: |
-          if [ -n "${{ vars.PRIVATE_INGESTION_COMMIT }}" ]; then
-            test "$(git -C _core rev-parse HEAD)" = "${{ vars.PRIVATE_INGESTION_COMMIT }}"
-          fi
-          node -e "const worker=require('./package.json'); const core=require('./_core/package.json'); const name='@builder-radar/evidence-contract'; if (worker.dependencies[name] && core.dependencies[name] && worker.dependencies[name] !== core.dependencies[name]) throw new Error('evidence-contract pins differ')"
-          cp -r _core/src/db src/db
-          cp -r _core/src/lib src/lib
-          if [ -d _core/src/types ]; then cp -r _core/src/types src/types; fi
-          rm -rf _core
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Install Playwright browsers and dependencies
-        run: npx playwright install --with-deps chromium
-
-      - name: Restore sessions from secrets
-        run: |
-          mkdir -p /tmp/playwright_sessions
-          if [ -n "${{ secrets.PERPLEXITY_SESSION_GZ_B64 }}" ]; then
-            echo "${{ secrets.PERPLEXITY_SESSION_GZ_B64 }}" | base64 -d | gunzip > /tmp/playwright_sessions/perplexity_auth_state.json
-          elif [ -n "${{ secrets.PERPLEXITY_SESSION_B64 }}" ]; then
-            echo "${{ secrets.PERPLEXITY_SESSION_B64 }}" | base64 -d > /tmp/playwright_sessions/perplexity_auth_state.json
-          fi
-          
-      - name: Run Test Script
-        run: xvfb-run -a npx tsx verify-single-worker.ts
+  canary:
+    uses: ./.github/workflows/_consumer-canary.yml
+    with:
+      engine: perplexity
+      project_id: ${{ inputs.project_id }}
+      prompt_id: ${{ inputs.prompt_id }}
+    secrets: inherit
 

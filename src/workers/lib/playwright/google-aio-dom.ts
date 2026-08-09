@@ -5,6 +5,11 @@ export type GoogleAioState =
   | 'no_aio'
   | 'consent'
   | 'challenge'
+  | 'login_required'
+  | 'rate_limited'
+  | 'interstitial'
+  | 'refusal'
+  | 'duplicate_aio'
   | 'timeout'
   | 'aio_complete'
   | 'raw_capture';
@@ -47,19 +52,30 @@ export function inspectGoogleAioDom(expectedPrompt?: string): GoogleAioInspectio
   if (challengeNode && challengeNode.getClientRects().length > 0) {
     return { state: 'challenge', rawAnswer: '', links: [], containerIdentity: null };
   }
+  const loginNode = document.querySelector<HTMLElement>('form[action*="login"], a[href*="accounts.google.com/ServiceLogin"]');
+  if (loginNode) return { state: 'login_required', rawAnswer: '', links: [], containerIdentity: null };
+  const rateLimitNode = document.querySelector<HTMLElement>('[data-testid="rate-limit"], [aria-label*="rate limit" i]');
+  if (rateLimitNode) return { state: 'rate_limited', rawAnswer: '', links: [], containerIdentity: null };
+  const interstitialNode = document.querySelector<HTMLElement>('[data-testid="account-interstitial"], [aria-label*="choose an account" i]');
+  if (interstitialNode) return { state: 'interstitial', rawAnswer: '', links: [], containerIdentity: null };
 
   const explicit = document.querySelectorAll<HTMLElement>(
     '[data-attrid*="SGE"], [data-attrid*="ai_overview"], [data-testid*="ai-overview"], [class*="ai-overview"], [aria-label*="AI Overview" i]',
   );
-  let container: HTMLElement | null = null;
+  const visibleExplicit: HTMLElement[] = [];
   for (let i = explicit.length - 1; i >= 0; i--) {
     const el = explicit[i];
     const style = window.getComputedStyle(el);
     if (style.display !== 'none' && el.getClientRects().length > 0) {
-      container = el;
-      break;
+      visibleExplicit.push(el);
     }
   }
+  const explicitRoots = visibleExplicit.filter((node) =>
+    !visibleExplicit.some((other) => other !== node && other.contains(node)));
+  if (explicitRoots.length > 1) {
+    return { state: 'duplicate_aio', rawAnswer: '', links: [], containerIdentity: null };
+  }
+  let container: HTMLElement | null = explicitRoots[0] ?? null;
   if (!container) {
     const candidates = document.querySelectorAll<HTMLElement>('section, [role="region"], div.MjjYud, div');
     let shortest = Number.POSITIVE_INFINITY;
@@ -123,6 +139,10 @@ export function inspectGoogleAioDom(expectedPrompt?: string): GoogleAioInspectio
     
   const isComplete = !streaming && terminalIndicator;
   const rawAnswer = container.innerText || container.textContent || '';
+  const normalizedAnswer = rawAnswer.normalize('NFKC').replace(/\s+/g, ' ').trim().toLowerCase();
+  if (/\b(?:i (?:can(?:not|'t)|won't)|sorry[, ]|i'm sorry|unable to (?:help|comply))\b/i.test(normalizedAnswer)) {
+    return { state: 'refusal', rawAnswer, links: [], containerIdentity: identity };
+  }
   const links: { url: string; title?: string }[] = [];
   const anchors = container.querySelectorAll<HTMLAnchorElement>('a[href]');
   for (let index = 0; index < anchors.length && links.length < 12; index += 1) {

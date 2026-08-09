@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import {
   CONTRACT_SOURCE_COMMIT,
   ENGINE_IDS,
@@ -11,14 +12,21 @@ import {
   EvidenceContractError,
   assertEvidenceCompatibility,
   isEngineId,
+  parseAdapterResult,
   validateIdentityForPreAcquisition,
   type CompleteProjectIdentity,
+  type AdapterResultV1,
   type EngineId,
   type EvidenceFailureCode,
   type IdentityProvenance,
   type ValidationResult,
   type VerifiedCompetitorIdentity,
 } from '@builder-radar/evidence-contract';
+import {
+  BROWSER_ADAPTER_VERSIONS,
+  isRealProviderIdentity,
+  isTerminalSignalCompatible,
+} from './playwright/capture-contract';
 
 export const WORKER_EVIDENCE_COMPATIBILITY = Object.freeze({
   contractName: EVIDENCE_CONTRACT_NAME,
@@ -34,6 +42,44 @@ export const WORKER_EVIDENCE_COMPATIBILITY = Object.freeze({
 
 export function assertWorkerEvidenceCompatibility() {
   return assertEvidenceCompatibility(WORKER_EVIDENCE_COMPATIBILITY);
+}
+
+function adapterFailure(
+  primaryFailureCode: EvidenceFailureCode,
+  message: string,
+  path: string,
+): ValidationResult<AdapterResultV1> {
+  return { success: false, failure: { primaryFailureCode, message, path, diagnostics: {} } };
+}
+
+/** Worker-side semantic gate layered over the shared structural contract. */
+export function validateWorkerAdapterEnvelope(value: unknown): ValidationResult<AdapterResultV1> {
+  const parsed = parseAdapterResult(value);
+  if (!parsed.success) return parsed;
+  const adapter = parsed.value;
+  if (adapter.captureStatus !== 'accepted') return parsed;
+  const expectedVersion = BROWSER_ADAPTER_VERSIONS[adapter.engine];
+  if (!expectedVersion || adapter.adapterVersion !== expectedVersion) {
+    return adapterFailure('unsupported_worker_version', 'Adapter version does not match this worker implementation.', 'adapterVersion');
+  }
+  if (!isRealProviderIdentity(adapter.provenance.userTurnId)
+    || !isRealProviderIdentity(adapter.provenance.assistantTurnId)
+    || !isRealProviderIdentity(adapter.provenance.answerNodeId)) {
+    return adapterFailure('provenance_unverified', 'Provider-emitted turn identities are required.', 'provenance');
+  }
+  if (!isTerminalSignalCompatible(adapter.adapterVersion, adapter.provenance.providerTerminalSignal)) {
+    return adapterFailure('provider_not_terminal', 'Terminal signal is not valid for this exact adapter version.', 'provenance.providerTerminalSignal');
+  }
+  if (adapter.rawReceipt.kind !== 'database'
+    || !adapter.rawReceipt.uri.startsWith('urn:builder-radar:database-receipt:ingestion-pending:')
+    || adapter.rawReceipt.mediaType !== 'text/plain;charset=utf-8') {
+    return adapterFailure('missing_raw_receipt', 'Worker captures must be truthfully labeled as pending database receipts.', 'rawReceipt');
+  }
+  const expectedSha = createHash('sha256').update(Buffer.from(adapter.rawAnswer ?? '', 'utf8')).digest('hex');
+  if (expectedSha !== adapter.rawReceipt.contentSha256) {
+    return adapterFailure('missing_raw_receipt', 'Raw receipt SHA does not match the exact UTF-8 answer bytes.', 'rawReceipt.contentSha256');
+  }
+  return parsed;
 }
 
 export function workerSourcesToEngines(sources: readonly string[]): EngineId[] {

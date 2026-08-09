@@ -55,7 +55,7 @@ export async function launchSeededPersistentContext(model: AnswerModel): Promise
     cookies?: any[];
     origins?: StoredOrigin[];
   };
-  console.log(`[stealth] loading session file from ${sessionPath}, found ${storageState.cookies?.length ?? 0} cookies`);
+  console.log(`[stealth] loading configured ${model} session state`);
   const localStorageByOrigin = Object.fromEntries(
     (storageState.origins ?? [])
       .filter((entry) => entry.origin && entry.localStorage?.length)
@@ -69,7 +69,7 @@ export async function launchSeededPersistentContext(model: AnswerModel): Promise
   } : undefined;
   
   if (proxyUsed) {
-    console.log(`[stealth] routing Playwright through proxy ${proxyServer}`);
+    console.log(`[stealth] routing ${model} through configured proxy`);
   } else if (proxyRequested) {
     console.log(`[stealth] bypassing proxy for ${model} to save bandwidth`);
   }
@@ -92,6 +92,9 @@ export async function launchSeededPersistentContext(model: AnswerModel): Promise
   }
 
   const context = await chromium.launchPersistentContext(userDataDir, launchOptions);
+  await context.addInitScript({
+    content: `Object.defineProperty(globalThis, '__name', { value: (target) => target, configurable: true });`,
+  });
   if (model === 'google-aio') {
     await applyStealth(context);
   }
@@ -187,10 +190,13 @@ export async function launchSeededContext(model: AnswerModel): Promise<Playwrigh
   const actualVersion = browser.version();
   const hasSession = isSessionAvailable(model);
 
-  console.log(`[stealth] Launching seeded context for ${model}. hasSession: ${hasSession}, path: ${sessionPath}`);
+  console.log(`[stealth] launching seeded context for ${model}; session_available=${hasSession}`);
 
   const context = await browser.newContext({
     ...stealthContext(actualVersion),
+  });
+  await context.addInitScript({
+    content: `Object.defineProperty(globalThis, '__name', { value: (target) => target, configurable: true });`,
   });
 
   if (hasSession) {
@@ -276,23 +282,36 @@ export async function captureDebug(
 
   const safeStage = stage.replace(/[^a-z0-9_-]+/gi, '-').slice(0, 80);
   const prefix = path.join(dir, `${model}-${safeStage}`);
-  const title = await page.title().catch(() => '');
-  const url = page.url();
-  const rawBodyText = ((await page.textContent('body').catch(() => '')) ?? '').replace(/\s+/g, ' ').trim().slice(0, 4000);
-  const bodyText = rawBodyText
-    .replace(/"accessToken":"[^"]+"/g, '"accessToken":"[redacted]"')
-    .replace(/"sessionToken":"[^"]+"/g, '"sessionToken":"[redacted]"')
-    .replace(/"email":"[^"]+"/g, '"email":"[redacted]"');
+  const redactText = (value: string): string => value
+    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[redacted-email]')
+    .replace(/(?:bearer|token|cookie|session|authorization)\s*[:=]\s*[^\s,;]+/gi, '$1=[redacted]')
+    .slice(0, 240);
+  const safeExtra = Object.fromEntries(Object.entries(extra)
+    .filter(([key]) => !/(?:authorization|cookie|credential|password|secret|session|token|storage|proxy)/i.test(key))
+    .slice(0, 20)
+    .map(([key, value]) => [key, redactText(typeof value === 'string' ? value : JSON.stringify(value).slice(0, 240))]));
+  const title = redactText(await page.title().catch(() => ''));
+  let safeUrl = 'unavailable';
+  try {
+    const parsed = new URL(page.url());
+    safeUrl = `${parsed.origin}${parsed.pathname}`.slice(0, 300);
+  } catch {}
 
-  const rawHtml = "[Redacted from debug output]";
-
-  console.log(`[DEBUG-INFO] ${model} at ${stage}: URL=${url.replace(/[?#].*/, '')} (debug files saved)`);
+  console.log(`[DEBUG-INFO] ${model} at ${stage}: URL=${safeUrl} (bounded debug files saved)`);
+  const redactionStyle = await page.addStyleTag({ content: `
+    aside, nav, input, textarea, [contenteditable="true"],
+    [data-testid*="account" i], [data-testid*="profile" i],
+    [aria-label*="profile" i], [aria-label*="account" i], [href*="/settings"] {
+      visibility: hidden !important;
+    }
+  ` }).catch(() => null);
   const screenshotBuffer = await page.screenshot({ fullPage: true }).catch(() => null);
+  await redactionStyle?.evaluate((node) => (node as Element).remove()).catch(() => {});
 
   if (screenshotBuffer) {
     await fs.promises.writeFile(`${prefix}.png`, screenshotBuffer).catch(() => {});
   }
-  await fs.promises.writeFile(`${prefix}.json`, JSON.stringify({ model, stage, title, url, bodyText, rawHtml, extra }, null, 2), 'utf8').catch(() => {});
+  await fs.promises.writeFile(`${prefix}.json`, JSON.stringify({ model, stage: safeStage, title, url: safeUrl, extra: safeExtra }, null, 2), 'utf8').catch(() => {});
 }
 
 export async function firstVisibleLocator(

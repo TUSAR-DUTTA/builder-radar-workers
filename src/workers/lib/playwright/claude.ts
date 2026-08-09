@@ -1,8 +1,13 @@
-import { launchSeededPersistentContext, captureDebug, firstVisibleLocator, PlaywrightContextHandle } from './shared';
-import { snapshotConversationDom, waitForStableCorrelatedTurn, ConversationDomSpec } from './conversation-dom';
-import { BrowserCapture, buildProvenance, type TerminalProof, type BrowserConnectionMetadata } from './capture-contract';
+import { launchSeededPersistentContext, captureDebug, firstVisibleLocator, type PlaywrightContextHandle } from './shared';
+import { snapshotConversationDom, waitForTerminalCorrelatedTurn } from './conversation-dom';
+import { CLAUDE_TURN_SPEC } from './provider-turn-specs';
+import { type BrowserCapture, buildProvenance, type TerminalProof, type BrowserConnectionMetadata } from './capture-contract';
 
-export let sharedClaudeBrowser: { runtime: PlaywrightContextHandle, page: import('playwright').Page, connectionMeta: BrowserConnectionMetadata } | null = null;
+export let sharedClaudeBrowser: {
+  runtime: PlaywrightContextHandle;
+  page: import('playwright').Page;
+  connectionMeta: BrowserConnectionMetadata;
+} | null = null;
 
 export async function closeClaudeBrowser() {
   if (sharedClaudeBrowser) {
@@ -19,123 +24,74 @@ export async function scrapeClaudePrompt(
   if (!sharedClaudeBrowser) {
     const runtime = await launchSeededPersistentContext('claude');
     try {
-      const ctx = runtime.context;
-      const page = await ctx.newPage();
+      const page = await runtime.context.newPage();
       await page.goto('https://claude.ai/new', { waitUntil: 'domcontentloaded', timeout: 45_000 });
-      await page.waitForTimeout(2500);
       sharedClaudeBrowser = { runtime, page, connectionMeta: runtime.connectionMeta };
-    } catch (err) {
+    } catch (error) {
       await runtime.close().catch(() => {});
-      throw err;
+      throw error;
     }
   }
-
-  const { page } = sharedClaudeBrowser;
-
+  const { page, connectionMeta } = sharedClaudeBrowser;
   try {
     await page.goto('https://claude.ai/new', { waitUntil: 'domcontentloaded', timeout: 45_000 });
-    await page.waitForTimeout(1000);
-
-    // Attempt to dismiss cookie popups repeatedly
     let composer: import('playwright').Locator | null = null;
-    for (let i = 0; i < 15; i++) {
+    for (let attempt = 0; attempt < 15; attempt += 1) {
       if (signal?.aborted) throw new Error('provider_deadline_aborted');
-      await page.locator('button:has-text("Accept All Cookies")').click({ timeout: 1000 }).catch(() => {});
-      composer = await firstVisibleLocator(page, '[contenteditable="true"], textarea, #prompt-textarea');
+      await page.locator('button:has-text("Accept All Cookies")').click({ timeout: 500 }).catch(() => {});
+      composer = await firstVisibleLocator(page, '[contenteditable="true"][data-testid="chat-input"], [contenteditable="true"], textarea');
       if (composer) break;
-      await page.waitForTimeout(1000);
+      await page.waitForTimeout(1_000);
     }
+    if (!composer) throw new Error('login_required:claude_missing_composer');
 
-    if (!composer) {
-      await captureDebug(page, 'claude', 'missing-composer');
-      throw new Error(`Claude composer not found`);
-    }
-
-    const spec: ConversationDomSpec = {
-      userSelector: '[data-is-user="true"], [data-testid="user-message"], [class*="font-user-message"]',
-      assistantSelector: '[data-is-user="false"], [data-testid="assistant-message"], [class*="font-claude-response"]',
-      streamingSelector: '[data-is-streaming="true"], [class*="streaming"], [class*="animate-pulse"]',
-      loginSelector: 'form[action*="login"], [href*="/login"]',
-      challengeSelector: 'iframe[src*="cloudflare"], #challenge-running',
-      rateLimitSelector: '[data-testid="rate-limit-message"]',
-      providerOrigin: 'https://claude.ai',
-    };
-
-    const snapshot = await page.evaluate(snapshotConversationDom, spec);
-
-    await composer.click({ timeout: 20_000, force: true }).catch(() => {});
+    const snapshot = await page.evaluate(snapshotConversationDom, CLAUDE_TURN_SPEC);
+    const submittedUiPrompt = `Use web search and answer this buyer question with citations:\n\n${prompt}`;
+    await composer.click({ timeout: 20_000, force: true });
     await composer.fill('');
-    await page.keyboard.insertText(`Use web search and answer this buyer question with citations:\n\n${prompt}`);
-    if (signal?.aborted) throw new Error('provider_deadline_aborted');
-    await page.waitForTimeout(300);
+    await page.keyboard.insertText(submittedUiPrompt);
+    const composerText = await composer.inputValue().catch(async () => composer!.innerText().catch(() => ''));
+    if (composerText !== submittedUiPrompt) throw new Error('prompt_binding_unverified:claude_composer_round_trip');
+    const submit = await firstVisibleLocator(page, 'button[aria-label="Send message"], button[data-testid="send-button"]');
+    if (submit && !await submit.isDisabled().catch(() => true)) await submit.click();
+    else await composer.press('Enter');
 
-    const submit = await firstVisibleLocator(page, 'button[aria-label*="Send" i], button[data-testid="send-button"]');
-    if (submit) {
-      const disabled = await submit.isDisabled().catch(() => false);
-      if (!disabled) {
-        await submit.click().catch(() => {});
-      } else {
-        await composer.press('Enter');
-      }
-    } else {
-      await composer.press('Enter');
-    }
-
-    const inspection = await waitForStableCorrelatedTurn(page, {
-      spec,
+    const inspection = await waitForTerminalCorrelatedTurn(page, {
+      spec: CLAUDE_TURN_SPEC,
       snapshot,
-      expectedPrompt: prompt,
+      expectedPrompt: submittedUiPrompt,
       provider: 'claude',
-      timeoutMs: deadlineAt ? Math.max(0, deadlineAt - Date.now()) : 180_000,
+      timeoutMs: deadlineAt ? Math.max(1_000, deadlineAt - Date.now()) : 180_000,
       signal,
     });
-
-    const isCloudflare = /Performing security verification|Verifies you are not a bot/i.test(inspection.rawAnswer);
-    if (inspection.rawAnswer.length < 5 || isCloudflare) {
-      await captureDebug(page, 'claude', 'bad-response', { isCloudflare });
-      throw new Error(isCloudflare ? 'Claude blocked by Cloudflare' : 'Claude did not render a real assistant answer');
+    if (!inspection.userNodeId || !inspection.assistantNodeId || !inspection.answerNodeId || !inspection.terminalSignal) {
+      throw new Error('provider_identity_missing:claude');
     }
-
-    // Verify composer was cleared after submission
-    const composerText = await page.evaluate(() => {
-      const el = document.querySelector('[contenteditable="true"], textarea, #prompt-textarea') as HTMLElement;
-      return el ? (el.textContent || (el as HTMLTextAreaElement).value || '').trim() : '';
-    }).catch(() => '');
-    if (composerText.length > 10) {
-      console.warn('[claude] Composer not cleared after submission — possible stuck state, retrying Enter');
-      // Attempt one more Enter press
-      const retryComposer = await firstVisibleLocator(page, '[contenteditable="true"], textarea, #prompt-textarea');
-      if (retryComposer) {
-        await retryComposer.press('Enter').catch(() => {});
-        await page.waitForTimeout(2000);
-      }
-    }
-
-    const { connectionMeta } = sharedClaudeBrowser!;
-    const uiLocale = await page.evaluate(() => document.documentElement.lang || 'en-US').catch(() => 'en-US');
-    connectionMeta.locale = uiLocale;
-
-    if (!inspection.userNodeId || !inspection.assistantNodeId || !inspection.promptMatched) {
-      throw new Error('capture_rejected: missing stable provider IDs');
-    }
-
+    connectionMeta.actualLocale = await page.evaluate(() => document.documentElement.lang || 'en-US').catch(() => 'en-US');
     const terminalProof: TerminalProof = {
       providerState: 'complete',
       userTurnId: inspection.userNodeId,
       assistantTurnId: inspection.assistantNodeId,
-      answerNodeId: inspection.assistantNodeId,
-      terminalSignal: inspection.status,
-      stableChecks: inspection.promptMatched ? 3 : 5,
+      answerNodeId: inspection.answerNodeId,
+      terminalSignal: inspection.terminalSignal,
+      stableChecks: inspection.observedStableChecks,
     };
-
-    return { 
+    await captureDebug(page, 'claude', 'terminal-success', {
+      userTurnId: inspection.userNodeId, assistantTurnId: inspection.assistantNodeId,
+      answerNodeId: inspection.answerNodeId, terminalSignal: inspection.terminalSignal,
+      rawByteLength: Buffer.byteLength(inspection.rawAnswer, 'utf8'),
+    });
+    return {
       capturedPrompt: prompt,
-      rawAnswer: inspection.rawAnswer, 
+      rawAnswer: inspection.rawAnswer,
       citations: inspection.links,
-      provenance: buildProvenance('claude', { terminalProof }, connectionMeta)
+      provenance: buildProvenance('claude', { terminalProof }, connectionMeta),
     };
-  } catch (err) {
+  } catch (error) {
+    await captureDebug(page, 'claude', 'capture-rejected', {
+      reason: error instanceof Error ? error.message.slice(0, 160) : 'unknown_error',
+    });
     await closeClaudeBrowser();
-    throw err;
+    throw error;
   }
 }

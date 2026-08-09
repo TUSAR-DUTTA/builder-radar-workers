@@ -28,6 +28,7 @@ jobs:
     timeout-minutes: 45
 
     env:
+      PRIVATE_INGESTION_COMMIT: ${{ vars.PRIVATE_INGESTION_COMMIT }}
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
       NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
@@ -51,6 +52,14 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Validate and stage exact private runtime
+        uses: ./.github/actions/stage-private-runtime
+        with:
+          private_commit: ${{ vars.PRIVATE_INGESTION_COMMIT }}
+          core_token: ${{ secrets.CORE_REPO_PAT }}
 
       # API-source half — fetch HN/Bluesky/dev.to/StackExchange/GitHub/Lemmy/YouTube/Medium/News/
       # Mastodon via the deployed endpoint. Independent of Playwright and failure-tolerant, so a
@@ -77,23 +86,6 @@ jobs:
       - name: Verify evidence-contract version and integrity
         run: npm run verify:evidence-contract
 
-      - name: Fetch private core (read-only, runtime only)
-        uses: actions/checkout@v4
-        with:
-          repository: TUSAR-DUTTA/Builder-Radar
-          ref: ${{ vars.PRIVATE_INGESTION_COMMIT || 'main' }}
-          token: ${{ secrets.CORE_REPO_PAT }}
-          path: _core
-      - name: Stage private core into src/ (never committed)
-        run: |
-          if [ -n "${{ vars.PRIVATE_INGESTION_COMMIT }}" ]; then
-            test "$(git -C _core rev-parse HEAD)" = "${{ vars.PRIVATE_INGESTION_COMMIT }}"
-          fi
-          node -e "const worker=require('./package.json'); const core=require('./_core/package.json'); const name='@builder-radar/evidence-contract'; if (worker.dependencies[name] && core.dependencies[name] && worker.dependencies[name] !== core.dependencies[name]) throw new Error('evidence-contract pins differ')"
-          cp -r _core/src/db src/db
-          cp -r _core/src/lib src/lib
-          if [ -d _core/src/types ]; then cp -r _core/src/types src/types; fi
-          rm -rf _core
       - name: Install Playwright system dependencies
         run: npx playwright install-deps chromium
 
@@ -115,3 +107,12 @@ jobs:
           SOCIAL_SCRAPE: '1'
           SCRAPE_PROJECT_ID: ${{ github.event.inputs.project_id }}
         run: xvfb-run -a npx tsx src/workers/runner.ts
+
+      - name: Upload bounded redacted diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: social-worker-diagnostics-${{ github.run_id }}
+          path: /tmp/playwright_debug
+          if-no-files-found: ignore
+          retention-days: 3

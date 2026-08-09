@@ -8,7 +8,6 @@ export default defineConfig([
     'src/db/**',
     'src/lib/**',
     'src/types/**',
-    'test/**',
     'playwright_google_profile/**',
     'playwright_sessions/**',
   ]),

@@ -1,0 +1,41 @@
+name: Stage exact private runtime
+description: Validate immutable runtime SHAs, check out the exact private core, and stage its runtime sources.
+inputs:
+  private_commit:
+    description: Exact 40-character private-core commit
+    required: true
+  core_token:
+    description: Token used only by actions/checkout for the private repository
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Fail closed on runtime identity before private checkout
+      shell: bash
+      env:
+        EXPECTED_PRIVATE_SHA: ${{ inputs.private_commit }}
+      run: |
+        [[ "$EXPECTED_PRIVATE_SHA" =~ ^[0-9a-fA-F]{40}$ ]] || { echo "PRIVATE_INGESTION_COMMIT must be exactly 40 hexadecimal characters"; exit 1; }
+        [[ "$GITHUB_SHA" =~ ^[0-9a-fA-F]{40}$ ]] || { echo "GITHUB_SHA must be exactly 40 hexadecimal characters"; exit 1; }
+
+    - name: Check out exact private core
+      uses: actions/checkout@v4
+      with:
+        repository: TUSAR-DUTTA/Builder-Radar
+        ref: ${{ inputs.private_commit }}
+        token: ${{ inputs.core_token }}
+        path: _core
+        persist-credentials: false
+
+    - name: Verify and stage exact private core
+      shell: bash
+      env:
+        EXPECTED_PRIVATE_SHA: ${{ inputs.private_commit }}
+      run: |
+        actual="$(git -C _core rev-parse HEAD)"
+        test "$actual" = "$EXPECTED_PRIVATE_SHA"
+        node -e "const worker=require('./package.json'); const core=require('./_core/package.json'); const name='@builder-radar/evidence-contract'; if (!worker.dependencies[name] || worker.dependencies[name] !== core.dependencies[name]) throw new Error('evidence-contract pins differ')"
+        cp -r _core/src/db src/db
+        cp -r _core/src/lib src/lib
+        if [ -d _core/src/types ]; then cp -r _core/src/types src/types; fi
+        rm -rf _core

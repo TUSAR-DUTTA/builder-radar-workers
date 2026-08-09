@@ -13,9 +13,14 @@ import { scrapePerplexityPrompt, closePerplexityBrowser } from './playwright/per
 import { scrapeGoogleAioPrompt, closeGoogleAioBrowser } from './playwright/google-aio';
 import { scrapeGrokPrompt, closeGrokBrowser } from './playwright/grok';
 
-import { isBrowserNoAnswerError, type BrowserCapture } from './playwright/capture-contract';
+import {
+  BROWSER_ADAPTER_VERSIONS,
+  isBrowserNoAnswerError,
+  type BrowserCapture,
+} from './playwright/capture-contract';
 import { classifySamplingFailure, type FailureClassification } from '@/lib/scan-job-contract';
 import type { AdapterResultV1, EvidenceFailureCode } from '@builder-radar/evidence-contract';
+import { validateWorkerAdapterEnvelope } from './evidence-contract-boundary';
 
 const observedBrowserAnswers = new Map<string, string>();
 
@@ -97,6 +102,31 @@ function boundedFailureReason(error: unknown): string {
   return message.replace(/[\r\n\t]+/g, ' ').slice(0, 240) || 'unknown_error';
 }
 
+function pendingDatabaseReceipt(input: {
+  scanCellId: string;
+  model: AnswerModel;
+  rawBytes: Buffer;
+  mediaType: string;
+}) {
+  const contentSha256 = crypto.createHash('sha256').update(input.rawBytes).digest('hex');
+  return {
+    kind: 'database' as const,
+    uri: `urn:builder-radar:database-receipt:ingestion-pending:${input.scanCellId}:${input.model}:${contentSha256}`,
+    contentSha256,
+    mediaType: input.mediaType,
+    immutable: true as const,
+  };
+}
+
+function rejectedFailureCode(reason: string): EvidenceFailureCode {
+  if (reason.includes('prompt_binding_unverified')) return 'prompt_binding_unverified';
+  if (reason.includes('provider_identity_missing')) return 'provenance_unverified';
+  if (reason.includes('provider_not_terminal') || reason.includes('terminal_signal_missing')) return 'provider_not_terminal';
+  if (reason.includes('provider_refusal') || reason.includes('provider_no_answer')) return 'capture_rejected';
+  if (reason.includes('region_unverified')) return 'region_unverified';
+  return 'capture_incomplete';
+}
+
 export async function runPromptViaPlaywrightDetailed(
   router: AIRouter,
   prompt: string,
@@ -113,6 +143,7 @@ export async function runPromptViaPlaywrightDetailed(
 
   for (const model of models) {
     const started = Date.now();
+    let acceptedReceiptRetained = false;
     if (!isPlaywrightAnswerModel(model)) {
       attempts.push({ model, status: 'skipped', stage: 'session', failureReason: 'unsupported_playwright_engine', latencyMs: 0 });
       outcomes[model] = { category: 'acquisition_failure', retryable: false, code: 'unsupported_engine' };
@@ -132,6 +163,66 @@ export async function runPromptViaPlaywrightDetailed(
       else if (model === 'perplexity') res = await scrapePerplexityPrompt(prompt, signal, deadlineAt);
       else if (model === 'google-aio') res = await scrapeGoogleAioPrompt(prompt, signal, deadlineAt);
       else res = await scrapeGrokPrompt(prompt, signal, deadlineAt);
+
+      const evidenceProvenance: EvidenceProvenance = {
+        requestedMarket: res.provenance.requestedMarket,
+        actualRegion: res.provenance.actualRegion,
+        regionVerificationStatus: res.provenance.regionVerificationStatus === 'verified' ? 'verified'
+          : (res.provenance.regionVerificationStatus === 'bypassed' ? 'unverified' : 'mismatch'),
+        requestedLocale: res.provenance.requestedLocale || 'en-US',
+        actualLocale: res.provenance.actualLocale || 'en-US',
+        actualConnectionMode: res.provenance.actualConnectionMode,
+        proxyRequested: !!res.provenance.proxyRequested,
+        proxyUsed: res.provenance.proxyUsed ?? null,
+        fallbackOccurred: res.provenance.fallbackOccurred,
+        adapterVersion: res.provenance.adapterVersion,
+        browserProviderMetadata: {
+          connection: res.provenance.connectionMetadata as unknown as Record<string, import('@builder-radar/evidence-contract').JsonValue>,
+          binding: {
+            submittedPromptSha256: crypto.createHash('sha256').update(prompt, 'utf8').digest('hex'),
+            rawContentSha256: crypto.createHash('sha256').update(Buffer.from(res.rawAnswer, 'utf8')).digest('hex'),
+            stableChecks: res.provenance.terminalProof?.stableChecks ?? 0,
+          },
+        },
+        userTurnId: res.provenance.terminalProof?.userTurnId ?? null,
+        assistantTurnId: res.provenance.terminalProof?.assistantTurnId ?? null,
+        answerNodeId: res.provenance.terminalProof?.answerNodeId ?? null,
+        providerTerminalSignal: res.provenance.providerTerminalSignal ?? null,
+      };
+      const acceptedAdapter: AdapterResultV1 = {
+        contractVersion: '1.0.1',
+        schemaVersion: 'evidence_adapter_v1',
+        engine: model,
+        adapterVersion: res.provenance.adapterVersion,
+        projectId: context.projectId,
+        scanJobId: context.scanJobId,
+        scanCellId: context.scanCellId,
+        baselineId: context.baselineId ?? 'legacy_unversioned',
+        promptId: context.promptId,
+        submittedPrompt: prompt,
+        capturedPrompt: res.capturedPrompt || prompt,
+        rawAnswer: res.rawAnswer,
+        rawReceipt: pendingDatabaseReceipt({
+          scanCellId: context.scanCellId,
+          model,
+          rawBytes: Buffer.from(res.rawAnswer, 'utf8'),
+          mediaType: 'text/plain;charset=utf-8',
+        }),
+        capturedAt: new Date().toISOString(),
+        captureStatus: 'accepted',
+        promptBindingStatus: 'verified',
+        completionStatus: 'terminal',
+        provenance: evidenceProvenance,
+        primaryFailureCode: null,
+        diagnostics: { durability: 'pending_private_database_ingestion' },
+      };
+      const semanticValidation = validateWorkerAdapterEnvelope(acceptedAdapter);
+      if (!semanticValidation.success) {
+        throw new Error(`invalid_adapter_payload:${semanticValidation.failure.primaryFailureCode}:${semanticValidation.failure.path ?? 'root'}`);
+      }
+      // Acquisition evidence is retained before any sanitization, quality gate, or analysis work.
+      adapterResults.push(semanticValidation.value);
+      acceptedReceiptRetained = true;
 
       const answer = sanitizeAnswerText(res.rawAnswer);
       if (isLowQualityAnswer(answer)) {
@@ -177,52 +268,6 @@ export async function runPromptViaPlaywrightDetailed(
       });
       attempts.push({ model, status: 'succeeded', stage: 'complete', failureReason: null, latencyMs: Date.now() - started });
 
-      const evidenceProvenance: EvidenceProvenance = {
-        requestedMarket: res.provenance.requestedMarket,
-        actualRegion: res.provenance.actualRegion,
-        regionVerificationStatus: res.provenance.regionVerificationStatus === 'verified' ? 'verified' : (res.provenance.regionVerificationStatus === 'bypassed' ? 'unverified' : 'mismatch'),
-        requestedLocale: res.provenance.requestedLocale || 'en-US',
-        actualLocale: res.provenance.actualLocale || 'en-US',
-        actualConnectionMode: res.provenance.actualConnectionMode,
-        proxyRequested: !!res.provenance.proxyRequested,
-        proxyUsed: res.provenance.proxyUsed ?? null,
-        fallbackOccurred: res.provenance.fallbackOccurred,
-        adapterVersion: res.provenance.adapterVersion,
-        browserProviderMetadata: res.provenance.connectionMetadata as unknown as Record<string, import('@builder-radar/evidence-contract').JsonValue>,
-        userTurnId: res.provenance.terminalProof?.userTurnId ?? null,
-        assistantTurnId: res.provenance.terminalProof?.assistantTurnId ?? null,
-        answerNodeId: res.provenance.terminalProof?.answerNodeId ?? null,
-        providerTerminalSignal: res.provenance.providerTerminalSignal ?? null,
-      };
-
-      adapterResults.push({
-        contractVersion: '1.0.1',
-        schemaVersion: 'evidence_adapter_v1',
-        engine: model,
-        adapterVersion: res.provenance.adapterVersion,
-        projectId: context.projectId,
-        scanJobId: context.scanJobId,
-        scanCellId: context.scanCellId,
-        baselineId: context.baselineId ?? 'legacy_unversioned',
-        promptId: context.promptId,
-        submittedPrompt: prompt,
-        capturedPrompt: res.capturedPrompt || prompt,
-        rawAnswer: res.rawAnswer,
-        rawReceipt: {
-          kind: 'object_store',
-          uri: `receipt://builder-radar/${context.scanJobId}/${model}/${Date.now()}`,
-          contentSha256: crypto.createHash('sha256').update(res.rawAnswer).digest('hex'),
-          mediaType: 'text/html',
-          immutable: true,
-        },
-        capturedAt: new Date().toISOString(),
-        captureStatus: 'accepted',
-        promptBindingStatus: 'verified',
-        completionStatus: 'terminal',
-        provenance: evidenceProvenance,
-        primaryFailureCode: null,
-        diagnostics: {},
-      });
     } catch (error) {
       const reason = boundedFailureReason(error);
       console.warn(`[geo-playwright] ${model} failed for "${prompt.slice(0, 40)}": ${reason}`);
@@ -232,24 +277,29 @@ export async function runPromptViaPlaywrightDetailed(
         throw error;
       }
       
-      const failureCode: EvidenceFailureCode = reason.includes('region_unverified') ? 'region_unverified' :
-        reason.includes('prompt_identity_unverified') || reason.includes('prompt_binding_unverified') ? 'prompt_binding_unverified' :
-        'capture_incomplete';
+      const failureCode = rejectedFailureCode(reason);
         
       attempts.push({ model, status: 'failed', stage: 'acquisition', failureReason: reason, latencyMs: Date.now() - started });
       
-      const isBindingError = isPromptIdentityError(error) || reason.includes('prompt_binding_unverified');
+      const isBindingError = isPromptIdentityError(error)
+        || reason.includes('prompt_binding_unverified')
+        || reason.includes('provider_identity_missing');
       if (isBindingError) {
         outcomes[model] = { category: 'identity_binding_failure', retryable: false, code: 'prompt_identity_unverified' as any };
+      } else if (isBrowserNoAnswerError(error) || reason.includes('provider_no_answer') || reason.includes('provider_refusal')) {
+        outcomes[model] = { category: 'no_answer', retryable: false, code: 'provider_no_answer' as any };
       } else {
         outcomes[model] = { category: 'acquisition_failure', retryable: false, code: 'capture_incomplete' as any };
       }
 
-      adapterResults.push({
+      const adapterVersion = BROWSER_ADAPTER_VERSIONS[model] ?? 'unknown';
+      const failureBytes = Buffer.from('', 'utf8');
+
+      if (!acceptedReceiptRetained) adapterResults.push({
         contractVersion: '1.0.1',
         schemaVersion: 'evidence_adapter_v1',
         engine: model,
-        adapterVersion: 'unknown',
+        adapterVersion,
         projectId: context.projectId,
         scanJobId: context.scanJobId,
         scanCellId: context.scanCellId,
@@ -257,18 +307,17 @@ export async function runPromptViaPlaywrightDetailed(
         promptId: context.promptId,
         submittedPrompt: prompt,
         capturedPrompt: prompt,
-        rawAnswer: '',
-        rawReceipt: {
-          kind: 'object_store',
-          uri: `receipt://builder-radar/${context.scanJobId}/${model}/${Date.now()}_error`,
-          contentSha256: crypto.createHash('sha256').update(reason).digest('hex'),
-          mediaType: 'text/plain',
-          immutable: true,
-        },
+        rawAnswer: null,
+        rawReceipt: pendingDatabaseReceipt({
+          scanCellId: context.scanCellId,
+          model,
+          rawBytes: failureBytes,
+          mediaType: 'text/plain;charset=utf-8',
+        }),
         capturedAt: new Date().toISOString(),
         captureStatus: 'rejected',
         promptBindingStatus: isBindingError ? 'unverified' : 'verified',
-        completionStatus: 'terminal',
+        completionStatus: failureCode === 'provider_not_terminal' ? 'incomplete' : 'unverified',
         provenance: {
           requestedMarket: 'US',
           actualRegion: null,
@@ -279,7 +328,7 @@ export async function runPromptViaPlaywrightDetailed(
           proxyRequested: false,
           proxyUsed: null,
           fallbackOccurred: false,
-          adapterVersion: 'unknown',
+          adapterVersion,
           browserProviderMetadata: {},
           userTurnId: null,
           assistantTurnId: null,
@@ -289,6 +338,7 @@ export async function runPromptViaPlaywrightDetailed(
         primaryFailureCode: failureCode,
         diagnostics: {
           internalReason: reason,
+          durability: 'pending_private_database_ingestion',
         },
       });
     }

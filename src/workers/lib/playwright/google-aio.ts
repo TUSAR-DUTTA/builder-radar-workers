@@ -21,11 +21,6 @@ export async function scrapeGoogleAioPrompt(
     const ctx = runtime.context;
     const page = ctx.pages()[0] || await ctx.newPage();
     await page.goto('https://www.google.com/ncr', { waitUntil: 'domcontentloaded', timeout: 45_000 });
-    console.log(`[google-aio] Final URL after goto: ${page.url()}`);
-    const cookies = await ctx.cookies(page.url());
-    console.log(`[google-aio] Found ${cookies.length} cookies on ${page.url()}`);
-    const has1PSID = cookies.some(c => c.name === '__Secure-1PSID');
-    console.log(`[google-aio] __Secure-1PSID present: ${has1PSID}`);
     await page.waitForTimeout(2500);
     sharedGoogleAioBrowser = { runtime, page, connectionMeta: runtime.connectionMeta };
   }
@@ -62,6 +57,7 @@ export async function scrapeGoogleAioPrompt(
     const deadline = deadlineAt || (Date.now() + 180_000);
     let finalInspection: any = null;
     let stableContainerIdentity: string | null = null;
+    let noAioStableChecks = 0;
     
     while (Date.now() < deadline) {
       if (signal?.aborted) throw new Error('provider_deadline_aborted');
@@ -69,7 +65,7 @@ export async function scrapeGoogleAioPrompt(
       
       let inspection;
       try {
-        inspection = await page.evaluate((p) => inspectGoogleAioDom(p), prompt);
+        inspection = await page.evaluate(inspectGoogleAioDom, prompt);
       } catch {
         continue;
       }
@@ -77,6 +73,11 @@ export async function scrapeGoogleAioPrompt(
          await captureDebug(page, 'google-aio', inspection.state);
          throw new Error(`Google blocked by ${inspection.state}`);
       }
+      if (inspection.state === 'login_required' || inspection.state === 'rate_limited'
+        || inspection.state === 'interstitial' || inspection.state === 'duplicate_aio') {
+        throw new Error(`${inspection.state}:google-aio`);
+      }
+      if (inspection.state === 'refusal') throw new Error('provider_refusal:google-aio');
       if (inspection.state === 'search_submitted') {
          continue;
       }
@@ -114,6 +115,8 @@ export async function scrapeGoogleAioPrompt(
         }
       } else {
          finalInspection = inspection; // results_loaded
+         noAioStableChecks = inspection.state === 'results_loaded' ? noAioStableChecks + 1 : 0;
+         if (noAioStableChecks >= 5) break;
       }
     }
 
@@ -128,7 +131,7 @@ export async function scrapeGoogleAioPrompt(
 
     const { connectionMeta } = sharedGoogleAioBrowser;
     const uiLocale = await page.evaluate(() => document.documentElement.lang || 'en-US').catch(() => 'en-US');
-    connectionMeta.locale = uiLocale;
+    connectionMeta.actualLocale = uiLocale;
 
     const userTurnId = await page.evaluate(() => {
       const input = document.querySelector('textarea[name="q"], input[name="q"]');
@@ -147,6 +150,13 @@ export async function scrapeGoogleAioPrompt(
       terminalSignal: finalInspection.state,
       stableChecks: stableCount,
     };
+
+    await captureDebug(page, 'google-aio', 'terminal-success', {
+      userTurnId, assistantTurnId: finalInspection.containerIdentity,
+      answerNodeId: finalInspection.containerIdentity, terminalSignal: finalInspection.state,
+      rawByteLength: Buffer.byteLength(finalInspection.rawAnswer, 'utf8'),
+      citationCount: finalInspection.links.length,
+    });
 
     return { 
       capturedPrompt: prompt,

@@ -1,34 +1,25 @@
-name: Test All Workers - Single Prompt
-
+name: Test One Worker - Exact Project Prompt
 on:
   workflow_dispatch:
-
-env:
-  PLAYWRIGHT_PROXY_SERVER: ${{ secrets.PLAYWRIGHT_PROXY_SERVER }}
-  PLAYWRIGHT_PROXY_CREDENTIALS: ${{ secrets.PLAYWRIGHT_PROXY_CREDENTIALS }}
-  CHATGPT_SESSION_B64: ${{ secrets.CHATGPT_SESSION_B64 }}
-  CLAUDE_SESSION_B64: ${{ secrets.CLAUDE_SESSION_B64 }}
-  PERPLEXITY_SESSION_B64: ${{ secrets.PERPLEXITY_SESSION_B64 }}
-  GOOGLE_SESSION_B64: ${{ secrets.GOOGLE_SESSION_B64 }}
-  GROK_SESSION_B64: ${{ secrets.GROK_SESSION_B64 }}
-
+    inputs:
+      engine:
+        description: One exact provider adapter
+        required: true
+        type: choice
+        options: [chatgpt, claude, perplexity, grok, google-aio]
+      project_id:
+        description: Exact project UUID
+        required: true
+        type: string
+      prompt_id:
+        description: Exact active prompt UUID
+        required: true
+        type: string
 jobs:
-  run-test:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Install Playwright Browsers
-        run: npx playwright install --with-deps chromium
-
-      - name: Run run-single-prompt.ts
-        run: npx tsx run-single-prompt.ts
+  canary:
+    uses: ./.github/workflows/_consumer-canary.yml
+    with:
+      engine: ${{ inputs.engine }}
+      project_id: ${{ inputs.project_id }}
+      prompt_id: ${{ inputs.prompt_id }}
+    secrets: inherit

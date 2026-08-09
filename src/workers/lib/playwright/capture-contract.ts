@@ -1,16 +1,52 @@
 import type { AnswerModel } from '@/lib/geo/types';
 
 export const BROWSER_ADAPTER_VERSIONS: Record<string, string> = {
-  'chatgpt-consumer': 'chatgpt_dom_v5',
-  claude: 'claude_dom_v5',
-  perplexity: 'perplexity_dom_v5',
-  'google-aio': 'google_aio_state_v5',
-  grok: 'grok_dom_v5',
+  'chatgpt-consumer': 'chatgpt_dom_v6',
+  claude: 'claude_dom_v6',
+  perplexity: 'perplexity_dom_v6',
+  'google-aio': 'google_aio_state_v6',
+  grok: 'grok_dom_v6',
   'gemini-grounded': 'not_browser_captured',
   kimi: 'not_browser_captured',
   mistral: 'not_browser_captured',
   'gpt-oss': 'not_browser_captured',
 };
+
+export const PROVIDER_TERMINAL_SIGNALS = Object.freeze({
+  chatgpt_dom_v6: ['chatgpt_turn_actions_complete'],
+  claude_dom_v6: ['claude_response_actions_complete'],
+  perplexity_dom_v6: ['perplexity_answer_actions_complete'],
+  grok_dom_v6: ['grok_response_actions_complete'],
+  google_aio_state_v5: ['aio_complete'],
+  google_aio_state_v6: ['aio_complete'],
+} as const);
+
+export type BrowserTerminalSignal =
+  typeof PROVIDER_TERMINAL_SIGNALS[keyof typeof PROVIDER_TERMINAL_SIGNALS][number];
+
+const SHA40 = /^[a-f0-9]{40}$/i;
+const PLACEHOLDER_PROVIDER_ID = /^(?:(?:unknown|missing|none|null|dummy|synthetic|placeholder|n\/a)(?:[-_:].*)?|(?:chatgpt|claude|perplexity|grok|google)[-_](?:query|answer|user|assistant)[-_]\d+)$/i;
+
+export function isRealProviderIdentity(value: string | null | undefined): value is string {
+  const candidate = value?.trim() ?? '';
+  return candidate.length >= 2 && candidate.length <= 500 && !PLACEHOLDER_PROVIDER_ID.test(candidate);
+}
+
+export function isTerminalSignalCompatible(adapterVersion: string, signal: string | null | undefined): signal is BrowserTerminalSignal {
+  const accepted = PROVIDER_TERMINAL_SIGNALS[adapterVersion as keyof typeof PROVIDER_TERMINAL_SIGNALS] as readonly string[] | undefined;
+  return Boolean(accepted?.includes(signal ?? ''));
+}
+
+export function assertRuntimeCommitShas(env: NodeJS.ProcessEnv = process.env): {
+  workerSha: string;
+  privateSha: string;
+} {
+  const workerSha = env.GITHUB_ACTIONS === 'true' ? env.GITHUB_SHA?.trim() : env.WORKER_RUNTIME_SHA?.trim();
+  const privateSha = env.PRIVATE_INGESTION_COMMIT?.trim();
+  if (!workerSha || !SHA40.test(workerSha)) throw new Error('runtime_compatibility:worker_sha_missing_or_invalid');
+  if (!privateSha || !SHA40.test(privateSha)) throw new Error('runtime_compatibility:private_sha_missing_or_invalid');
+  return { workerSha: workerSha.toLowerCase(), privateSha: privateSha.toLowerCase() };
+}
 
 /** Factual connection metadata returned from the launcher — never inferred from env var existence. */
 export interface BrowserConnectionMetadata {
@@ -33,7 +69,7 @@ export interface TerminalProof {
   userTurnId: string;
   assistantTurnId: string;
   answerNodeId: string;
-  terminalSignal: string;
+  terminalSignal: BrowserTerminalSignal;
   stableChecks: number;
 }
 
@@ -85,6 +121,19 @@ export function buildProvenance(
 ): CaptureProvenance {
   if (!connectionMeta) {
     throw new Error('connectionMeta is required to build provenance');
+  }
+
+  if (overrides?.terminalProof) {
+    const proof = overrides.terminalProof;
+    if (!isRealProviderIdentity(proof.userTurnId)
+      || !isRealProviderIdentity(proof.assistantTurnId)
+      || !isRealProviderIdentity(proof.answerNodeId)) {
+      throw new Error('capture_rejected:provider_turn_identity_missing_or_synthetic');
+    }
+    const adapterVersion = BROWSER_ADAPTER_VERSIONS[model] || 'unknown';
+    if (!isTerminalSignalCompatible(adapterVersion, proof.terminalSignal)) {
+      throw new Error('provider_not_terminal:signal_incompatible_with_adapter_version');
+    }
   }
 
   const base: CaptureProvenance = {

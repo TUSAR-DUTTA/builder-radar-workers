@@ -1,8 +1,12 @@
-import { launchSeededPersistentContext, captureDebug, firstVisibleLocator, PlaywrightContextHandle } from './shared';
-import { snapshotConversationDom, waitForStableCorrelatedTurn, ConversationDomSpec } from './conversation-dom';
-import { BrowserCapture, buildProvenance, type TerminalProof, type BrowserConnectionMetadata } from './capture-contract';
+import { launchSeededPersistentContext, captureDebug, firstVisibleLocator, type PlaywrightContextHandle } from './shared';
+import { inspectPerplexityDom, type PerplexityInspection } from './perplexity-dom';
+import { type BrowserCapture, buildProvenance, type TerminalProof, type BrowserConnectionMetadata } from './capture-contract';
 
-export let sharedPerplexityBrowser: { runtime: PlaywrightContextHandle, page: import('playwright').Page, connectionMeta: BrowserConnectionMetadata } | null = null;
+export let sharedPerplexityBrowser: {
+  runtime: PlaywrightContextHandle;
+  page: import('playwright').Page;
+  connectionMeta: BrowserConnectionMetadata;
+} | null = null;
 
 export async function closePerplexityBrowser() {
   if (sharedPerplexityBrowser) {
@@ -19,97 +23,87 @@ export async function scrapePerplexityPrompt(
   if (!sharedPerplexityBrowser) {
     const runtime = await launchSeededPersistentContext('perplexity');
     try {
-      const ctx = runtime.context;
-      const page = await ctx.newPage();
+      const page = await runtime.context.newPage();
       await page.goto('https://www.perplexity.ai/', { waitUntil: 'domcontentloaded', timeout: 45_000 });
-      await page.waitForTimeout(2500);
       sharedPerplexityBrowser = { runtime, page, connectionMeta: runtime.connectionMeta };
-    } catch (err) {
+    } catch (error) {
       await runtime.close().catch(() => {});
-      throw err;
+      throw error;
     }
   }
-
-  const { page } = sharedPerplexityBrowser;
-
+  const { page, connectionMeta } = sharedPerplexityBrowser;
   try {
-    if (signal?.aborted) throw new Error('provider_deadline_aborted');
     await page.goto('https://www.perplexity.ai/', { waitUntil: 'domcontentloaded', timeout: 45_000 });
-    if (signal?.aborted) throw new Error('provider_deadline_aborted');
-    await page.waitForTimeout(1000);
-
-    let composer = await firstVisibleLocator(page, '#ask-input, textarea, [contenteditable="true"], [placeholder="Ask anything..."]');
+    const priorUrl = page.url();
+    let composer = await firstVisibleLocator(page, '#ask-input, textarea[placeholder*="Ask" i], [contenteditable="true"][data-lexical-editor="true"]');
     if (!composer) {
-      await page.waitForSelector('textarea, [contenteditable="true"]', { timeout: 15_000 }).catch(() => {});
-      composer = await firstVisibleLocator(page, '#ask-input, textarea, [contenteditable="true"], [placeholder="Ask anything..."]');
+      await page.waitForSelector('#ask-input, textarea[placeholder*="Ask" i], [contenteditable="true"][data-lexical-editor="true"]', { timeout: 15_000 }).catch(() => {});
+      composer = await firstVisibleLocator(page, '#ask-input, textarea[placeholder*="Ask" i], [contenteditable="true"][data-lexical-editor="true"]');
     }
-    if (!composer) {
-      // Fallback: just grab the last contenteditable or ask-input
-      const all = await page.locator('#ask-input, [contenteditable="true"]').all();
-      if (all.length > 0) composer = all[all.length - 1];
-    }
-    if (!composer) {
-      await captureDebug(page, 'perplexity', 'missing-composer');
-      throw new Error(`Perplexity composer not found`);
-    }
-
-    const spec: ConversationDomSpec = {
-      userSelector: '[data-testid="query-text"], [data-testid="user-query"], h1, h2, h3, .prose, .query-text, [class*="user"], [class*="query"], div.whitespace-pre-wrap.select-text, .text-textMain',
-      assistantSelector: '[data-testid="answer-text"], div[class*="answer-text"], .default.font-sans.select-text, div.prose.dark\\:prose-invert',
-      streamingSelector: '[data-is-streaming="true"], [class*="streaming"], [class*="animate-pulse"]',
-      loginSelector: 'form[action*="login"]',
-      challengeSelector: '#challenge-running',
-      rateLimitSelector: '[data-testid="rate-limit-message"]',
-      providerOrigin: 'https://www.perplexity.ai',
-    };
-
-    const snapshot = await page.evaluate(snapshotConversationDom, spec);
-
-    await composer.click({ timeout: 20_000, force: true }).catch(() => {});
+    if (!composer) throw new Error('login_required:perplexity_missing_composer');
+    const submittedUiPrompt = `Use web search and answer this buyer question with citations:\n\n${prompt}`;
+    await composer.click({ timeout: 20_000, force: true });
     await composer.fill('');
-    await page.keyboard.insertText(`Use web search and answer this buyer question with citations:\n\n${prompt}`);
-    if (signal?.aborted) throw new Error('provider_deadline_aborted');
-    await page.keyboard.press('Enter');
+    await page.keyboard.insertText(submittedUiPrompt);
+    const composerText = await composer.inputValue().catch(async () => composer!.innerText().catch(() => ''));
+    if (composerText !== submittedUiPrompt) throw new Error('prompt_binding_unverified:perplexity_composer_round_trip');
+    const submit = await firstVisibleLocator(page, 'button[aria-label="Submit"], button[type="submit"]');
+    if (submit && !await submit.isDisabled().catch(() => true)) await submit.click();
+    else await composer.press('Enter');
 
-    const inspection = await waitForStableCorrelatedTurn(page, {
-      spec,
-      snapshot,
-      expectedPrompt: prompt,
-      provider: 'perplexity',
-      timeoutMs: deadlineAt ? Math.max(0, deadlineAt - Date.now()) : 180_000,
-      signal,
-    });
-
-    if (!inspection.rawAnswer || inspection.rawAnswer.length < 10) {
-      await captureDebug(page, 'perplexity', 'bad-response');
-      throw new Error(`Perplexity did not render a real assistant answer`);
+    const deadline = deadlineAt ?? Date.now() + 180_000;
+    let previousText: string | null = null;
+    let stableChecks = 0;
+    let inspection: PerplexityInspection | null = null;
+    while (Date.now() < deadline) {
+      if (signal?.aborted) throw new Error('provider_deadline_aborted');
+      await page.waitForTimeout(1_000);
+      inspection = await page.evaluate(inspectPerplexityDom, { expectedPrompt: submittedUiPrompt, priorUrl, currentUrl: page.url() });
+      if (['login_required', 'provider_challenge', 'rate_limited', 'provider_interstitial', 'provider_refusal',
+        'provider_no_answer', 'prompt_binding_unverified', 'provider_identity_missing', 'duplicate_current_turn'].includes(inspection.status)) {
+        throw new Error(`${inspection.status}:perplexity`);
+      }
+      if (inspection.status !== 'terminal' || inspection.rawAnswer.length < 40) {
+        previousText = null;
+        stableChecks = 0;
+        continue;
+      }
+      stableChecks = inspection.rawAnswer === previousText ? stableChecks + 1 : 1;
+      previousText = inspection.rawAnswer;
+      if (stableChecks >= 3) break;
     }
-
-    const { connectionMeta } = sharedPerplexityBrowser!;
-    const uiLocale = await page.evaluate(() => document.documentElement.lang || 'en-US').catch(() => 'en-US');
-    connectionMeta.locale = uiLocale;
-
-    if (!inspection.userNodeId || !inspection.assistantNodeId || !inspection.promptMatched) {
-      throw new Error('capture_rejected: missing stable provider IDs');
+    if (!inspection || inspection.status !== 'terminal' || stableChecks < 3) {
+      throw new Error(`provider_not_terminal:perplexity:last_state_${inspection?.status ?? 'waiting'}`);
     }
-
+    if (!inspection.userTurnId || !inspection.assistantTurnId || !inspection.answerNodeId || !inspection.terminalSignal) {
+      throw new Error('provider_identity_missing:perplexity');
+    }
+    connectionMeta.actualLocale = await page.evaluate(() => document.documentElement.lang || 'en-US').catch(() => 'en-US');
     const terminalProof: TerminalProof = {
       providerState: 'complete',
-      userTurnId: inspection.userNodeId,
-      assistantTurnId: inspection.assistantNodeId,
-      answerNodeId: inspection.assistantNodeId,
-      terminalSignal: inspection.status,
-      stableChecks: inspection.promptMatched ? 3 : 5,
+      userTurnId: inspection.userTurnId,
+      assistantTurnId: inspection.assistantTurnId,
+      answerNodeId: inspection.answerNodeId,
+      terminalSignal: inspection.terminalSignal,
+      stableChecks,
     };
-
-    return { 
+    await captureDebug(page, 'perplexity', 'terminal-success', {
+      userTurnId: inspection.userTurnId, assistantTurnId: inspection.assistantTurnId,
+      answerNodeId: inspection.answerNodeId, terminalSignal: inspection.terminalSignal,
+      rawByteLength: Buffer.byteLength(inspection.rawAnswer, 'utf8'),
+      citationCount: inspection.links.length,
+    });
+    return {
       capturedPrompt: prompt,
-      rawAnswer: inspection.rawAnswer, 
+      rawAnswer: inspection.rawAnswer,
       citations: inspection.links,
-      provenance: buildProvenance('perplexity', { terminalProof }, connectionMeta)
+      provenance: buildProvenance('perplexity', { terminalProof }, connectionMeta),
     };
-  } catch (err) {
+  } catch (error) {
+    await captureDebug(page, 'perplexity', 'capture-rejected', {
+      reason: error instanceof Error ? error.message.slice(0, 160) : 'unknown_error',
+    });
     await closePerplexityBrowser();
-    throw err;
+    throw error;
   }
 }

@@ -15,58 +15,54 @@ jobs:
     timeout-minutes: 30
     env:
       PRIVATE_INGESTION_COMMIT: ${{ vars.PRIVATE_INGESTION_COMMIT }}
+      PLAYWRIGHT_DEBUG_DIR: /tmp/playwright_debug
     steps:
-      - name: Checkout worker
+      - name: Check out worker commit
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
-      - name: Setup Node.js
+      - name: Validate and stage exact private runtime
+        uses: ./.github/actions/stage-private-runtime
+        with:
+          private_commit: ${{ vars.PRIVATE_INGESTION_COMMIT }}
+          core_token: ${{ secrets.CORE_REPO_PAT }}
+
+      - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
 
-      - name: Install exact worker dependencies
+      - name: Install exact dependencies
         run: npm ci
 
-      - name: Verify evidence-contract version and integrity
-        run: npm run verify:evidence-contract
-
-      - name: Fetch private runtime
-        uses: actions/checkout@v4
-        with:
-          repository: TUSAR-DUTTA/Builder-Radar
-          ref: ${{ vars.PRIVATE_INGESTION_COMMIT || 'main' }}
-          token: ${{ secrets.CORE_REPO_PAT }}
-          path: _core
-
-      - name: Verify private consumer pin
-        run: |
-          if [ -n "$PRIVATE_INGESTION_COMMIT" ]; then
-            test "$(git -C _core rev-parse HEAD)" = "$PRIVATE_INGESTION_COMMIT"
-          fi
-          node -e "const worker=require('./package.json'); const core=require('./_core/package.json'); const name='@builder-radar/evidence-contract'; if (worker.dependencies[name] && core.dependencies[name] && worker.dependencies[name] !== core.dependencies[name]) throw new Error('private and worker evidence-contract pins differ')"
-
-      - name: Stage pinned private runtime implementation
-        run: |
-          cp -r _core/src/db src/db
-          cp -r _core/src/lib src/lib
-          if [ -d _core/src/types ]; then cp -r _core/src/types src/types; fi
-          rm -rf _core
-
-      - name: Install Chromium before browser-dependent tests
+      - name: Install Chromium for adapter fixtures
         run: npx playwright install --with-deps chromium
 
-      - name: Run shared worker contract tests
-        run: npm run test:worker-contracts
+      - name: Verify evidence contract integrity
+        run: npm run verify:evidence-contract
 
-      - name: Run existing browser contract tests
-        run: npm run test:worker-browser-contracts
+      - name: Run complete deterministic test suite
+        run: npm test
 
-      - name: Typecheck workers explicitly
+      - name: Typecheck worker runtime
         run: npm run typecheck:workers
 
-      - name: Lint intended worker and contract files
+      - name: Lint worker, contract, test, and verification code
         run: npm run lint
 
-      - name: Verify patch whitespace
+      - name: Build and verify package contents
+        run: npm run build
+
+      - name: Verify clean patch whitespace
         run: git diff --check
+
+      - name: Upload bounded test diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: worker-ci-diagnostics-${{ github.run_id }}
+          path: /tmp/playwright_debug
+          if-no-files-found: ignore
+          retention-days: 3

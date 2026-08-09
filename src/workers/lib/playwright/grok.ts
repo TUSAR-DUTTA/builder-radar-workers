@@ -1,8 +1,13 @@
-import { launchSeededPersistentContext, captureDebug, firstVisibleLocator, PlaywrightContextHandle } from './shared';
-import { isGrokTurnCorrelated } from './grok-turn-binding';
-import { BrowserCapture, buildProvenance, type TerminalProof, type BrowserConnectionMetadata } from './capture-contract';
+import { launchSeededPersistentContext, captureDebug, firstVisibleLocator, type PlaywrightContextHandle } from './shared';
+import { snapshotConversationDom, waitForTerminalCorrelatedTurn } from './conversation-dom';
+import { GROK_TURN_SPEC } from './provider-turn-specs';
+import { type BrowserCapture, buildProvenance, type TerminalProof, type BrowserConnectionMetadata } from './capture-contract';
 
-export let sharedGrokBrowser: { runtime: PlaywrightContextHandle, page: import('playwright').Page, connectionMeta: BrowserConnectionMetadata } | null = null;
+export let sharedGrokBrowser: {
+  runtime: PlaywrightContextHandle;
+  page: import('playwright').Page;
+  connectionMeta: BrowserConnectionMetadata;
+} | null = null;
 
 export async function closeGrokBrowser() {
   if (sharedGrokBrowser) {
@@ -18,263 +23,77 @@ export async function scrapeGrokPrompt(
 ): Promise<BrowserCapture> {
   if (!sharedGrokBrowser) {
     const runtime = await launchSeededPersistentContext('grok');
-    const ctx = runtime.context;
-    const page = await ctx.newPage();
-    if (signal?.aborted) throw new Error('provider_deadline_aborted');
-    await page.goto('https://grok.com/', { waitUntil: 'domcontentloaded', timeout: 45_000 });
-    await page.waitForTimeout(2500);
-    sharedGrokBrowser = { runtime, page, connectionMeta: runtime.connectionMeta };
+    try {
+      const page = await runtime.context.newPage();
+      await page.goto('https://grok.com/', { waitUntil: 'domcontentloaded', timeout: 45_000 });
+      sharedGrokBrowser = { runtime, page, connectionMeta: runtime.connectionMeta };
+    } catch (error) {
+      await runtime.close().catch(() => {});
+      throw error;
+    }
   }
-
-  const { page } = sharedGrokBrowser;
-
+  const { page, connectionMeta } = sharedGrokBrowser;
   try {
-    if (signal?.aborted) throw new Error('provider_deadline_aborted');
     await page.goto('https://grok.com/', { waitUntil: 'domcontentloaded', timeout: 45_000 });
-    if (signal?.aborted) throw new Error('provider_deadline_aborted');
-    await page.waitForTimeout(1000);
-
     if (page.url().includes('login') || await page.locator('text="Sign in"').isVisible().catch(() => false)) {
-      await captureDebug(page, 'grok', 'unauthenticated');
-      throw new Error('Grok session is unauthenticated (redirected to login page).');
+      throw new Error('login_required:grok');
     }
-
     let composer: import('playwright').Locator | null = null;
-    for (let i = 0; i < 15; i++) {
-      composer = await firstVisibleLocator(
-        page,
-        '#grok-input, [contenteditable="true"], textarea, [placeholder*="Ask"], [placeholder*="What"], [aria-label*="Ask"], [aria-label*="prompt"]'
-      );
+    for (let attempt = 0; attempt < 15; attempt += 1) {
+      if (signal?.aborted) throw new Error('provider_deadline_aborted');
+      composer = await firstVisibleLocator(page, '#grok-input, [contenteditable="true"][data-testid="composer-input"], textarea[aria-label*="Ask" i]');
       if (composer) break;
-      await page.waitForTimeout(1000);
+      await page.waitForTimeout(1_000);
     }
+    if (!composer) throw new Error('login_required:grok_missing_composer');
 
-    if (!composer) {
-      await captureDebug(page, 'grok', 'missing-composer');
-      throw new Error(`Grok composer not found`);
-    }
-
-    const snapshot = await page.evaluate(() => {
-      const userSelector = [
-        'div[data-testid*="user"]',
-        'div[data-message-author-role="user"]',
-        '.message.user',
-        '[class*="message"][class*="user"]',
-        '.query-text',
-      ].join(', ');
-
-      const assistantSelector = [
-        'div[data-testid*="assistant"]',
-        'div[data-message-author-role="assistant"]',
-        'div[data-testid*="response"]',
-        'div.response-content',
-        'div.response-body',
-        '.message.assistant',
-        '[class*="message"][class*="assistant"]',
-      ].join(', ');
-
-      const userTurns = Array.from(document.querySelectorAll<HTMLElement>(userSelector));
-      let assistantTurns = Array.from(document.querySelectorAll<HTMLElement>(assistantSelector));
-      assistantTurns = assistantTurns.filter(a => !userTurns.some(u => u.contains(a) || u === a));
-      const lastAssistant = assistantTurns.at(-1);
-      return {
-        assistantCount: assistantTurns.length,
-        userCount: userTurns.length,
-        lastAssistantText: lastAssistant ? (lastAssistant.textContent ?? '') : ''
-      };
-    });
-
-    await composer.click({ timeout: 20_000, force: true }).catch(() => {});
+    const snapshot = await page.evaluate(snapshotConversationDom, GROK_TURN_SPEC);
+    await composer.click({ timeout: 20_000, force: true });
     await composer.fill('');
     await page.keyboard.insertText(prompt);
-    await page.waitForTimeout(300);
+    const composerText = await composer.inputValue().catch(async () => composer!.innerText().catch(() => ''));
+    if (composerText !== prompt) throw new Error('prompt_binding_unverified:grok_composer_round_trip');
+    const submit = await firstVisibleLocator(page, 'button[aria-label="Send"], button[aria-label="Submit"], button[data-testid="send-button"]');
+    if (submit && !await submit.isDisabled().catch(() => true)) await submit.click();
+    else await composer.press('Enter');
 
-    const submitBtn = await firstVisibleLocator(
-      page,
-      'button[aria-label*="Send"], button[aria-label*="Submit"], button[aria-label*="Ask"], button[type="submit"], button:has(svg.lucide-arrow-up), button:has(svg.lucide-send), button.bg-white, [data-testid="send-button"]'
-    );
-    if (submitBtn) {
-      const disabled = await submitBtn.isDisabled().catch(() => false);
-      if (!disabled) {
-        await submitBtn.click().catch(() => {});
-      } else {
-        await composer.press('Enter');
-      }
-    } else {
-      await composer.press('Enter');
+    const inspection = await waitForTerminalCorrelatedTurn(page, {
+      spec: GROK_TURN_SPEC,
+      snapshot,
+      expectedPrompt: prompt,
+      provider: 'grok',
+      timeoutMs: deadlineAt ? Math.max(1_000, deadlineAt - Date.now()) : 180_000,
+      minimumChars: 50,
+      signal,
+    });
+    if (!inspection.userNodeId || !inspection.assistantNodeId || !inspection.answerNodeId || !inspection.terminalSignal) {
+      throw new Error('provider_identity_missing:grok');
     }
-    await page.waitForTimeout(500);
-
-    // Wait for response to stream and stabilize
-    let stableCount = 0;
-    let finalData = { text: '', links: [] as any[], userTurnId: null as string | null, assistantTurnId: null as string | null, completionState: 'streaming' };
-    let previousText = '';
-    const deadline = deadlineAt || (Date.now() + 180_000);
-    
-    for (let i = 0; Date.now() < deadline; i++) {
-      if (signal?.aborted) throw new Error('provider_deadline_aborted');
-      await page.waitForTimeout(1000);
-
-      // If at 5s/10s the composer still contains text and no assistant response is found, re-trigger submission
-      if ((i === 4 || i === 9) && !finalData.text) {
-        // Check if a user turn with the prompt already exists before retrying
-        const hasExistingUserTurn = await page.evaluate((expectedPrompt) => {
-          const normalizedWanted = expectedPrompt.normalize('NFKC').toLocaleLowerCase('en-US').replace(/\s+/g, ' ').trim();
-          const userEls = document.querySelectorAll<HTMLElement>('div[data-testid*="user"], div[data-message-author-role="user"], .message.user, [class*="message"][class*="user"], .query-text');
-          return Array.from(userEls).some(el => {
-            const text = (el.innerText || el.textContent || '').normalize('NFKC').toLocaleLowerCase('en-US').replace(/\s+/g, ' ').trim();
-            return text.includes(normalizedWanted);
-          });
-        }, prompt).catch(() => false);
-
-        if (!hasExistingUserTurn) {
-          const composerText = await composer.inputValue().catch(() => '') || await composer.innerText().catch(() => '');
-          if (composerText && composerText.trim().length > 0) {
-            const retryBtn = await firstVisibleLocator(page, 'button[aria-label*="Send"], button[aria-label*="Submit"], button[type="submit"]');
-            if (retryBtn) await retryBtn.click().catch(() => {});
-            await composer.press('Enter').catch(() => {});
-          }
-        }
-      }
-
-      const data = await page.evaluate((expectedPrompt) => {
-        const userSelector = [
-          'div[data-testid*="user"]',
-          'div[data-message-author-role="user"]',
-          '.message.user',
-          '[class*="message"][class*="user"]',
-          '.query-text',
-        ].join(', ');
-
-        const assistantSelector = [
-          'div[data-testid*="assistant"]',
-          'div[data-message-author-role="assistant"]',
-          'div[data-testid*="response"]',
-          'div.response-content',
-          'div.response-body',
-          '.message.assistant',
-          '[class*="message"][class*="assistant"]',
-        ].join(', ');
-
-        const userTurns = Array.from(document.querySelectorAll<HTMLElement>(userSelector));
-        const normalizedWanted = expectedPrompt.normalize('NFKC').toLocaleLowerCase('en-US').replace(/\s+/g, ' ').trim();
-
-        let matchingUserNode: HTMLElement | null = null;
-        let lastMatchingUserIndex = -1;
-
-        if (normalizedWanted) {
-          for (let j = userTurns.length - 1; j >= 0; j--) {
-            const text = (userTurns[j].innerText || userTurns[j].textContent || '').normalize('NFKC').toLocaleLowerCase('en-US').replace(/\s+/g, ' ').trim();
-            if (text.includes(normalizedWanted)) {
-              lastMatchingUserIndex = j + 1; // 1-indexed to match count
-              matchingUserNode = userTurns[j];
-              break;
-            }
-          }
-
-
-        }
-
-        let assistantTurns = Array.from(document.querySelectorAll<HTMLElement>(assistantSelector));
-        assistantTurns = assistantTurns.filter(a => !userTurns.some(u => u.contains(a) || u === a));
-
-        // If matchingUserNode is found, find following elements that could be the assistant turn
-        let targetAssistant: HTMLElement | null = null;
-        if (matchingUserNode) {
-          const followingAssistantTurns = assistantTurns.filter(a => 
-            !!(matchingUserNode!.compareDocumentPosition(a) & Node.DOCUMENT_POSITION_FOLLOWING)
-          );
-          if (followingAssistantTurns.length > 0) {
-            targetAssistant = followingAssistantTurns.reduce((prev, curr) => 
-              ((curr.innerText || curr.textContent || '').length > (prev.innerText || prev.textContent || '').length) ? curr : prev
-            );
-          }
-        } else if (assistantTurns.length > 0) {
-          targetAssistant = assistantTurns.at(-1)!;
-        }
-
-        if (!targetAssistant) return null;
-
-        const assistantFollowsMatchingUser = matchingUserNode
-          ? !!(matchingUserNode.compareDocumentPosition(targetAssistant) & Node.DOCUMENT_POSITION_FOLLOWING)
-          : false;
-
-        const busy = !!document.querySelector('[aria-busy="true"], [class*="streaming"], [class*="loading"], button[aria-label*="Stop"], button[aria-label*="stop"], [data-testid="stop-button"], [class*="animate-spin"], [class*="animate-pulse"]')
-          || Array.from(document.querySelectorAll<HTMLButtonElement>('button')).some(b => (b.textContent || '').trim().toLowerCase() === 'stop');
-
-        let text = (targetAssistant as HTMLElement).innerText || targetAssistant.textContent || '';
-        text = text.replace(/\s+/g, ' ').trim();
-
-        const links = Array.from(targetAssistant.querySelectorAll<HTMLAnchorElement>('a[href]'))
-          .map((a) => ({ url: a.href, title: (a.textContent ?? '').trim() || undefined }))
-          .filter((a) => /^https?:\/\//i.test(a.url) && !a.url.includes('grok.com') && !a.url.includes('x.com'))
-          .slice(0, 12);
-
-        return {
-          candidate: {
-            assistantCount: assistantTurns.length || 1,
-            userCount: userTurns.length,
-            lastMatchingUserIndex,
-            assistantFollowsMatchingUser,
-            text,
-            busy,
-            promptBound: matchingUserNode !== null,
-          },
-          links,
-          userTurnId: matchingUserNode ? matchingUserNode.id || matchingUserNode.getAttribute('data-testid') || null : null,
-          assistantTurnId: targetAssistant ? targetAssistant.id || targetAssistant.getAttribute('data-testid') || null : null,
-          completionState: busy ? 'streaming' : 'complete'
-        };
-      }, prompt);
-
-      if (!data) continue;
-
-      const { candidate, links } = data;
-      // Note: isGrokTurnCorrelated runs in node context
-      if (!isGrokTurnCorrelated(snapshot, candidate)) {
-        continue;
-      }
-
-      if (candidate.text.length >= 80 && candidate.text === previousText && !candidate.busy) {
-        stableCount++;
-        finalData = { text: candidate.text, links, userTurnId: data.userTurnId, assistantTurnId: data.assistantTurnId, completionState: data.completionState };
-        if (stableCount >= 3) break; // stable for 3 seconds
-      } else {
-        stableCount = 0;
-        previousText = candidate.text;
-      }
-    }
-
-    if (finalData.text.length < 50) {
-      await captureDebug(page, 'grok', 'bad-response-or-unbound');
-      throw new Error('prompt_identity_unverified:grok did not render a real assistant answer or failed to bind prompt');
-    }
-
-    const { connectionMeta } = sharedGrokBrowser!;
-    const uiLocale = await page.evaluate(() => document.documentElement.lang || 'en-US').catch(() => 'en-US');
-    connectionMeta.locale = uiLocale;
-
-    if (!finalData.userTurnId || !finalData.assistantTurnId) {
-      throw new Error('capture_rejected: missing stable provider IDs');
-    }
-
+    connectionMeta.actualLocale = await page.evaluate(() => document.documentElement.lang || 'en-US').catch(() => 'en-US');
     const terminalProof: TerminalProof = {
       providerState: 'complete',
-      userTurnId: finalData.userTurnId,
-      assistantTurnId: finalData.assistantTurnId,
-      answerNodeId: finalData.assistantTurnId,
-      terminalSignal: finalData.completionState || 'complete',
-      stableChecks: stableCount,
+      userTurnId: inspection.userNodeId,
+      assistantTurnId: inspection.assistantNodeId,
+      answerNodeId: inspection.answerNodeId,
+      terminalSignal: inspection.terminalSignal,
+      stableChecks: inspection.observedStableChecks,
     };
-
-    return { 
+    await captureDebug(page, 'grok', 'terminal-success', {
+      userTurnId: inspection.userNodeId, assistantTurnId: inspection.assistantNodeId,
+      answerNodeId: inspection.answerNodeId, terminalSignal: inspection.terminalSignal,
+      rawByteLength: Buffer.byteLength(inspection.rawAnswer, 'utf8'),
+    });
+    return {
       capturedPrompt: prompt,
-      rawAnswer: finalData.text, 
-      citations: finalData.links,
-      provenance: buildProvenance('grok', { terminalProof }, connectionMeta)
+      rawAnswer: inspection.rawAnswer,
+      citations: inspection.links,
+      provenance: buildProvenance('grok', { terminalProof }, connectionMeta),
     };
-  } catch (err) {
+  } catch (error) {
+    await captureDebug(page, 'grok', 'capture-rejected', {
+      reason: error instanceof Error ? error.message.slice(0, 160) : 'unknown_error',
+    });
     await closeGrokBrowser();
-    throw err;
+    throw error;
   }
 }

@@ -1,0 +1,86 @@
+name: Diagnose Perplexity Structure
+
+on:
+  workflow_dispatch:
+    inputs:
+      project_id:
+        description: Exact Builder Radar project UUID
+        required: true
+        type: string
+      prompt_id:
+        description: Exact active prompt UUID
+        required: true
+        type: string
+      thread_url:
+        description: Existing Perplexity search URL; no prompt is submitted
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PRIVATE_INGESTION_COMMIT: ${{ vars.PRIVATE_INGESTION_COMMIT }}
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      PLAYWRIGHT_HEADLESS: '0'
+      PLAYWRIGHT_MARKET: US
+      PLAYWRIGHT_SESSIONS_DIR: /tmp/playwright_sessions
+      PLAYWRIGHT_DEBUG_DIR: /tmp/playwright_debug
+
+    steps:
+      - name: Check out worker commit
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Validate and stage exact private runtime
+        uses: ./.github/actions/stage-private-runtime
+        with:
+          private_commit: ${{ vars.PRIVATE_INGESTION_COMMIT }}
+          core_token: ${{ secrets.CORE_REPO_PAT }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install exact dependencies and Chromium
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Restore and validate only the Perplexity session
+        shell: bash
+        env:
+          SESSION_GZ: ${{ secrets.PERPLEXITY_SESSION_GZ_B64 }}
+          SESSION_PLAIN: ${{ secrets.PERPLEXITY_SESSION_B64 }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/playwright_sessions /tmp/playwright_debug
+          target=/tmp/playwright_sessions/perplexity_auth_state.json
+          if [ -n "$SESSION_GZ" ]; then printf '%s' "$SESSION_GZ" | base64 -d | gunzip > "$target"
+          elif [ -n "$SESSION_PLAIN" ]; then printf '%s' "$SESSION_PLAIN" | base64 -d > "$target"
+          else echo "selected provider session is unavailable"; exit 1
+          fi
+          node -e "const fs=require('fs'); const s=JSON.parse(fs.readFileSync(process.argv[1],'utf8')); if (!Array.isArray(s.cookies)||!Array.isArray(s.origins)) throw new Error('session_contract_invalid')" "$target"
+
+      - name: Inspect existing result without acquiring a new answer
+        env:
+          SCRAPE_PROJECT_ID: ${{ inputs.project_id }}
+          SCRAPE_PROMPT_ID: ${{ inputs.prompt_id }}
+          PERPLEXITY_DIAGNOSTIC_URL: ${{ inputs.thread_url }}
+        run: xvfb-run -a npx tsx scripts/inspect-perplexity-structure.ts
+
+      - name: Upload bounded structural diagnostic
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: perplexity-structure-${{ github.run_id }}
+          path: /tmp/playwright_debug/perplexity-selector-diagnostic.json
+          if-no-files-found: ignore
+          retention-days: 3

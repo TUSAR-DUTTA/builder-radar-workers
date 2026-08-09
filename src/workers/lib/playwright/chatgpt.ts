@@ -81,7 +81,11 @@ export async function scrapeChatGPTPrompt(
       if (composer && profile) break;
       await page.waitForTimeout(1_000);
     }
-    if (!composer || !profile) {
+    const explicitLogin = await firstVisibleLocator(
+      page,
+      'a[href*="/auth/login"], button[data-testid="login-button"], button:has-text("Log in")',
+    );
+    if (!composer || !profile || explicitLogin) {
       await captureDebug(page, 'chatgpt', 'login-required', { composerVisible: Boolean(composer), profileVisible: Boolean(profile) });
       throw new Error('login_required:chatgpt');
     }

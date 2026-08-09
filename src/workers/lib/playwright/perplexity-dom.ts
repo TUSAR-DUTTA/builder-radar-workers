@@ -73,7 +73,7 @@ export function inspectPerplexityDom(input: {
     .filter((node) => node.classList.contains('prose'));
   if (answerNodes.length === 0) {
     return visible('button[aria-label="Stop"], button[aria-label*="Stop generating" i], button[aria-label*="Cancel" i]')
-      ? empty('streaming') : empty('provider_no_answer');
+      ? empty('streaming') : empty('waiting');
   }
   if (answerNodes.length !== 1) return empty('duplicate_current_turn');
   const answerNode = answerNodes[0];

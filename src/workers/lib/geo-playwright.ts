@@ -278,7 +278,7 @@ export async function runPromptViaPlaywrightDetailed(
         throw error;
       }
       
-      const failureCode = rejectedFailureCode(reason);
+      const failureCode = terminalNoAnswer ? 'capture_rejected' : rejectedFailureCode(reason);
         
       attempts.push({ model, status: 'failed', stage: 'acquisition', failureReason: reason, latencyMs: Date.now() - started });
       

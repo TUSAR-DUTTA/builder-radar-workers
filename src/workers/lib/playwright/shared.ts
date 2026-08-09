@@ -65,7 +65,10 @@ export async function fillAndVerifyComposer(
     if (node instanceof HTMLInputElement || node instanceof HTMLTextAreaElement) return node.value;
     return node.textContent ?? '';
   });
-  const browserCanonical = (value: string): string => value.replace(/\r\n?/g, '\n');
+  const browserCanonical = (value: string): string => value.normalize('NFKC')
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
   if (browserCanonical(reflected) !== browserCanonical(submittedText)) {
     throw new Error(`prompt_binding_unverified:${provider}_composer_round_trip`);
   }

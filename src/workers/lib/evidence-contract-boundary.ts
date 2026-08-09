@@ -94,10 +94,14 @@ function isoOrNull(value: unknown): string | null {
 
 function explicitLocaleAndLanguage(marketProfile: unknown): { locale: string; language: string } {
   const profile = record(marketProfile);
-  const icp = record(profile?.icp);
-  const measurement = record(profile?.measurement);
-  const locale = stringOrEmpty(profile?.locale || icp?.locale || measurement?.locale);
-  const language = stringOrEmpty(profile?.language) || strings(icp?.languages)[0] || '';
+  const nestedMarketProfile = record(profile?.market_profile);
+  const targetProfile = nestedMarketProfile || profile;
+  
+  const icp = record(targetProfile?.icp);
+  const measurement = record(targetProfile?.measurement);
+  
+  const locale = stringOrEmpty(targetProfile?.locale || icp?.locale || measurement?.locale);
+  const language = stringOrEmpty(targetProfile?.language) || strings(icp?.languages)[0] || '';
   return { locale, language };
 }
 

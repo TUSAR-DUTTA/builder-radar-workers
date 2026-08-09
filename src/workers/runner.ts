@@ -164,36 +164,12 @@ async function runGeoForProject(projectId: string, sources: string[]): Promise<G
     competitorIdentities: factRow.competitorIdentities,
     marketProfile: factRow.marketProfile,
   } : null);
-  let completeIdentity: any;
   if (!identityResult.success) {
-    if (project.id === '31eb8fa9-23b4-4b45-812c-2d6951da57d0') {
-      console.log('[runner] Temporarily bypassing identity validation for Tally project');
-      completeIdentity = {
-        identityVersion: 'project_identity_v2',
-        projectId: project.id,
-        baselineId: factRow?.measurementBaselineVersion || 'mock-baseline',
-        canonicalProductName: 'Tally',
-        canonicalDomain: 'tally.so',
-        category: 'Form Builder',
-        aliases: [],
-        domainAliases: [],
-        ambiguousAliases: [],
-        negativeMeanings: [],
-        geography: [],
-        locale: 'en',
-        language: 'en',
-        verificationStatus: 'user_approved',
-        provenance: { source: 'system', verifiedAt: new Date().toISOString() } as any,
-        competitors: []
-      };
-    } else {
-      const primaryFailureCode = blockedIdentityCode(identityResult);
-      console.error(`[runner] project ${project.id} blocked before paid acquisition: ${primaryFailureCode}`);
-      return { prompts: prompts.length, runs: 0, models, status: 'identity_blocked', primaryFailureCode };
-    }
-  } else {
-    completeIdentity = identityResult.value;
+    const primaryFailureCode = blockedIdentityCode(identityResult);
+    console.error(`[runner] project ${project.id} blocked before paid acquisition: ${primaryFailureCode}`);
+    return { prompts: prompts.length, runs: 0, models, status: 'identity_blocked', primaryFailureCode };
   }
+  const completeIdentity = identityResult.value;
   const identity = completeIdentityToLegacyPrivateProfile(completeIdentity);
   const competitors = completeIdentity.competitors.map((competitor) => competitor.canonicalName);
 

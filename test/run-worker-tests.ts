@@ -219,7 +219,7 @@ function validEnvelope(engine: GenericFixture['model'] | 'perplexity' | 'google-
 async function main() {
   console.log('=== Worker deterministic evidence tests ===');
   assert.deepEqual(BROWSER_ADAPTER_VERSIONS, {
-    'chatgpt-consumer': 'chatgpt_dom_v8', claude: 'claude_dom_v8', perplexity: 'perplexity_dom_v8',
+    'chatgpt-consumer': 'chatgpt_dom_v8', claude: 'claude_dom_v9', perplexity: 'perplexity_dom_v8',
     'google-aio': 'google_aio_state_v7', grok: 'grok_dom_v6', 'gemini-grounded': 'not_browser_captured',
     kimi: 'not_browser_captured', mistral: 'not_browser_captured', 'gpt-oss': 'not_browser_captured',
   });
@@ -259,7 +259,7 @@ async function main() {
     invalidSignal.provenance.providerTerminalSignal = 'complete';
     assert.equal(validateWorkerAdapterEnvelope(invalidSignal).success, false, `${engine} invalid terminal signal rejected`);
     const wrongVersion = structuredClone(envelope);
-    wrongVersion.adapterVersion = wrongVersion.adapterVersion.replace(/v[678]$/, 'v5');
+    wrongVersion.adapterVersion = wrongVersion.adapterVersion.replace(/v[6789]$/, 'v5');
     wrongVersion.provenance.adapterVersion = wrongVersion.adapterVersion;
     assert.equal(validateWorkerAdapterEnvelope(wrongVersion).success, false, `${engine} wrong adapter version rejected`);
     const syntheticObjectStore = structuredClone(envelope);

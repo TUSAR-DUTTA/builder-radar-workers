@@ -57,20 +57,22 @@ export async function fillAndVerifyComposer(
   composer: import('playwright').Locator,
   submittedText: string,
   provider: string,
+  options: { renderedBlockText?: boolean } = {},
 ): Promise<void> {
   await composer.click({ timeout: 20_000, force: true });
   await composer.fill('');
   await composer.fill(submittedText);
-  const reflection = await composer.evaluate((node) => {
+  const reflection = await composer.evaluate((node, readOptions) => {
     const value = node instanceof HTMLInputElement || node instanceof HTMLTextAreaElement
-      ? node.value : (node.textContent ?? '');
+      ? node.value
+      : (readOptions.renderedBlockText && node instanceof HTMLElement ? node.innerText : (node.textContent ?? ''));
     return {
       value,
       tag: node.tagName.toLowerCase(),
       hasTestId: Boolean(node.getAttribute('data-testid')),
       hasRole: Boolean(node.getAttribute('role')),
     };
-  });
+  }, options);
   const browserCanonical = (value: string): string => value.normalize('NFKC')
     .replace(/[\u200B-\u200D\uFEFF]/g, '')
     .replace(/\s+/g, ' ')

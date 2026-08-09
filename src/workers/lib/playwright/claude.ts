@@ -47,7 +47,7 @@ export async function scrapeClaudePrompt(
 
     const snapshot = await page.evaluate(snapshotConversationDom, CLAUDE_TURN_SPEC);
     const submittedUiPrompt = `Use web search and answer this buyer question with citations:\n\n${prompt}`;
-    await fillAndVerifyComposer(composer, submittedUiPrompt, 'claude');
+    await fillAndVerifyComposer(composer, submittedUiPrompt, 'claude', { renderedBlockText: true });
     const submit = await firstVisibleLocator(page, 'button[aria-label="Send message"], button[data-testid="send-button"]');
     if (submit && !await submit.isDisabled().catch(() => true)) await submit.click();
     else await composer.press('Enter');

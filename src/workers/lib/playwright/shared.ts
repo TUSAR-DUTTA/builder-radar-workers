@@ -61,16 +61,24 @@ export async function fillAndVerifyComposer(
   await composer.click({ timeout: 20_000, force: true });
   await composer.fill('');
   await composer.fill(submittedText);
-  const reflected = await composer.evaluate((node) => {
-    if (node instanceof HTMLInputElement || node instanceof HTMLTextAreaElement) return node.value;
-    return node.textContent ?? '';
+  const reflection = await composer.evaluate((node) => {
+    const value = node instanceof HTMLInputElement || node instanceof HTMLTextAreaElement
+      ? node.value : (node.textContent ?? '');
+    return {
+      value,
+      tag: node.tagName.toLowerCase(),
+      hasTestId: Boolean(node.getAttribute('data-testid')),
+      hasRole: Boolean(node.getAttribute('role')),
+    };
   });
   const browserCanonical = (value: string): string => value.normalize('NFKC')
     .replace(/[\u200B-\u200D\uFEFF]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
-  if (browserCanonical(reflected) !== browserCanonical(submittedText)) {
-    throw new Error(`prompt_binding_unverified:${provider}_composer_round_trip`);
+  const expectedCanonical = browserCanonical(submittedText);
+  const reflectedCanonical = browserCanonical(reflection.value);
+  if (reflectedCanonical !== expectedCanonical) {
+    throw new Error(`prompt_binding_unverified:${provider}_composer_round_trip:expected_${expectedCanonical.length}:actual_${reflectedCanonical.length}:tag_${reflection.tag}:testid_${Number(reflection.hasTestId)}:role_${Number(reflection.hasRole)}`);
   }
 }
 

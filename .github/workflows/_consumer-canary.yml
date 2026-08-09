@@ -18,10 +18,6 @@ on:
         required: false
         type: boolean
         default: false
-      perplexity_diagnostic_url:
-        required: false
-        type: string
-        default: ''
 
 permissions:
   contents: read
@@ -112,25 +108,18 @@ jobs:
           elif [ -n "$plain" ]; then printf '%s' "$plain" | base64 -d > "/tmp/playwright_sessions/$target"
           else echo "selected provider session is unavailable"; exit 1
           fi
+          node -e "try { const fs=require('fs'); const s=JSON.parse(fs.readFileSync(process.argv[1],'utf8')); if (!Array.isArray(s.cookies)||!Array.isArray(s.origins)) throw new Error(); } catch { console.error('selected_provider_session_contract_invalid'); process.exit(1); }" "/tmp/playwright_sessions/$target"
 
       - name: Run one exact provider acquisition preflight
-        if: inputs.preflight_only && inputs.perplexity_diagnostic_url == ''
+        if: inputs.preflight_only
         env:
           PREFLIGHT_ENGINE: ${{ inputs.engine }}
           SCRAPE_PROJECT_ID: ${{ inputs.project_id }}
           SCRAPE_PROMPT_ID: ${{ inputs.prompt_id }}
         run: xvfb-run -a npx tsx scripts/run-consumer-adapter-preflight.ts
 
-      - name: Inspect one existing Perplexity result without acquisition
-        if: inputs.perplexity_diagnostic_url != ''
-        env:
-          SCRAPE_PROJECT_ID: ${{ inputs.project_id }}
-          SCRAPE_PROMPT_ID: ${{ inputs.prompt_id }}
-          PERPLEXITY_DIAGNOSTIC_URL: ${{ inputs.perplexity_diagnostic_url }}
-        run: xvfb-run -a npx tsx scripts/inspect-perplexity-structure.ts
-
       - name: Run one exact provider/project/prompt persistence canary
-        if: ${{ !inputs.preflight_only && inputs.perplexity_diagnostic_url == '' }}
+        if: ${{ !inputs.preflight_only }}
         env:
           SCRAPE_PROJECT_ID: ${{ inputs.project_id }}
           SCRAPE_PROMPT_ID: ${{ inputs.prompt_id }}
@@ -146,7 +135,6 @@ jobs:
           PROJECT_ID: ${{ inputs.project_id }}
           PROMPT_ID: ${{ inputs.prompt_id }}
           PREFLIGHT_ONLY: ${{ inputs.preflight_only }}
-          DIAGNOSTIC_URL: ${{ inputs.perplexity_diagnostic_url }}
         run: |
           {
             echo "## Consumer evidence canary"
@@ -155,13 +143,8 @@ jobs:
             echo "- engine: $ENGINE"
             echo "- project_id: $PROJECT_ID"
             echo "- prompt_id: $PROMPT_ID"
-            if [ -n "$DIAGNOSTIC_URL" ]; then
-              echo "- mode: existing_thread_selector_diagnostic"
-              echo "- acquisition_limit: 0"
-            else
-              echo "- mode: $([ "$PREFLIGHT_ONLY" = "true" ] && echo acquisition_only_preflight || echo persistence_canary)"
-              echo "- acquisition_limit: 1"
-            fi
+            echo "- mode: $([ "$PREFLIGHT_ONLY" = "true" ] && echo acquisition_only_preflight || echo persistence_canary)"
+            echo "- acquisition_limit: 1"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload bounded redacted diagnostics

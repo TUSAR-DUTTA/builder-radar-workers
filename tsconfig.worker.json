@@ -5,7 +5,9 @@
     "allowImportingTsExtensions": true
   },
   "include": [
-    "src/workers/**/*.ts"
+    "src/workers/**/*.ts",
+    "scripts/run-consumer-adapter-preflight.ts",
+    "scripts/inspect-perplexity-structure.ts"
   ],
   "exclude": [
     "node_modules",

@@ -67,24 +67,40 @@ async function main(): Promise<void> {
         scanCellId,
         baselineId: binding.baseline_id,
         promptId,
-        targetMarket: 'US',
       },
     );
     const adapter = result.adapterResults[0];
     if (!adapter) throw new Error('preflight_adapter_result_missing');
-    const verified = validateWorkerAdapterEnvelope(adapter);
+    const validation = validateWorkerAdapterEnvelope(adapter);
+    if (!validation.success) {
+      throw new Error(`preflight_adapter_contract_invalid:${validation.failure.primaryFailureCode}`);
+    }
+    const verified = validation.value;
     const bytes = Buffer.from(verified.rawAnswer ?? '', 'utf8');
     const contentSha256 = createHash('sha256').update(bytes).digest('hex');
-    if (verified.captureStatus !== 'accepted' || verified.promptBindingStatus !== 'verified'
-      || verified.completionStatus !== 'terminal' || verified.rawReceipt.contentSha256 !== contentSha256) {
+    const receiptMatches = verified.rawReceipt.kind === 'database'
+      && verified.rawReceipt.contentSha256 === contentSha256;
+    const acceptedAnswer = verified.captureStatus === 'accepted'
+      && verified.promptBindingStatus === 'verified'
+      && verified.completionStatus === 'terminal'
+      && verified.primaryFailureCode === null;
+    const terminalNoAnswer = verified.captureStatus === 'rejected'
+      && verified.promptBindingStatus === 'verified'
+      && verified.completionStatus === 'terminal'
+      && verified.primaryFailureCode === 'capture_rejected'
+      && result.outcomes[model]?.category === 'no_answer'
+      && verified.diagnostics.acquisitionOutcome === 'no_answer_terminal';
+    if ((!acceptedAnswer && !terminalNoAnswer) || !receiptMatches) {
       throw new Error('preflight_evidence_not_accepted');
     }
 
     const safe = {
       mode: 'acquisition_only_preflight',
       claimable: false,
-      workerSha: runtime.workerRuntimeSha,
-      privateSha: runtime.privateIngestionCommit,
+      acquisitionOutcome: acceptedAnswer ? 'answer_captured' : 'no_answer_terminal',
+      boundedFailureCode: verified.primaryFailureCode,
+      workerSha: runtime.workerSha,
+      privateSha: runtime.privateSha,
       engine: verified.engine,
       adapterVersion: verified.adapterVersion,
       contractVersion: verified.contractVersion,

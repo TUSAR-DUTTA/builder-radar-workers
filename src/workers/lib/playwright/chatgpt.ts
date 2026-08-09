@@ -1,4 +1,4 @@
-import { launchSeededPersistentContext, captureDebug, firstVisibleLocator, type PlaywrightContextHandle } from './shared';
+import { launchSeededPersistentContext, captureDebug, fillAndVerifyComposer, firstVisibleLocator, type PlaywrightContextHandle } from './shared';
 import { snapshotConversationDom, waitForTerminalCorrelatedTurn } from './conversation-dom';
 import { CHATGPT_TURN_SPEC } from './provider-turn-specs';
 import { type BrowserCapture, buildProvenance, type TerminalProof, type BrowserConnectionMetadata } from './capture-contract';
@@ -72,16 +72,17 @@ export async function scrapeChatGPTPrompt(
     }
     const authDeadline = Math.min(deadlineAt ?? Date.now() + 45_000, Date.now() + 45_000);
     let composer: import('playwright').Locator | null = null;
+    let profile: import('playwright').Locator | null = null;
     while (Date.now() < authDeadline) {
       if (signal?.aborted) throw new Error('provider_deadline_aborted');
       if (await dismissAccountChooser(page).catch(() => false)) continue;
       composer = await firstVisibleLocator(page, '#prompt-textarea, div[contenteditable="true"][aria-label="Chat with ChatGPT"]');
-      const profile = await firstVisibleLocator(page, '[data-testid="accounts-profile-button"], [aria-label*="profile menu" i]');
+      profile = await firstVisibleLocator(page, '[data-testid="accounts-profile-button"], [aria-label*="profile menu" i]');
       if (composer && profile) break;
       await page.waitForTimeout(1_000);
     }
-    if (!composer) {
-      await captureDebug(page, 'chatgpt', 'login-required');
+    if (!composer || !profile) {
+      await captureDebug(page, 'chatgpt', 'login-required', { composerVisible: Boolean(composer), profileVisible: Boolean(profile) });
       throw new Error('login_required:chatgpt');
     }
     const authFailures = chatGPTForbiddenUrls(forbidden);
@@ -92,11 +93,7 @@ export async function scrapeChatGPTPrompt(
 
     const snapshot = await page.evaluate(snapshotConversationDom, CHATGPT_TURN_SPEC);
     const submittedUiPrompt = `Use web search and answer this buyer question with citations:\n\n${prompt}`;
-    await composer.click({ timeout: 20_000, force: true });
-    await composer.fill('');
-    await page.keyboard.insertText(submittedUiPrompt);
-    const composerText = await composer.inputValue().catch(async () => composer!.innerText().catch(() => ''));
-    if (composerText !== submittedUiPrompt) throw new Error('prompt_binding_unverified:chatgpt_composer_round_trip');
+    await fillAndVerifyComposer(composer, submittedUiPrompt, 'chatgpt');
 
     const submit = await firstVisibleLocator(page, 'button[data-testid="send-button"], #composer-submit-button');
     if (submit && !await submit.isDisabled().catch(() => true)) await submit.click({ timeout: 10_000 });

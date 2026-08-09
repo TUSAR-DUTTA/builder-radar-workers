@@ -119,9 +119,9 @@ function perplexityHtml(input: {
   const prompt = input.prompt ?? PROMPT;
   const answer = input.answer ?? ANSWER;
   const answerBlock = (id: string) => `<div role="tabpanel" id="perplexity-${id}">
-    <div class="group relative flex items-end"><div>${prompt}</div><button aria-label="Copy query">Copy query</button></div>
-    <div class="gap-y-sm flex flex-col"><div class="mt-md">${answer}</div><a href="https://tally.so/">Tally</a>
-      <button aria-label="${input.terminal === false ? 'Share' : 'Copy'}">Action</button></div>
+    <div class="group relative flex items-end"><div role="heading" class="group/query">${prompt}</div><button aria-label="Copy query">Copy query</button></div>
+    <div class="gap-y-2 flex flex-col"><div class="prose">${answer}${answer === 'No answer' ? '' : '<a href="https://tally.so/">Tally</a>'}</div>
+      ${input.terminal === false ? '' : '<button aria-label="Copy">Copy</button><button aria-label="Rewrite Session">Rewrite</button><button aria-label="Share">Share</button>'}</div>
     ${input.streaming ? '<button aria-label="Stop">Stop</button>' : ''}
   </div>`;
   return answerBlock('current') + (input.duplicate ? answerBlock('duplicate') : '');
@@ -148,7 +148,7 @@ async function assertPerplexityMatrix(page: Page): Promise<void> {
   assert.equal((await inspectPerplexity(page, perplexityHtml({ answer: 'No answer' }))).status, 'provider_no_answer');
   assert.equal((await inspectPerplexity(page, '<div data-testid="account-interstitial">Setup</div>')).status, 'provider_interstitial');
   assert.equal((await inspectPerplexity(page, perplexityHtml({ duplicate: true }))).status, 'duplicate_current_turn');
-  assert.equal((await inspectPerplexity(page, `<div class="group relative flex items-end"><div>Old prompt</div><button aria-label="Copy query"></button></div>${perplexityHtml()}`)).status, 'terminal');
+  assert.equal((await inspectPerplexity(page, `<div role="tabpanel" id="old"><div role="heading" class="group/query">Old prompt</div></div>${perplexityHtml()}`)).status, 'terminal');
   assert.equal((await inspectPerplexity(page, '<article>Selector drift</article>')).status, 'prompt_binding_unverified');
   assert.equal((await inspectPerplexity(page, perplexityHtml({ terminal: false }))).status, 'terminal_signal_missing');
   assert.equal((await inspectPerplexity(page, perplexityHtml(), { currentUrl: 'https://www.perplexity.ai/search/x' })).status, 'provider_identity_missing');
@@ -217,9 +217,9 @@ function validEnvelope(engine: GenericFixture['model'] | 'perplexity' | 'google-
 }
 
 async function main() {
-  console.log('=== Worker v6 deterministic evidence tests ===');
+  console.log('=== Worker deterministic evidence tests ===');
   assert.deepEqual(BROWSER_ADAPTER_VERSIONS, {
-    'chatgpt-consumer': 'chatgpt_dom_v6', claude: 'claude_dom_v6', perplexity: 'perplexity_dom_v6',
+    'chatgpt-consumer': 'chatgpt_dom_v7', claude: 'claude_dom_v7', perplexity: 'perplexity_dom_v7',
     'google-aio': 'google_aio_state_v6', grok: 'grok_dom_v6', 'gemini-grounded': 'not_browser_captured',
     kimi: 'not_browser_captured', mistral: 'not_browser_captured', 'gpt-oss': 'not_browser_captured',
   });
@@ -259,7 +259,7 @@ async function main() {
     invalidSignal.provenance.providerTerminalSignal = 'complete';
     assert.equal(validateWorkerAdapterEnvelope(invalidSignal).success, false, `${engine} invalid terminal signal rejected`);
     const wrongVersion = structuredClone(envelope);
-    wrongVersion.adapterVersion = wrongVersion.adapterVersion.replace('v6', 'v5');
+    wrongVersion.adapterVersion = wrongVersion.adapterVersion.replace(/v[67]$/, 'v5');
     wrongVersion.provenance.adapterVersion = wrongVersion.adapterVersion;
     assert.equal(validateWorkerAdapterEnvelope(wrongVersion).success, false, `${engine} wrong adapter version rejected`);
     const syntheticObjectStore = structuredClone(envelope);

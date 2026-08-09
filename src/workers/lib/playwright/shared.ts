@@ -30,6 +30,47 @@ type StoredOrigin = {
   localStorage?: Array<{ name: string; value: string }>;
 };
 
+type ValidatedStorageState = {
+  cookies: Parameters<import('playwright').BrowserContext['addCookies']>[0];
+  origins: StoredOrigin[];
+};
+
+async function readValidatedStorageState(model: AnswerModel, sessionPath: string): Promise<ValidatedStorageState> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(await fs.promises.readFile(sessionPath, 'utf8'));
+  } catch {
+    throw new Error(`session_contract_invalid:${model}`);
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error(`session_contract_invalid:${model}`);
+  }
+  const candidate = parsed as { cookies?: unknown; origins?: unknown };
+  if (!Array.isArray(candidate.cookies) || !Array.isArray(candidate.origins)) {
+    throw new Error(`session_contract_invalid:${model}`);
+  }
+  return candidate as ValidatedStorageState;
+}
+
+/** Fill an input/editor and prove the browser DOM reflects the exact submitted text before sending. */
+export async function fillAndVerifyComposer(
+  composer: import('playwright').Locator,
+  submittedText: string,
+  provider: string,
+): Promise<void> {
+  await composer.click({ timeout: 20_000, force: true });
+  await composer.fill('');
+  await composer.fill(submittedText);
+  const reflected = await composer.evaluate((node) => {
+    if (node instanceof HTMLInputElement || node instanceof HTMLTextAreaElement) return node.value;
+    return node.textContent ?? '';
+  });
+  const browserCanonical = (value: string): string => value.replace(/\r\n?/g, '\n');
+  if (browserCanonical(reflected) !== browserCanonical(submittedText)) {
+    throw new Error(`prompt_binding_unverified:${provider}_composer_round_trip`);
+  }
+}
+
 const sharedUserDataDir: Record<string, string> = {};
 
 export async function launchSeededPersistentContext(model: AnswerModel): Promise<PlaywrightContextHandle> {
@@ -51,13 +92,10 @@ export async function launchSeededPersistentContext(model: AnswerModel): Promise
     }
   }
   const userDataDir = sharedUserDataDir[model];
-  const storageState = JSON.parse(await fs.promises.readFile(sessionPath, 'utf8')) as {
-    cookies?: any[];
-    origins?: StoredOrigin[];
-  };
+  const storageState = await readValidatedStorageState(model, sessionPath);
   console.log(`[stealth] loading configured ${model} session state`);
   const localStorageByOrigin = Object.fromEntries(
-    (storageState.origins ?? [])
+    storageState.origins
       .filter((entry) => entry.origin && entry.localStorage?.length)
       .map((entry) => [entry.origin, entry.localStorage ?? []]),
   );
@@ -118,7 +156,7 @@ export async function launchSeededPersistentContext(model: AnswerModel): Promise
     }
   });
 
-  if (storageState.cookies?.length) {
+  if (storageState.cookies.length) {
     await context.addCookies(storageState.cookies);
   }
 
@@ -200,12 +238,12 @@ export async function launchSeededContext(model: AnswerModel): Promise<Playwrigh
   });
 
   if (hasSession) {
-    const storageState = JSON.parse(await fs.promises.readFile(sessionPath, 'utf8')) as any;
-    if (storageState.cookies && storageState.cookies.length > 0) {
+    const storageState = await readValidatedStorageState(model, sessionPath);
+    if (storageState.cookies.length > 0) {
       await context.addCookies(storageState.cookies);
     }
     const localStorageByOrigin = Object.fromEntries(
-      (storageState.origins ?? [])
+      storageState.origins
         .filter((entry: any) => entry.origin && entry.localStorage?.length)
         .map((entry: any) => [entry.origin, entry.localStorage ?? []]),
     );

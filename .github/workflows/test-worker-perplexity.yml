@@ -10,18 +10,12 @@ on:
         description: Exact active prompt UUID
         required: true
         type: string
-      prompt:
-        description: Legacy dispatch sentinel used only for quota-free selector diagnosis
-        required: false
-        type: string
-        default: ''
 jobs:
   canary:
     uses: ./.github/workflows/_consumer-canary.yml
     with:
       engine: perplexity
-      project_id: ${{ github.event.inputs.prompt == 'PERPLEXITY_STRUCTURE_ONLY' && '31eb8fa9-23b4-4b45-812c-2d6951da57d0' || inputs.project_id }}
-      prompt_id: ${{ github.event.inputs.prompt == 'PERPLEXITY_STRUCTURE_ONLY' && '4b7cded7-db38-413b-b08b-058789b9795f' || inputs.prompt_id }}
+      project_id: ${{ inputs.project_id }}
+      prompt_id: ${{ inputs.prompt_id }}
       preflight_only: true
-      perplexity_diagnostic_url: ${{ github.event.inputs.prompt == 'PERPLEXITY_STRUCTURE_ONLY' && 'https://www.perplexity.ai/search/56cafdb8-a5aa-490a-b1fc-cf91ad28e822' || '' }}
     secrets: inherit

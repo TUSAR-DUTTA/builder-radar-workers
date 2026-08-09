@@ -270,6 +270,7 @@ export async function runPromptViaPlaywrightDetailed(
 
     } catch (error) {
       const reason = boundedFailureReason(error);
+      const terminalNoAnswer = isBrowserNoAnswerError(error);
       console.warn(`[geo-playwright] ${model} failed for "${prompt.slice(0, 40)}": ${reason}`);
       
       if (error instanceof Error && error.message?.includes('_aborted')) {
@@ -286,7 +287,7 @@ export async function runPromptViaPlaywrightDetailed(
         || reason.includes('provider_identity_missing');
       if (isBindingError) {
         outcomes[model] = { category: 'identity_binding_failure', retryable: false, code: 'prompt_identity_unverified' as any };
-      } else if (isBrowserNoAnswerError(error) || reason.includes('provider_no_answer') || reason.includes('provider_refusal')) {
+      } else if (terminalNoAnswer || reason.includes('provider_no_answer') || reason.includes('provider_refusal')) {
         outcomes[model] = { category: 'no_answer', retryable: false, code: 'provider_no_answer' as any };
       } else {
         outcomes[model] = { category: 'acquisition_failure', retryable: false, code: 'capture_incomplete' as any };
@@ -317,7 +318,7 @@ export async function runPromptViaPlaywrightDetailed(
         capturedAt: new Date().toISOString(),
         captureStatus: 'rejected',
         promptBindingStatus: isBindingError ? 'unverified' : 'verified',
-        completionStatus: failureCode === 'provider_not_terminal' ? 'incomplete' : 'unverified',
+        completionStatus: terminalNoAnswer ? 'terminal' : (failureCode === 'provider_not_terminal' ? 'incomplete' : 'unverified'),
         provenance: {
           requestedMarket: 'US',
           actualRegion: null,
@@ -338,6 +339,7 @@ export async function runPromptViaPlaywrightDetailed(
         primaryFailureCode: failureCode,
         diagnostics: {
           internalReason: reason,
+          acquisitionOutcome: terminalNoAnswer ? 'no_answer_terminal' : 'capture_rejected',
           durability: 'pending_private_database_ingestion',
         },
       });

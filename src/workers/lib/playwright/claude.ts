@@ -1,4 +1,4 @@
-import { launchSeededPersistentContext, captureDebug, firstVisibleLocator, type PlaywrightContextHandle } from './shared';
+import { launchSeededPersistentContext, captureDebug, fillAndVerifyComposer, firstVisibleLocator, type PlaywrightContextHandle } from './shared';
 import { snapshotConversationDom, waitForTerminalCorrelatedTurn } from './conversation-dom';
 import { CLAUDE_TURN_SPEC } from './provider-turn-specs';
 import { type BrowserCapture, buildProvenance, type TerminalProof, type BrowserConnectionMetadata } from './capture-contract';
@@ -47,11 +47,7 @@ export async function scrapeClaudePrompt(
 
     const snapshot = await page.evaluate(snapshotConversationDom, CLAUDE_TURN_SPEC);
     const submittedUiPrompt = `Use web search and answer this buyer question with citations:\n\n${prompt}`;
-    await composer.click({ timeout: 20_000, force: true });
-    await composer.fill('');
-    await page.keyboard.insertText(submittedUiPrompt);
-    const composerText = await composer.inputValue().catch(async () => composer!.innerText().catch(() => ''));
-    if (composerText !== submittedUiPrompt) throw new Error('prompt_binding_unverified:claude_composer_round_trip');
+    await fillAndVerifyComposer(composer, submittedUiPrompt, 'claude');
     const submit = await firstVisibleLocator(page, 'button[aria-label="Send message"], button[data-testid="send-button"]');
     if (submit && !await submit.isDisabled().catch(() => true)) await submit.click();
     else await composer.press('Enter');

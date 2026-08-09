@@ -56,27 +56,27 @@ export function inspectPerplexityDom(input: {
   if (!/^[-a-z0-9_]{8,}$/i.test(threadSegment)) return empty('provider_identity_missing');
   const threadIdentity = `perplexity-thread:${threadSegment}`;
 
-  const queryControls = Array.from(document.querySelectorAll<HTMLElement>('button[aria-label="Copy query"], button[aria-label="Edit query"]'));
-  const queryRoots = Array.from(new Set(queryControls.map((control) => control.closest<HTMLElement>('.group.relative.flex.items-end')).filter(Boolean)));
   const expected = normalize(input.expectedPrompt);
-  const matchingQueries = queryRoots.filter((root) => normalize(root!.innerText || root!.textContent || '').includes(expected));
-  if (matchingQueries.length !== 1) return empty(matchingQueries.length > 1 ? 'duplicate_current_turn' : 'prompt_binding_unverified');
-
-  const answerControls = Array.from(document.querySelectorAll<HTMLElement>(
-    'button[aria-label="Copy"], button[aria-label="Share"], button[aria-label="Rewrite Session"]',
-  ));
-  const answerRoots = Array.from(new Set(answerControls.map((control) =>
-    control.closest<HTMLElement>('div.gap-y-sm.flex.flex-col')).filter(Boolean)));
-  if (answerRoots.length === 0) {
-    return visible('button[aria-label="Stop"], button[aria-label*="Stop generating" i]')
-      ? empty('streaming') : empty('waiting');
+  const panels = Array.from(document.querySelectorAll<HTMLElement>('[role="tabpanel"][id]'));
+  const matchingPanels = panels.filter((panel) => {
+    const queryHeadings = Array.from(panel.querySelectorAll<HTMLElement>('[role="heading"]'))
+      .filter((node) => node.classList.contains('group/query'));
+    return queryHeadings.length === 1
+      && normalize(queryHeadings[0].innerText || queryHeadings[0].textContent || '') === expected;
+  });
+  if (matchingPanels.length !== 1) {
+    return empty(matchingPanels.length > 1 ? 'duplicate_current_turn' : 'prompt_binding_unverified');
   }
-  if (answerRoots.length !== 1) return empty('duplicate_current_turn');
-  const answerRoot = answerRoots[0]!;
-  const tabPanel = answerRoot.closest<HTMLElement>('[role="tabpanel"][id]');
-  if (!tabPanel?.id) return empty('provider_identity_missing');
-  const answerNode = answerRoot.querySelector<HTMLElement>(':scope > .mt-md, :scope > [class*="prose"], [data-testid="answer-text"]');
-  if (!answerNode) return empty('provider_no_answer');
+  const tabPanel = matchingPanels[0];
+  if (!tabPanel.id) return empty('provider_identity_missing');
+  const answerNodes = Array.from(tabPanel.querySelectorAll<HTMLElement>('.prose'))
+    .filter((node) => node.classList.contains('prose'));
+  if (answerNodes.length === 0) {
+    return visible('button[aria-label="Stop"], button[aria-label*="Stop generating" i], button[aria-label*="Cancel" i]')
+      ? empty('streaming') : empty('provider_no_answer');
+  }
+  if (answerNodes.length !== 1) return empty('duplicate_current_turn');
+  const answerNode = answerNodes[0];
   const rawAnswer = answerNode.innerText || answerNode.textContent || '';
   const normalizedAnswer = normalize(rawAnswer);
   if (/^(?:i (?:can(?:not|'t)|won't)|sorry[, ]|i'm sorry|unable to (?:help|comply))/i.test(normalizedAnswer)) {
@@ -85,16 +85,20 @@ export function inspectPerplexityDom(input: {
   if (!normalizedAnswer || /^(?:no answer|answer unavailable|something went wrong|try again)$/i.test(normalizedAnswer)) {
     return { ...empty('provider_no_answer'), rawAnswer };
   }
-  if (visible('button[aria-label="Stop"], button[aria-label*="Stop generating" i], [aria-busy="true"]')) {
+  if (visible('button[aria-label="Stop"], button[aria-label*="Stop generating" i], button[aria-label*="Cancel" i], [aria-busy="true"]')) {
     return { ...empty('streaming'), rawAnswer };
   }
   const links: { url: string; title?: string }[] = [];
-  for (const anchor of Array.from(answerRoot.querySelectorAll<HTMLAnchorElement>('a[href]'))) {
+  const seenLinks = new Set<string>();
+  for (const anchor of Array.from(answerNode.querySelectorAll<HTMLAnchorElement>('a[href]'))) {
     if (links.length >= 12) break;
-    if (!/^https?:\/\//i.test(anchor.href) || anchor.href.includes('perplexity.ai')) continue;
+    if (!/^https?:\/\//i.test(anchor.href) || anchor.href === input.currentUrl || seenLinks.has(anchor.href)) continue;
+    seenLinks.add(anchor.href);
     links.push({ url: anchor.href, title: (anchor.textContent ?? '').trim() || undefined });
   }
-  const terminal = Boolean(answerRoot.querySelector('button[aria-label="Copy"]'));
+  const terminalControls = ['Copy', 'Rewrite Session', 'Share'].map((label) =>
+    tabPanel.querySelectorAll(`button[aria-label="${label}"]`).length);
+  const terminal = terminalControls.every((count) => count === 1);
   return {
     status: terminal ? 'terminal' : 'terminal_signal_missing',
     rawAnswer,

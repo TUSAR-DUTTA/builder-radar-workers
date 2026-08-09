@@ -1,4 +1,4 @@
-import { launchSeededPersistentContext, captureDebug, firstVisibleLocator, type PlaywrightContextHandle } from './shared';
+import { launchSeededPersistentContext, captureDebug, fillAndVerifyComposer, firstVisibleLocator, type PlaywrightContextHandle } from './shared';
 import { inspectPerplexityDom, type PerplexityInspection } from './perplexity-dom';
 import { type BrowserCapture, buildProvenance, type TerminalProof, type BrowserConnectionMetadata } from './capture-contract';
 
@@ -42,11 +42,7 @@ export async function scrapePerplexityPrompt(
     }
     if (!composer) throw new Error('login_required:perplexity_missing_composer');
     const submittedUiPrompt = `Use web search and answer this buyer question with citations:\n\n${prompt}`;
-    await composer.click({ timeout: 20_000, force: true });
-    await composer.fill('');
-    await page.keyboard.insertText(submittedUiPrompt);
-    const composerText = await composer.inputValue().catch(async () => composer!.innerText().catch(() => ''));
-    if (composerText !== submittedUiPrompt) throw new Error('prompt_binding_unverified:perplexity_composer_round_trip');
+    await fillAndVerifyComposer(composer, submittedUiPrompt, 'perplexity');
     const submit = await firstVisibleLocator(page, 'button[aria-label="Submit"], button[type="submit"]');
     if (submit && !await submit.isDisabled().catch(() => true)) await submit.click();
     else await composer.press('Enter');

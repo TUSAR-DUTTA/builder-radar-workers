@@ -116,7 +116,7 @@ async function runGeoForProject(projectId: string, sources: string[]): Promise<G
       bf.identity_version AS "identityVersion",
       bf.identity_verification_status AS "identityVerificationStatus",
       bf.verified_at AS "verifiedAt",
-      (SELECT id FROM measurement_baselines WHERE project_id = p.id AND status = 'approved' ORDER BY created_at DESC LIMIT 1) AS "measurementBaselineVersion",
+      (SELECT id FROM measurement_baselines WHERE project_id = p.id AND status IN ('approved', 'active') ORDER BY created_at DESC LIMIT 1) AS "measurementBaselineVersion",
       p.market_profile AS "marketProfile"
     FROM projects p
     LEFT JOIN brand_facts bf ON bf.project_id = p.id

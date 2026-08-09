@@ -11,7 +11,7 @@ const providerWorkflows = engines.flatMap((engine) => [
 ]);
 const allWorkflows = [
   '.github/workflows/ci.yml', '.github/workflows/social-worker.yml', '.github/workflows/test-single-prompt-all.yml',
-  '.github/workflows/_consumer-canary.yml', ...providerWorkflows,
+  '.github/workflows/_consumer-canary.yml', '.github/workflows/diagnose-perplexity-structure.yml', ...providerWorkflows,
 ];
 const failures = [];
 for (const file of allWorkflows) {

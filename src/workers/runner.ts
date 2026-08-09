@@ -195,7 +195,7 @@ async function runGeoForProject(projectId: string, sources: string[]): Promise<G
     completeIdentity = identityResult.value;
   }
   const identity = completeIdentityToLegacyPrivateProfile(completeIdentity);
-  const competitors = completeIdentity.competitors.map((competitor) => competitor.canonicalName);
+  const competitors = completeIdentity.competitors.map((competitor: any) => competitor.canonicalName);
 
   const router = getAIRouter();
   const jobKind = `worker:playwright:${[...models].sort().join(',')}`;

@@ -113,12 +113,15 @@ export async function scrapeChatGPTPrompt(
     });
     if (isBadChatGPTResponse(inspection.rawAnswer)) throw new Error('provider_no_answer:chatgpt');
     if (chatGPTForbiddenUrls(forbidden).length) throw new Error('login_required:chatgpt_backend_403_after_send');
-    if (!inspection.userNodeId || !inspection.assistantNodeId || !inspection.answerNodeId || !inspection.terminalSignal) {
-      throw new Error('provider_identity_missing:chatgpt');
+    if (!inspection.terminalSignal || inspection.turnBindingMethod === 'unavailable'
+      || (inspection.turnBindingMethod === 'deterministic_dom' && !inspection.captureBindingId)) {
+      throw new Error('prompt_binding_unverified:chatgpt');
     }
     connectionMeta.actualLocale = await page.evaluate(() => document.documentElement.lang || 'en-US').catch(() => 'en-US');
     const terminalProof: TerminalProof = {
       providerState: 'complete',
+      turnBindingMethod: inspection.turnBindingMethod,
+      captureBindingId: inspection.captureBindingId,
       userTurnId: inspection.userNodeId,
       assistantTurnId: inspection.assistantNodeId,
       answerNodeId: inspection.answerNodeId,
@@ -128,6 +131,8 @@ export async function scrapeChatGPTPrompt(
     await captureDebug(page, 'chatgpt', 'terminal-success', {
       userTurnId: inspection.userNodeId, assistantTurnId: inspection.assistantNodeId,
       answerNodeId: inspection.answerNodeId, terminalSignal: inspection.terminalSignal,
+      bindingMethod: inspection.turnBindingMethod, captureBindingId: inspection.captureBindingId,
+      submissionCount: 1,
       rawByteLength: Buffer.byteLength(inspection.rawAnswer, 'utf8'),
     });
     return {

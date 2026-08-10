@@ -6,6 +6,10 @@ on:
       engine:
         required: true
         type: string
+      private_commit:
+        description: Exact 40-character private-core commit selected by the caller
+        required: true
+        type: string
       project_id:
         required: false
         type: string
@@ -27,7 +31,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
-      PRIVATE_INGESTION_COMMIT: ${{ vars.PRIVATE_INGESTION_COMMIT }}
+      PRIVATE_INGESTION_COMMIT: ${{ inputs.private_commit }}
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
       NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
@@ -47,16 +51,6 @@ jobs:
       PLAYWRIGHT_PROXY_PASSWORD: ${{ secrets.PLAYWRIGHT_PROXY_PASSWORD }}
       PLAYWRIGHT_SESSIONS_DIR: /tmp/playwright_sessions
       PLAYWRIGHT_DEBUG_DIR: /tmp/playwright_debug
-      SESSION_CHATGPT_GZ: ${{ secrets.CHATGPT_SESSION_GZ_B64 }}
-      SESSION_CHATGPT: ${{ secrets.CHATGPT_SESSION_B64 }}
-      SESSION_CLAUDE_GZ: ${{ secrets.CLAUDE_SESSION_GZ_B64 }}
-      SESSION_CLAUDE: ${{ secrets.CLAUDE_SESSION_B64 }}
-      SESSION_PERPLEXITY_GZ: ${{ secrets.PERPLEXITY_SESSION_GZ_B64 }}
-      SESSION_PERPLEXITY: ${{ secrets.PERPLEXITY_SESSION_B64 }}
-      SESSION_GROK_GZ: ''
-      SESSION_GROK: ${{ secrets.GROK_SESSION_B64_1 }}
-      SESSION_GOOGLE_GZ: ${{ secrets.GOOGLE_SESSION_GZ_B64 }}
-      SESSION_GOOGLE: ${{ secrets.GOOGLE_SESSION_B64 }}
 
     steps:
       - name: Check out worker commit
@@ -67,7 +61,7 @@ jobs:
       - name: Validate and stage exact private runtime
         uses: ./.github/actions/stage-private-runtime
         with:
-          private_commit: ${{ vars.PRIVATE_INGESTION_COMMIT }}
+          private_commit: ${{ inputs.private_commit }}
           core_token: ${{ secrets.CORE_REPO_PAT }}
 
       - name: Set up Node.js
@@ -86,29 +80,25 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Restore only the selected provider session
-        shell: bash
         env:
           ENGINE: ${{ inputs.engine }}
+          CHATGPT_SESSION_GZ_B64: ${{ inputs.engine == 'chatgpt' && secrets.CHATGPT_SESSION_GZ_B64 || '' }}
+          CHATGPT_SESSION_B64: ${{ inputs.engine == 'chatgpt' && secrets.CHATGPT_SESSION_B64 || '' }}
+          CLAUDE_SESSION_GZ_B64: ${{ inputs.engine == 'claude' && secrets.CLAUDE_SESSION_GZ_B64 || '' }}
+          CLAUDE_SESSION_B64: ${{ inputs.engine == 'claude' && secrets.CLAUDE_SESSION_B64 || '' }}
+          PERPLEXITY_SESSION_GZ_B64: ${{ inputs.engine == 'perplexity' && secrets.PERPLEXITY_SESSION_GZ_B64 || '' }}
+          PERPLEXITY_SESSION_B64: ${{ inputs.engine == 'perplexity' && secrets.PERPLEXITY_SESSION_B64 || '' }}
+          GROK_SESSION_GZ_B64: ${{ inputs.engine == 'grok' && secrets.GROK_SESSION_GZ_B64 || '' }}
+          GROK_SESSION_B64_1: ${{ inputs.engine == 'grok' && secrets.GROK_SESSION_B64_1 || '' }}
+          GROK_SESSION_B64_2: ${{ inputs.engine == 'grok' && secrets.GROK_SESSION_B64_2 || '' }}
+          GROK_SESSION_B64_3: ${{ inputs.engine == 'grok' && secrets.GROK_SESSION_B64_3 || '' }}
+          GROK_SESSION_B64_4: ${{ inputs.engine == 'grok' && secrets.GROK_SESSION_B64_4 || '' }}
+          GROK_SESSION_B64_5: ${{ inputs.engine == 'grok' && secrets.GROK_SESSION_B64_5 || '' }}
+          GOOGLE_SESSION_GZ_B64: ${{ inputs.engine == 'google-aio' && secrets.GOOGLE_SESSION_GZ_B64 || '' }}
+          GOOGLE_SESSION_B64: ${{ inputs.engine == 'google-aio' && secrets.GOOGLE_SESSION_B64 || '' }}
         run: |
           mkdir -p /tmp/playwright_sessions /tmp/playwright_debug
-          case "$ENGINE" in
-            chatgpt)
-              target=chatgpt_auth_state.json; gz="$SESSION_CHATGPT_GZ"; plain="$SESSION_CHATGPT" ;;
-            claude)
-              target=claude_auth_state.json; gz="$SESSION_CLAUDE_GZ"; plain="$SESSION_CLAUDE" ;;
-            perplexity)
-              target=perplexity_auth_state.json; gz="$SESSION_PERPLEXITY_GZ"; plain="$SESSION_PERPLEXITY" ;;
-            grok)
-              target=grok_auth_state.json; gz="$SESSION_GROK_GZ"; plain="$SESSION_GROK" ;;
-            google-aio)
-              target=google_auth_state.json; gz="$SESSION_GOOGLE_GZ"; plain="$SESSION_GOOGLE" ;;
-            *) echo "unsupported canary engine"; exit 1 ;;
-          esac
-          if [ -n "$gz" ]; then printf '%s' "$gz" | base64 -d | gunzip > "/tmp/playwright_sessions/$target"
-          elif [ -n "$plain" ]; then printf '%s' "$plain" | base64 -d > "/tmp/playwright_sessions/$target"
-          else echo "selected provider session is unavailable"; exit 1
-          fi
-          node -e "try { const fs=require('fs'); const s=JSON.parse(fs.readFileSync(process.argv[1],'utf8')); if (!Array.isArray(s.cookies)||!Array.isArray(s.origins)) throw new Error(); } catch { console.error('selected_provider_session_contract_invalid'); process.exit(1); }" "/tmp/playwright_sessions/$target"
+          node scripts/restore-provider-session.mjs "$ENGINE" /tmp/playwright_sessions
 
       - name: Run one exact provider acquisition preflight
         if: inputs.preflight_only

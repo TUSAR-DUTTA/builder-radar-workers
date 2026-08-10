@@ -21,6 +21,8 @@ export interface PerplexityInspection {
   assistantTurnId: string | null;
   answerNodeId: string | null;
   terminalSignal: 'perplexity_answer_actions_complete' | null;
+  observedThreadIdentity: string | null;
+  answerDomIdentity: string | null;
 }
 
 /** Browser callback. It binds one query and answer to the newly created provider thread. */
@@ -31,6 +33,7 @@ export function inspectPerplexityDom(input: {
 }): PerplexityInspection {
   const empty = (status: PerplexityInspectionStatus): PerplexityInspection => ({
     status, rawAnswer: '', links: [], userTurnId: null, assistantTurnId: null, answerNodeId: null, terminalSignal: null,
+    observedThreadIdentity: null, answerDomIdentity: null,
   });
   const visible = (selector: string): boolean => Array.from(document.querySelectorAll<HTMLElement>(selector)).some((node) => {
     const style = window.getComputedStyle(node);
@@ -54,7 +57,7 @@ export function inspectPerplexityDom(input: {
   if (current.hostname !== 'www.perplexity.ai' || current.href === prior.href) return empty('waiting');
   const threadSegment = current.pathname.split('/').filter(Boolean).at(-1) ?? '';
   if (!/^[-a-z0-9_]{8,}$/i.test(threadSegment)) return empty('provider_identity_missing');
-  const threadIdentity = `perplexity-thread:${threadSegment}`;
+  const threadIdentity = `observed-thread-path:${threadSegment}`;
 
   const expected = normalize(input.expectedPrompt);
   const panels = Array.from(document.querySelectorAll<HTMLElement>('[role="tabpanel"][id]'));
@@ -103,9 +106,11 @@ export function inspectPerplexityDom(input: {
     status: terminal ? 'terminal' : 'terminal_signal_missing',
     rawAnswer,
     links,
-    userTurnId: `${threadIdentity}:query`,
-    assistantTurnId: `${threadIdentity}:answer`,
-    answerNodeId: `id:${tabPanel.id}`,
+    userTurnId: null,
+    assistantTurnId: null,
+    answerNodeId: null,
     terminalSignal: terminal ? 'perplexity_answer_actions_complete' : null,
+    observedThreadIdentity: threadIdentity,
+    answerDomIdentity: `dom:id:${tabPanel.id}`,
   };
 }

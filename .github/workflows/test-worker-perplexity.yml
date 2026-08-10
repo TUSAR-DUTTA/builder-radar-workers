@@ -10,11 +10,16 @@ on:
         description: Exact active prompt UUID
         required: true
         type: string
+      canary_private_commit:
+        description: Exact 40-character private-core commit for this canary only
+        required: true
+        type: string
 jobs:
   canary:
     uses: ./.github/workflows/_consumer-canary.yml
     with:
       engine: perplexity
+      private_commit: ${{ inputs.canary_private_commit }}
       project_id: ${{ inputs.project_id }}
       prompt_id: ${{ inputs.prompt_id }}
       preflight_only: true

@@ -1,26 +1,161 @@
-name: Test One Worker - Exact Project Prompt
+name: Consumer Browser Evidence A-B Harness
 on:
   workflow_dispatch:
     inputs:
-      engine:
-        description: One exact provider adapter
+      worker_commit:
+        description: Exact 40-character worker commit under test
+        required: true
+        type: string
+      canary_private_commit:
+        description: Exact 40-character private-core commit for this run only
+        required: true
+        type: string
+      provider:
+        description: One exact provider
         required: true
         type: choice
         options: [chatgpt, claude, perplexity, grok, google-aio]
-      project_id:
-        description: Exact project UUID
+      prompt:
+        description: The one prompt submitted in this run
         required: true
         type: string
-      prompt_id:
-        description: Exact active prompt UUID
+      acceptance_mode:
+        description: Explicit expected outcome
         required: true
-        type: string
+        type: choice
+        options: [expected_answer, expected_terminal_no_answer, diagnostic_only]
+
+permissions:
+  contents: read
+
 jobs:
-  canary:
-    uses: ./.github/workflows/_consumer-canary.yml
-    with:
-      engine: ${{ inputs.engine }}
-      project_id: ${{ inputs.project_id }}
-      prompt_id: ${{ inputs.prompt_id }}
-      preflight_only: true
-    secrets: inherit
+  live-harness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PLAYWRIGHT_BROWSER_CHANNEL: chrome
+      PLAYWRIGHT_HEADLESS: '0'
+      PLAYWRIGHT_MARKET: US
+      PLAYWRIGHT_PROXY_SERVER: ${{ secrets.PLAYWRIGHT_PROXY_SERVER }}
+      PLAYWRIGHT_PROXY_USERNAME: ${{ secrets.PLAYWRIGHT_PROXY_USERNAME }}
+      PLAYWRIGHT_PROXY_PASSWORD: ${{ secrets.PLAYWRIGHT_PROXY_PASSWORD }}
+      PLAYWRIGHT_SESSIONS_DIR: /tmp/playwright_sessions
+      PLAYWRIGHT_DEBUG_DIR: /tmp/playwright_debug
+
+    steps:
+      - name: Check out harness definition
+        uses: actions/checkout@v4
+        with:
+          path: _harness
+          persist-credentials: false
+
+      - name: Validate exact immutable runtime commits
+        env:
+          WORKER_COMMIT: ${{ inputs.worker_commit }}
+          PRIVATE_COMMIT: ${{ inputs.canary_private_commit }}
+        run: |
+          node _harness/scripts/validate-runtime-sha.mjs "$WORKER_COMMIT" WORKER_RUNTIME_SHA
+          node _harness/scripts/validate-runtime-sha.mjs "$PRIVATE_COMMIT" PRIVATE_INGESTION_COMMIT
+
+      - name: Check out exact worker commit
+        uses: actions/checkout@v4
+        with:
+          repository: TUSAR-DUTTA/builder-radar-workers
+          ref: ${{ inputs.worker_commit }}
+          path: runtime
+          persist-credentials: false
+
+      - name: Check out exact private commit
+        uses: actions/checkout@v4
+        with:
+          repository: TUSAR-DUTTA/Builder-Radar
+          ref: ${{ inputs.canary_private_commit }}
+          token: ${{ secrets.CORE_REPO_PAT }}
+          path: runtime/_core
+          persist-credentials: false
+
+      - name: Verify and stage exact runtime pair
+        env:
+          WORKER_COMMIT: ${{ inputs.worker_commit }}
+          PRIVATE_COMMIT: ${{ inputs.canary_private_commit }}
+        run: |
+          test "$(git -C runtime rev-parse HEAD)" = "$WORKER_COMMIT"
+          test "$(git -C runtime/_core rev-parse HEAD)" = "$PRIVATE_COMMIT"
+          test "$(git -C runtime cat-file -t "$WORKER_COMMIT")" = commit
+          test "$(git -C runtime/_core cat-file -t "$PRIVATE_COMMIT")" = commit
+          node -e "const worker=require('./runtime/package.json'); const core=require('./runtime/_core/package.json'); const name='@builder-radar/evidence-contract'; if (!worker.dependencies[name] || worker.dependencies[name] !== core.dependencies[name]) throw new Error('evidence-contract pins differ')"
+          cp -r runtime/_core/src/db runtime/src/db
+          cp -r runtime/_core/src/lib runtime/src/lib
+          if [ -d runtime/_core/src/types ]; then cp -r runtime/_core/src/types runtime/src/types; fi
+          rm -rf runtime/_core
+          cp _harness/scripts/run-consumer-live-harness.ts runtime/scripts/run-consumer-live-harness.ts
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: runtime/package-lock.json
+
+      - name: Install exact runtime and Chromium
+        working-directory: runtime
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Restore only the selected provider session
+        env:
+          PROVIDER: ${{ inputs.provider }}
+          CHATGPT_SESSION_GZ_B64: ${{ inputs.provider == 'chatgpt' && secrets.CHATGPT_SESSION_GZ_B64 || '' }}
+          CHATGPT_SESSION_B64: ${{ inputs.provider == 'chatgpt' && secrets.CHATGPT_SESSION_B64 || '' }}
+          CLAUDE_SESSION_GZ_B64: ${{ inputs.provider == 'claude' && secrets.CLAUDE_SESSION_GZ_B64 || '' }}
+          CLAUDE_SESSION_B64: ${{ inputs.provider == 'claude' && secrets.CLAUDE_SESSION_B64 || '' }}
+          PERPLEXITY_SESSION_GZ_B64: ${{ inputs.provider == 'perplexity' && secrets.PERPLEXITY_SESSION_GZ_B64 || '' }}
+          PERPLEXITY_SESSION_B64: ${{ inputs.provider == 'perplexity' && secrets.PERPLEXITY_SESSION_B64 || '' }}
+          GROK_SESSION_GZ_B64: ${{ inputs.provider == 'grok' && secrets.GROK_SESSION_GZ_B64 || '' }}
+          GROK_SESSION_B64_1: ${{ inputs.provider == 'grok' && secrets.GROK_SESSION_B64_1 || '' }}
+          GROK_SESSION_B64_2: ${{ inputs.provider == 'grok' && secrets.GROK_SESSION_B64_2 || '' }}
+          GROK_SESSION_B64_3: ${{ inputs.provider == 'grok' && secrets.GROK_SESSION_B64_3 || '' }}
+          GROK_SESSION_B64_4: ${{ inputs.provider == 'grok' && secrets.GROK_SESSION_B64_4 || '' }}
+          GROK_SESSION_B64_5: ${{ inputs.provider == 'grok' && secrets.GROK_SESSION_B64_5 || '' }}
+          GOOGLE_SESSION_GZ_B64: ${{ inputs.provider == 'google-aio' && secrets.GOOGLE_SESSION_GZ_B64 || '' }}
+          GOOGLE_SESSION_B64: ${{ inputs.provider == 'google-aio' && secrets.GOOGLE_SESSION_B64 || '' }}
+        run: |
+          mkdir -p /tmp/playwright_sessions /tmp/playwright_debug
+          node _harness/scripts/restore-provider-session.mjs "$PROVIDER" /tmp/playwright_sessions
+
+      - name: Run exactly one acquisition and enforce acceptance
+        working-directory: runtime
+        env:
+          HARNESS_PROVIDER: ${{ inputs.provider }}
+          HARNESS_PROMPT: ${{ inputs.prompt }}
+          HARNESS_ACCEPTANCE_MODE: ${{ inputs.acceptance_mode }}
+          WORKER_RUNTIME_SHA: ${{ inputs.worker_commit }}
+          PRIVATE_INGESTION_COMMIT: ${{ inputs.canary_private_commit }}
+        run: xvfb-run -a npx tsx scripts/run-consumer-live-harness.ts
+
+      - name: Write exact non-secret runtime summary
+        if: always()
+        env:
+          WORKER_COMMIT: ${{ inputs.worker_commit }}
+          PRIVATE_COMMIT: ${{ inputs.canary_private_commit }}
+          PROVIDER: ${{ inputs.provider }}
+          ACCEPTANCE_MODE: ${{ inputs.acceptance_mode }}
+        run: |
+          {
+            echo "## Consumer browser A/B harness"
+            echo "- worker_sha: $WORKER_COMMIT"
+            echo "- private_sha: $PRIVATE_COMMIT"
+            echo "- provider: $PROVIDER"
+            echo "- acceptance_mode: $ACCEPTANCE_MODE"
+            echo "- acquisition_limit: 1"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload bounded redacted evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: consumer-ab-${{ inputs.provider }}-${{ inputs.worker_commit }}-${{ github.run_id }}
+          path: /tmp/playwright_debug
+          if-no-files-found: error
+          retention-days: 3

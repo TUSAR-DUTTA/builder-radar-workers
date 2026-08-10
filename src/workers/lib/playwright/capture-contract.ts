@@ -1,11 +1,11 @@
 import type { AnswerModel } from '@/lib/geo/types';
 
 export const BROWSER_ADAPTER_VERSIONS: Record<string, string> = {
-  'chatgpt-consumer': 'chatgpt_dom_v8',
-  claude: 'claude_dom_v9',
-  perplexity: 'perplexity_dom_v8',
-  'google-aio': 'google_aio_state_v7',
-  grok: 'grok_dom_v6',
+  'chatgpt-consumer': 'chatgpt_dom_v9',
+  claude: 'claude_dom_v10',
+  perplexity: 'perplexity_dom_v9',
+  'google-aio': 'google_aio_state_v8',
+  grok: 'grok_dom_v7',
   'gemini-grounded': 'not_browser_captured',
   kimi: 'not_browser_captured',
   mistral: 'not_browser_captured',
@@ -27,7 +27,14 @@ export const PROVIDER_TERMINAL_SIGNALS = Object.freeze({
   perplexity_dom_v8: ['perplexity_answer_actions_complete'],
   google_aio_state_v7: ['aio_complete'],
   claude_dom_v9: ['claude_response_actions_complete'],
+  chatgpt_dom_v9: ['chatgpt_turn_actions_complete'],
+  claude_dom_v10: ['claude_response_actions_complete'],
+  perplexity_dom_v9: ['perplexity_answer_actions_complete'],
+  grok_dom_v7: ['grok_response_actions_complete'],
+  google_aio_state_v8: ['aio_complete'],
 } as const);
+
+export type TurnBindingMethod = 'provider_id' | 'deterministic_dom' | 'unavailable';
 
 export type BrowserTerminalSignal =
   typeof PROVIDER_TERMINAL_SIGNALS[keyof typeof PROVIDER_TERMINAL_SIGNALS][number];
@@ -74,9 +81,11 @@ export interface BrowserConnectionMetadata {
 /** Evidence that the captured answer reached a genuine provider-specific terminal state. */
 export interface TerminalProof {
   providerState: 'complete';
-  userTurnId: string;
-  assistantTurnId: string;
-  answerNodeId: string;
+  turnBindingMethod: Exclude<TurnBindingMethod, 'unavailable'>;
+  captureBindingId: string | null;
+  userTurnId: string | null;
+  assistantTurnId: string | null;
+  answerNodeId: string | null;
   terminalSignal: BrowserTerminalSignal;
   stableChecks: number;
 }
@@ -95,6 +104,8 @@ export interface CaptureProvenance {
   proxyRequested?: boolean;
   proxyUsed?: boolean;
   regionVerified?: boolean;
+  turnBindingMethod: TurnBindingMethod;
+  captureBindingId: string | null;
   providerTerminalSignal?: string;
   terminalProof?: TerminalProof;
   connectionMetadata?: BrowserConnectionMetadata;
@@ -133,10 +144,16 @@ export function buildProvenance(
 
   if (overrides?.terminalProof) {
     const proof = overrides.terminalProof;
-    if (!isRealProviderIdentity(proof.userTurnId)
-      || !isRealProviderIdentity(proof.assistantTurnId)
-      || !isRealProviderIdentity(proof.answerNodeId)) {
-      throw new Error('capture_rejected:provider_turn_identity_missing_or_synthetic');
+    if (proof.turnBindingMethod === 'provider_id') {
+      if (!isRealProviderIdentity(proof.userTurnId)
+        || !isRealProviderIdentity(proof.assistantTurnId)
+        || !isRealProviderIdentity(proof.answerNodeId)
+        || proof.captureBindingId !== null) {
+        throw new Error('capture_rejected:provider_turn_identity_missing_or_synthetic');
+      }
+    } else if (proof.userTurnId !== null || proof.assistantTurnId !== null || proof.answerNodeId !== null
+      || !/^local:sha256:[0-9a-f]{64}$/.test(proof.captureBindingId ?? '')) {
+      throw new Error('capture_rejected:deterministic_dom_binding_invalid');
     }
     const adapterVersion = BROWSER_ADAPTER_VERSIONS[model] || 'unknown';
     if (!isTerminalSignalCompatible(adapterVersion, proof.terminalSignal)) {
@@ -158,6 +175,8 @@ export function buildProvenance(
     proxyRequested: connectionMeta.proxyRequested,
     proxyUsed: connectionMeta.proxyUsed,
     regionVerified: connectionMeta.regionVerified,
+    turnBindingMethod: overrides?.terminalProof?.turnBindingMethod ?? 'unavailable',
+    captureBindingId: overrides?.terminalProof?.captureBindingId ?? null,
     providerTerminalSignal: overrides?.terminalProof?.terminalSignal,
     connectionMetadata: connectionMeta,
   };

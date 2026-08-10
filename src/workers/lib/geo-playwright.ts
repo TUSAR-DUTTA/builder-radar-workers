@@ -184,13 +184,15 @@ export async function runPromptViaPlaywrightDetailed(
             stableChecks: res.provenance.terminalProof?.stableChecks ?? 0,
           },
         },
+        turnBindingMethod: res.provenance.turnBindingMethod,
+        captureBindingId: res.provenance.captureBindingId,
         userTurnId: res.provenance.terminalProof?.userTurnId ?? null,
         assistantTurnId: res.provenance.terminalProof?.assistantTurnId ?? null,
         answerNodeId: res.provenance.terminalProof?.answerNodeId ?? null,
         providerTerminalSignal: res.provenance.providerTerminalSignal ?? null,
       };
       const acceptedAdapter: AdapterResultV1 = {
-        contractVersion: '1.0.1',
+        contractVersion: '1.1.0',
         schemaVersion: 'evidence_adapter_v1',
         engine: model,
         adapterVersion: res.provenance.adapterVersion,
@@ -297,7 +299,7 @@ export async function runPromptViaPlaywrightDetailed(
       const failureBytes = Buffer.from('', 'utf8');
 
       if (!acceptedReceiptRetained) adapterResults.push({
-        contractVersion: '1.0.1',
+        contractVersion: '1.1.0',
         schemaVersion: 'evidence_adapter_v1',
         engine: model,
         adapterVersion,
@@ -331,6 +333,8 @@ export async function runPromptViaPlaywrightDetailed(
           fallbackOccurred: false,
           adapterVersion,
           browserProviderMetadata: {},
+          turnBindingMethod: 'unavailable',
+          captureBindingId: null,
           userTurnId: null,
           assistantTurnId: null,
           answerNodeId: null,

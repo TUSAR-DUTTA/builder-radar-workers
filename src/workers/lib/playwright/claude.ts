@@ -60,12 +60,15 @@ export async function scrapeClaudePrompt(
       timeoutMs: deadlineAt ? Math.max(1_000, deadlineAt - Date.now()) : 180_000,
       signal,
     });
-    if (!inspection.userNodeId || !inspection.assistantNodeId || !inspection.answerNodeId || !inspection.terminalSignal) {
-      throw new Error('provider_identity_missing:claude');
+    if (!inspection.terminalSignal || inspection.turnBindingMethod === 'unavailable'
+      || (inspection.turnBindingMethod === 'deterministic_dom' && !inspection.captureBindingId)) {
+      throw new Error('prompt_binding_unverified:claude');
     }
     connectionMeta.actualLocale = await page.evaluate(() => document.documentElement.lang || 'en-US').catch(() => 'en-US');
     const terminalProof: TerminalProof = {
       providerState: 'complete',
+      turnBindingMethod: inspection.turnBindingMethod,
+      captureBindingId: inspection.captureBindingId,
       userTurnId: inspection.userNodeId,
       assistantTurnId: inspection.assistantNodeId,
       answerNodeId: inspection.answerNodeId,
@@ -75,6 +78,8 @@ export async function scrapeClaudePrompt(
     await captureDebug(page, 'claude', 'terminal-success', {
       userTurnId: inspection.userNodeId, assistantTurnId: inspection.assistantNodeId,
       answerNodeId: inspection.answerNodeId, terminalSignal: inspection.terminalSignal,
+      bindingMethod: inspection.turnBindingMethod, captureBindingId: inspection.captureBindingId,
+      submissionCount: 1,
       rawByteLength: Buffer.byteLength(inspection.rawAnswer, 'utf8'),
     });
     return {

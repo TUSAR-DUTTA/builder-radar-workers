@@ -133,27 +133,24 @@ export async function scrapeGoogleAioPrompt(
     const uiLocale = await page.evaluate(() => document.documentElement.lang || 'en-US').catch(() => 'en-US');
     connectionMeta.actualLocale = uiLocale;
 
-    const userTurnId = await page.evaluate(() => {
-      const input = document.querySelector('textarea[name="q"], input[name="q"]');
-      return input ? input.id || input.getAttribute('name') : null;
-    });
-
-    if (!userTurnId || !finalInspection.containerIdentity) {
-      throw new Error('capture_rejected: missing stable provider IDs');
-    }
+    const captureBindingId = `local:sha256:${createHash('sha256').update(JSON.stringify({
+      provider: 'google-aio', prompt, observedContainerIdentity: finalInspection.containerIdentity ?? null,
+      rawHash: createHash('sha256').update(Buffer.from(finalInspection.rawAnswer, 'utf8')).digest('hex'),
+    }), 'utf8').digest('hex')}`;
 
     const terminalProof: TerminalProof = {
       providerState: 'complete',
-      userTurnId,
-      assistantTurnId: finalInspection.containerIdentity,
-      answerNodeId: finalInspection.containerIdentity,
+      turnBindingMethod: 'deterministic_dom',
+      captureBindingId,
+      userTurnId: null,
+      assistantTurnId: null,
+      answerNodeId: null,
       terminalSignal: finalInspection.state,
       stableChecks: stableCount,
     };
 
     await captureDebug(page, 'google-aio', 'terminal-success', {
-      userTurnId, assistantTurnId: finalInspection.containerIdentity,
-      answerNodeId: finalInspection.containerIdentity, terminalSignal: finalInspection.state,
+      bindingMethod: 'deterministic_dom', captureBindingId, terminalSignal: finalInspection.state,
       rawByteLength: Buffer.byteLength(finalInspection.rawAnswer, 'utf8'),
       citationCount: finalInspection.links.length,
     });
@@ -171,3 +168,4 @@ export async function scrapeGoogleAioPrompt(
     throw err;
   }
 }
+import { createHash } from 'node:crypto';

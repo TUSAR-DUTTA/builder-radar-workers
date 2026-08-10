@@ -62,10 +62,21 @@ export function validateWorkerAdapterEnvelope(value: unknown): ValidationResult<
   if (!expectedVersion || adapter.adapterVersion !== expectedVersion) {
     return adapterFailure('unsupported_worker_version', 'Adapter version does not match this worker implementation.', 'adapterVersion');
   }
-  if (!isRealProviderIdentity(adapter.provenance.userTurnId)
-    || !isRealProviderIdentity(adapter.provenance.assistantTurnId)
-    || !isRealProviderIdentity(adapter.provenance.answerNodeId)) {
-    return adapterFailure('provenance_unverified', 'Provider-emitted turn identities are required.', 'provenance');
+  if (adapter.provenance.turnBindingMethod === 'provider_id') {
+    if (!isRealProviderIdentity(adapter.provenance.userTurnId)
+      || !isRealProviderIdentity(adapter.provenance.assistantTurnId)
+      || !isRealProviderIdentity(adapter.provenance.answerNodeId)
+      || adapter.provenance.captureBindingId !== null) {
+      return adapterFailure('provenance_unverified', 'Provider-ID binding is incomplete or synthetic.', 'provenance');
+    }
+  } else if (adapter.provenance.turnBindingMethod === 'deterministic_dom') {
+    if (adapter.provenance.userTurnId !== null || adapter.provenance.assistantTurnId !== null
+      || adapter.provenance.answerNodeId !== null
+      || !/^local:sha256:[0-9a-f]{64}$/.test(adapter.provenance.captureBindingId ?? '')) {
+      return adapterFailure('provenance_unverified', 'Deterministic DOM binding is incomplete or mislabeled.', 'provenance');
+    }
+  } else {
+    return adapterFailure('prompt_binding_unverified', 'No provider-ID or deterministic DOM turn binding was established.', 'provenance.turnBindingMethod');
   }
   if (!isTerminalSignalCompatible(adapter.adapterVersion, adapter.provenance.providerTerminalSignal)) {
     return adapterFailure('provider_not_terminal', 'Terminal signal is not valid for this exact adapter version.', 'provenance.providerTerminalSignal');

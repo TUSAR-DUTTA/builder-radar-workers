@@ -71,21 +71,30 @@ export async function scrapePerplexityPrompt(
     if (!inspection || inspection.status !== 'terminal' || stableChecks < 3) {
       throw new Error(`provider_not_terminal:perplexity:last_state_${inspection?.status ?? 'waiting'}`);
     }
-    if (!inspection.userTurnId || !inspection.assistantTurnId || !inspection.answerNodeId || !inspection.terminalSignal) {
-      throw new Error('provider_identity_missing:perplexity');
+    if (!inspection.terminalSignal || !inspection.observedThreadIdentity || !inspection.answerDomIdentity) {
+      throw new Error('prompt_binding_unverified:perplexity');
     }
+    const captureBindingId = `local:sha256:${createHash('sha256').update(JSON.stringify({
+      provider: 'perplexity', prompt: submittedUiPrompt,
+      observedThreadIdentity: inspection.observedThreadIdentity,
+      answerDomIdentity: inspection.answerDomIdentity,
+      rawHash: createHash('sha256').update(Buffer.from(inspection.rawAnswer, 'utf8')).digest('hex'),
+    }), 'utf8').digest('hex')}`;
     connectionMeta.actualLocale = await page.evaluate(() => document.documentElement.lang || 'en-US').catch(() => 'en-US');
     const terminalProof: TerminalProof = {
       providerState: 'complete',
-      userTurnId: inspection.userTurnId,
-      assistantTurnId: inspection.assistantTurnId,
-      answerNodeId: inspection.answerNodeId,
+      turnBindingMethod: 'deterministic_dom',
+      captureBindingId,
+      userTurnId: null,
+      assistantTurnId: null,
+      answerNodeId: null,
       terminalSignal: inspection.terminalSignal,
       stableChecks,
     };
     await captureDebug(page, 'perplexity', 'terminal-success', {
-      userTurnId: inspection.userTurnId, assistantTurnId: inspection.assistantTurnId,
-      answerNodeId: inspection.answerNodeId, terminalSignal: inspection.terminalSignal,
+      bindingMethod: 'deterministic_dom', captureBindingId,
+      observedThreadIdentity: inspection.observedThreadIdentity,
+      answerDomIdentity: inspection.answerDomIdentity, terminalSignal: inspection.terminalSignal,
       rawByteLength: Buffer.byteLength(inspection.rawAnswer, 'utf8'),
       citationCount: inspection.links.length,
     });
@@ -103,3 +112,4 @@ export async function scrapePerplexityPrompt(
     throw error;
   }
 }
+import { createHash } from 'node:crypto';

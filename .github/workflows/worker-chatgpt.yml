@@ -14,14 +14,29 @@ on:
         description: Exact active prompt UUID for a one-cell canary
         required: true
         type: string
+      canary_private_commit:
+        description: Exact 40-character private-core commit for this canary only
+        required: true
+        type: string
 concurrency:
   group: builderradar-chatgpt-${{ inputs.project_id || 'scheduled' }}
   cancel-in-progress: false
 jobs:
-  run:
+  production:
+    if: github.event_name != 'workflow_dispatch'
     uses: ./.github/workflows/_consumer-canary.yml
     with:
       engine: chatgpt
-      project_id: ${{ inputs.project_id || github.event.client_payload.project_id || '' }}
-      prompt_id: ${{ inputs.prompt_id || github.event.client_payload.prompt_id || '' }}
+      private_commit: ${{ vars.PRODUCTION_PRIVATE_INGESTION_COMMIT }}
+      project_id: ${{ github.event.client_payload.project_id || '' }}
+      prompt_id: ${{ github.event.client_payload.prompt_id || '' }}
+    secrets: inherit
+  canary:
+    if: github.event_name == 'workflow_dispatch'
+    uses: ./.github/workflows/_consumer-canary.yml
+    with:
+      engine: chatgpt
+      private_commit: ${{ inputs.canary_private_commit }}
+      project_id: ${{ inputs.project_id }}
+      prompt_id: ${{ inputs.prompt_id }}
     secrets: inherit

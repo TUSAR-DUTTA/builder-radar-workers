@@ -15,6 +15,10 @@ on:
         description: Existing Perplexity search URL; no prompt is submitted
         required: true
         type: string
+      canary_private_commit:
+        description: Exact 40-character private-core commit for this diagnostic only
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -24,7 +28,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      PRIVATE_INGESTION_COMMIT: ${{ vars.PRIVATE_INGESTION_COMMIT }}
+      PRIVATE_INGESTION_COMMIT: ${{ inputs.canary_private_commit }}
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       PLAYWRIGHT_HEADLESS: '0'
       PLAYWRIGHT_MARKET: US
@@ -40,7 +44,7 @@ jobs:
       - name: Validate and stage exact private runtime
         uses: ./.github/actions/stage-private-runtime
         with:
-          private_commit: ${{ vars.PRIVATE_INGESTION_COMMIT }}
+          private_commit: ${{ inputs.canary_private_commit }}
           core_token: ${{ secrets.CORE_REPO_PAT }}
 
       - name: Set up Node.js

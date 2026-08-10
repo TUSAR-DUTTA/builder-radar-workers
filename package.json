@@ -22,11 +22,12 @@
     "test:worker-browser-contracts": "tsx test/run-worker-tests.ts"
   },
   "dependencies": {
-    "@builder-radar/evidence-contract": "file:vendor/builder-radar-evidence-contract-1.0.1.tgz",
     "@atproto/api": "^0.20.5",
+    "@builder-radar/evidence-contract": "file:vendor/builder-radar-evidence-contract-1.1.0.tgz",
     "@next/third-parties": "^16.2.7",
     "@qdrant/js-client-rest": "^1.18.0",
     "@supabase/supabase-js": "^2.106.1",
+    "builderradar-app": "file:..",
     "cohere-ai": "^8.0.0",
     "drizzle-orm": "^0.45.2",
     "groq-sdk": "^1.2.0",

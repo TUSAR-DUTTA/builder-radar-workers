@@ -28,7 +28,7 @@ jobs:
     timeout-minutes: 45
 
     env:
-      PRIVATE_INGESTION_COMMIT: ${{ vars.PRIVATE_INGESTION_COMMIT }}
+      PRIVATE_INGESTION_COMMIT: ${{ vars.PRODUCTION_PRIVATE_INGESTION_COMMIT }}
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
       NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
@@ -58,7 +58,7 @@ jobs:
       - name: Validate and stage exact private runtime
         uses: ./.github/actions/stage-private-runtime
         with:
-          private_commit: ${{ vars.PRIVATE_INGESTION_COMMIT }}
+          private_commit: ${{ vars.PRODUCTION_PRIVATE_INGESTION_COMMIT }}
           core_token: ${{ secrets.CORE_REPO_PAT }}
 
       # API-source half — fetch HN/Bluesky/dev.to/StackExchange/GitHub/Lemmy/YouTube/Medium/News/

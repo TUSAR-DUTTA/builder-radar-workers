@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { BrowserTerminalSignal } from './capture-contract';
 
 export interface ConversationDomSpec {
@@ -49,6 +50,10 @@ export interface CorrelatedTurnInspection {
   promptMatched: boolean;
   assistantFollowsUser: boolean;
   terminalSignal: BrowserTerminalSignal | null;
+  turnBindingMethod: 'provider_id' | 'deterministic_dom' | 'unavailable';
+  captureBindingId: string | null;
+  userOrdinal: number | null;
+  assistantOrdinal: number | null;
 }
 
 export function renderedTextContainsPrompt(renderedText: string, expectedPrompt: string): boolean {
@@ -72,8 +77,11 @@ export function snapshotConversationDom(spec: ConversationDomSpec): Conversation
     }
     return null;
   };
-  const users = Array.from(document.querySelectorAll<HTMLElement>(spec.userSelector));
-  const assistants = Array.from(document.querySelectorAll<HTMLElement>(spec.assistantSelector));
+  const outermost = (nodes: HTMLElement[]): HTMLElement[] => nodes.filter((node) =>
+    !nodes.some((candidate) => candidate !== node && candidate.contains(node)));
+  const users = outermost(Array.from(document.querySelectorAll<HTMLElement>(spec.userSelector)));
+  const assistants = outermost(Array.from(document.querySelectorAll<HTMLElement>(spec.assistantSelector)))
+    .filter((assistant) => !users.some((user) => user === assistant || user.contains(assistant)));
   return {
     userNodeIds: users.map((node) => identity(node, spec.userIdentityAttributes)).filter((value): value is string => Boolean(value)),
     assistantNodeIds: assistants.map((node) => identity(node, spec.assistantIdentityAttributes)).filter((value): value is string => Boolean(value)),
@@ -98,14 +106,17 @@ export function inspectCorrelatedConversationTurn(input: {
     promptMatched: false,
     assistantFollowsUser: false,
     terminalSignal: null,
+    turnBindingMethod: 'unavailable',
+    captureBindingId: null,
+    userOrdinal: null,
+    assistantOrdinal: null,
   });
-  const visible = (selector: string): boolean => {
-    if (!selector) return false;
-    return Array.from(document.querySelectorAll<HTMLElement>(selector)).some((node) => {
-      const style = window.getComputedStyle(node);
-      return style.display !== 'none' && style.visibility !== 'hidden' && !node.hasAttribute('hidden');
-    });
+  const elementVisible = (node: HTMLElement): boolean => {
+    const style = window.getComputedStyle(node);
+    return style.display !== 'none' && style.visibility !== 'hidden' && !node.hasAttribute('hidden');
   };
+  const visible = (selector: string): boolean => Boolean(selector)
+    && Array.from(document.querySelectorAll<HTMLElement>(selector)).some(elementVisible);
   const identity = (node: HTMLElement, attributes: string[]): string | null => {
     for (const attribute of attributes) {
       const value = attribute === 'id' ? node.id : node.getAttribute(attribute);
@@ -121,59 +132,46 @@ export function inspectCorrelatedConversationTurn(input: {
   if (visible(input.spec.loginSelector)) return empty('login_required');
   if (visible(input.spec.interstitialSelector)) return empty('provider_interstitial');
 
-  const users = Array.from(document.querySelectorAll<HTMLElement>(input.spec.userSelector));
-  const assistants = Array.from(document.querySelectorAll<HTMLElement>(input.spec.assistantSelector));
-  const oldUsers = new Set(input.snapshot.userNodeIds);
-  const oldAssistants = new Set(input.snapshot.assistantNodeIds);
+  const outermost = (nodes: HTMLElement[]): HTMLElement[] => nodes.filter((node) =>
+    !nodes.some((candidate) => candidate !== node && candidate.contains(node)));
+  const users = outermost(Array.from(document.querySelectorAll<HTMLElement>(input.spec.userSelector)));
+  const assistants = outermost(Array.from(document.querySelectorAll<HTMLElement>(input.spec.assistantSelector)))
+    .filter((assistant) => !users.some((user) => user === assistant || user.contains(assistant)));
   const wanted = normalize(input.expectedPrompt);
-  let matchingUser: HTMLElement | null = null;
-  let matchingUserId: string | null = null;
-  let matchingUserIndex = -1;
-
-  for (let index = users.length - 1; index >= input.snapshot.userCount; index -= 1) {
-    const node = users[index];
-    const nodeIdentity = identity(node, input.spec.userIdentityAttributes);
-    const rendered = normalize(node.innerText || node.textContent || '');
-    if (wanted && rendered.includes(wanted)) {
-      if (!nodeIdentity) return empty('provider_identity_missing');
-      if (oldUsers.has(nodeIdentity)) continue;
-      matchingUser = node;
-      matchingUserId = nodeIdentity;
-      matchingUserIndex = index;
-      break;
-    }
-  }
-  if (!matchingUser) return empty('prompt_binding_unverified');
-  if (!matchingUserId) return empty('provider_identity_missing');
+  const newUsers = users.slice(input.snapshot.userCount);
+  if (newUsers.length === 0) return empty('waiting');
+  const matchingUsers = newUsers.filter((node) => wanted && normalize(node.innerText || node.textContent || '').includes(wanted));
+  if (matchingUsers.length === 0) return empty('prompt_binding_unverified');
+  if (matchingUsers.length !== 1) return empty('duplicate_current_turn');
+  const matchingUser = matchingUsers[0];
+  const matchingUserId = identity(matchingUser, input.spec.userIdentityAttributes);
+  const matchingUserIndex = users.indexOf(matchingUser);
 
   const nextUser = users.slice(matchingUserIndex + 1).find((node) =>
     Boolean(matchingUser!.compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING));
   const candidates = assistants.filter((node, index) => {
     if (index < input.snapshot.assistantCount) return false;
-    const nodeIdentity = identity(node, input.spec.assistantIdentityAttributes);
-    if (!nodeIdentity || oldAssistants.has(nodeIdentity)) return false;
     if (!(matchingUser!.compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING)) return false;
     return !nextUser || Boolean(node.compareDocumentPosition(nextUser) & Node.DOCUMENT_POSITION_FOLLOWING);
   });
   if (candidates.length === 0) {
-    return { ...empty('waiting'), userNodeId: matchingUserId, promptMatched: true };
+    return { ...empty('waiting'), userNodeId: matchingUserId, promptMatched: true, userOrdinal: matchingUserIndex };
   }
   if (candidates.length !== 1) {
-    return { ...empty('duplicate_current_turn'), userNodeId: matchingUserId, promptMatched: true };
+    return { ...empty('duplicate_current_turn'), userNodeId: matchingUserId, promptMatched: true, userOrdinal: matchingUserIndex };
   }
 
   const assistant = candidates[0];
+  const assistantIndex = assistants.indexOf(assistant);
   const assistantNodeId = identity(assistant, input.spec.assistantIdentityAttributes);
-  if (!assistantNodeId) {
-    return { ...empty('provider_identity_missing'), userNodeId: matchingUserId, promptMatched: true };
-  }
+  const assistantScope = assistant.closest<HTMLElement>('[data-testid*="message"], [data-is-user="false"], article') ?? assistant;
   const answer = assistant.matches(input.spec.answerSelector)
     ? assistant
-    : assistant.querySelector<HTMLElement>(input.spec.answerSelector);
+    : assistantScope.querySelector<HTMLElement>(input.spec.answerSelector);
   if (!answer) {
     return {
       ...empty('provider_no_answer'), userNodeId: matchingUserId, assistantNodeId,
-      promptMatched: true, assistantFollowsUser: true,
+      promptMatched: true, assistantFollowsUser: true, userOrdinal: matchingUserIndex, assistantOrdinal: assistantIndex,
     };
   }
   const answerNodeId = identity(answer, input.spec.assistantIdentityAttributes) ?? assistantNodeId;
@@ -192,17 +190,30 @@ export function inspectCorrelatedConversationTurn(input: {
       promptMatched: true, assistantFollowsUser: true,
     };
   }
-  const streaming = assistant.matches(input.spec.streamingSelector)
-    || Boolean(assistant.querySelector(input.spec.streamingSelector))
+  const providerIdsAvailable = Boolean(matchingUserId && assistantNodeId && answerNodeId);
+  const bindingMethod = providerIdsAvailable ? 'provider_id' as const : 'deterministic_dom' as const;
+  const boundUserId = providerIdsAvailable ? matchingUserId : null;
+  const boundAssistantId = providerIdsAvailable ? assistantNodeId : null;
+  const boundAnswerId = providerIdsAvailable ? answerNodeId : null;
+  const streaming = assistantScope.matches(input.spec.streamingSelector)
+    || Boolean(assistantScope.querySelector(input.spec.streamingSelector))
     || visible(input.spec.globalStopSelector);
   if (streaming) {
     return {
-      ...empty('streaming'), rawAnswer, userNodeId: matchingUserId, assistantNodeId, answerNodeId,
-      promptMatched: true, assistantFollowsUser: true,
+      ...empty('streaming'), rawAnswer, userNodeId: boundUserId, assistantNodeId: boundAssistantId, answerNodeId: boundAnswerId,
+      promptMatched: true, assistantFollowsUser: true, turnBindingMethod: bindingMethod,
+      userOrdinal: matchingUserIndex, assistantOrdinal: assistantIndex,
     };
   }
-  const terminal = assistant.matches(input.spec.terminalSelector)
-    || Boolean(assistant.querySelector(input.spec.terminalSelector));
+  const followingTerminalControl = Array.from(document.querySelectorAll<HTMLElement>(input.spec.terminalSelector)).some((control) => {
+    const followsAssistant = assistantScope.contains(control)
+      || Boolean(assistant.compareDocumentPosition(control) & Node.DOCUMENT_POSITION_FOLLOWING);
+    const precedesNextUser = !nextUser || Boolean(control.compareDocumentPosition(nextUser) & Node.DOCUMENT_POSITION_FOLLOWING);
+    return followsAssistant && precedesNextUser && elementVisible(control);
+  });
+  const terminal = assistantScope.matches(input.spec.terminalSelector)
+    || Boolean(assistantScope.querySelector(input.spec.terminalSelector))
+    || followingTerminalControl;
   const links: { url: string; title?: string }[] = [];
   for (const anchor of Array.from(answer.querySelectorAll<HTMLAnchorElement>('a[href]'))) {
     if (links.length >= 12) break;
@@ -213,12 +224,16 @@ export function inspectCorrelatedConversationTurn(input: {
     status: terminal ? 'terminal' : 'terminal_signal_missing',
     rawAnswer,
     links,
-    userNodeId: matchingUserId,
-    assistantNodeId,
-    answerNodeId,
+    userNodeId: boundUserId,
+    assistantNodeId: boundAssistantId,
+    answerNodeId: boundAnswerId,
     promptMatched: true,
     assistantFollowsUser: true,
     terminalSignal: terminal ? input.spec.terminalSignal : null,
+    turnBindingMethod: bindingMethod,
+    captureBindingId: null,
+    userOrdinal: matchingUserIndex,
+    assistantOrdinal: assistantIndex,
   };
 }
 
@@ -239,6 +254,7 @@ export async function waitForTerminalCorrelatedTurn(
   const requiredStableChecks = input.stableChecks ?? 3;
   const minimumChars = input.minimumChars ?? 40;
   let previousText: string | null = null;
+  let previousHash: string | null = null;
   let stableCount = 0;
   let lastStatus: CorrelatedTurnStatus = 'waiting';
 
@@ -252,18 +268,32 @@ export async function waitForTerminalCorrelatedTurn(
     });
     lastStatus = inspection.status;
     if (['login_required', 'provider_challenge', 'rate_limited', 'provider_interstitial',
-      'provider_refusal', 'provider_no_answer', 'prompt_binding_unverified', 'provider_identity_missing',
+      'provider_refusal', 'provider_no_answer', 'prompt_binding_unverified',
       'duplicate_current_turn'].includes(inspection.status)) {
       throw new Error(`${inspection.status}:${input.provider}`);
     }
     if (inspection.status !== 'terminal' || inspection.rawAnswer.length < minimumChars) {
       previousText = null;
+      previousHash = null;
       stableCount = 0;
       continue;
     }
-    stableCount = inspection.rawAnswer === previousText ? stableCount + 1 : 1;
+    const rawHash = createHash('sha256').update(Buffer.from(inspection.rawAnswer, 'utf8')).digest('hex');
+    stableCount = inspection.rawAnswer === previousText && rawHash === previousHash ? stableCount + 1 : 1;
     previousText = inspection.rawAnswer;
-    if (stableCount >= requiredStableChecks) return { ...inspection, observedStableChecks: stableCount };
+    previousHash = rawHash;
+    if (stableCount >= requiredStableChecks) {
+      const captureBindingId = inspection.turnBindingMethod === 'deterministic_dom'
+        ? `local:sha256:${createHash('sha256').update(JSON.stringify({
+          provider: input.provider,
+          prompt: input.expectedPrompt,
+          userOrdinal: inspection.userOrdinal,
+          assistantOrdinal: inspection.assistantOrdinal,
+          rawHash,
+        }), 'utf8').digest('hex')}`
+        : null;
+      return { ...inspection, captureBindingId, observedStableChecks: stableCount };
+    }
   }
   throw new Error(`provider_not_terminal:${input.provider}:last_state_${lastStatus}`);
 }

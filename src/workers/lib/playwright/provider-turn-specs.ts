@@ -18,13 +18,13 @@ export const CHATGPT_TURN_SPEC: ConversationDomSpec = Object.freeze({
 });
 
 export const CLAUDE_TURN_SPEC: ConversationDomSpec = Object.freeze({
-  userSelector: '[data-testid="user-message"], [data-is-user="true"][data-message-id]',
-  assistantSelector: '[data-testid="assistant-message"], [data-is-user="false"][data-message-id]',
+  userSelector: '[data-is-user="true"], [data-testid="user-message"], [class*="font-user-message"]',
+  assistantSelector: '[data-is-user="false"], [data-testid="assistant-message"], [class*="font-claude-response"]',
   answerSelector: '[data-testid="assistant-message-content"], [class*="font-claude-response"], .font-claude-response',
   terminalSelector: 'button[aria-label="Copy response"], button[aria-label*="Copy response" i], button[data-testid="copy-response-button"]',
-  streamingSelector: '[data-is-streaming="true"], [aria-busy="true"], [class*="streaming"]',
+  streamingSelector: '[data-is-streaming="true"], [aria-busy="true"], [class*="streaming"], [class*="animate-spin"], [class*="animate-pulse"]',
   globalStopSelector: 'button[aria-label="Stop response"], button[aria-label*="Stop generating" i]',
-  loginSelector: 'form[action*="login"], a[href*="/login"]',
+  loginSelector: 'form[action*="login"], button[data-testid="login-button"]',
   challengeSelector: 'iframe[src*="cloudflare"], #challenge-running',
   rateLimitSelector: '[data-testid="rate-limit-message"], [data-testid="usage-limit"]',
   interstitialSelector: '[data-testid="onboarding-modal"], [data-testid="account-interstitial"]',
@@ -35,8 +35,8 @@ export const CLAUDE_TURN_SPEC: ConversationDomSpec = Object.freeze({
 });
 
 export const GROK_TURN_SPEC: ConversationDomSpec = Object.freeze({
-  userSelector: '[data-message-author-role="user"], [data-testid="user-message"]',
-  assistantSelector: '[data-message-author-role="assistant"], [data-testid="assistant-message"]',
+  userSelector: 'div[data-testid*="user"], [data-message-author-role="user"], .message.user, [class*="message"][class*="user"], .query-text',
+  assistantSelector: 'div[data-testid*="assistant"], [data-message-author-role="assistant"], div[data-testid*="response"], div.response-content, div.response-body, .message.assistant, [class*="message"][class*="assistant"]',
   answerSelector: '[data-testid="message-content"], .response-content, .response-body, [class*="prose"]',
   terminalSelector: 'button[aria-label="Copy response"], button[aria-label="Copy"], button[data-testid="copy-button"]',
   streamingSelector: '[data-is-streaming="true"], [aria-busy="true"], [class*="streaming"]',

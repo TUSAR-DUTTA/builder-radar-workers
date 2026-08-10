@@ -85,9 +85,9 @@ async function assertGenericProviderMatrix(page: Page, fixture: GenericFixture):
   const prior = fixture.turn('old', 'Previous unrelated prompt', 'A prior answer that must never be selected.');
   assert.equal((await inspectGeneric(page, fixture, prior, fixture.turn('new', PROMPT, ANSWER))).status, 'terminal');
   assert.equal((await inspectGeneric(page, fixture, prior, fixture.turn('new', PROMPT, ANSWER, { streaming: true }))).status, 'streaming');
-  assert.equal((await inspectGeneric(page, fixture, prior, '')).status, 'prompt_binding_unverified');
+  assert.equal((await inspectGeneric(page, fixture, prior, '')).status, 'waiting');
   assert.equal((await inspectGeneric(page, fixture, prior, fixture.turn('new', 'Wrong prompt', ANSWER))).status, 'prompt_binding_unverified');
-  assert.equal((await inspectGeneric(page, fixture, prior, '<nav>Navigation only</nav>')).status, 'prompt_binding_unverified');
+  assert.equal((await inspectGeneric(page, fixture, prior, '<nav>Navigation only</nav>')).status, 'waiting');
   assert.equal((await inspectGeneric(page, fixture, prior, '<form action="/login">Login</form>')).status, 'login_required');
   assert.equal((await inspectGeneric(page, fixture, prior, '<div data-testid="rate-limit-message">Limit</div>')).status, 'rate_limited');
   assert.equal((await inspectGeneric(page, fixture, prior, fixture.turn('new', PROMPT, "I'm sorry, I can't help with that."))).status, 'provider_refusal');
@@ -99,12 +99,16 @@ async function assertGenericProviderMatrix(page: Page, fixture: GenericFixture):
   assert.equal(duplicateInspection.status, 'duplicate_current_turn');
   const twoPrior = prior + fixture.turn('older', 'Another previous prompt', 'Another previous answer.');
   assert.equal((await inspectGeneric(page, fixture, twoPrior, fixture.turn('new', PROMPT, ANSWER))).status, 'terminal');
-  assert.equal((await inspectGeneric(page, fixture, prior, '<article data-role="changed-selector">Drifted markup</article>')).status, 'prompt_binding_unverified');
+  assert.equal((await inspectGeneric(page, fixture, prior, '<article data-role="changed-selector">Drifted markup</article>')).status, 'waiting');
   assert.equal((await inspectGeneric(page, fixture, prior, fixture.turn('new', PROMPT, ANSWER, { terminal: false }))).status, 'terminal_signal_missing');
-  assert.equal((await inspectGeneric(page, fixture, prior, fixture.turn('new', PROMPT, ANSWER, { omitUserId: true }))).status,
-    fixture.provider === 'chatgpt' ? 'terminal' : 'provider_identity_missing');
+  const providerBound = await inspectGeneric(page, fixture, prior, fixture.turn('new', PROMPT, ANSWER));
+  assert.equal(providerBound.turnBindingMethod, 'provider_id');
+  const deterministicBound = await inspectGeneric(page, fixture, prior,
+    fixture.turn('new', PROMPT, ANSWER, { omitUserId: true, omitAssistantId: true }));
+  assert.equal(deterministicBound.status, 'terminal');
+  assert.equal(deterministicBound.turnBindingMethod, fixture.provider === 'chatgpt' ? 'provider_id' : 'deterministic_dom');
   const timeoutState: CorrelatedTurnStatus = (await inspectGeneric(page, fixture, prior, '')).status;
-  assert.equal(timeoutState, 'prompt_binding_unverified');
+  assert.equal(timeoutState, 'waiting');
 }
 
 function perplexityHtml(input: {
@@ -201,7 +205,7 @@ function validEnvelope(engine: GenericFixture['model'] | 'perplexity' | 'google-
   const rawAnswer = `${ANSWER}\r\nExact raw spacing.\t`;
   const contentSha256 = createHash('sha256').update(Buffer.from(rawAnswer, 'utf8')).digest('hex');
   return {
-    contractVersion: '1.0.1', schemaVersion: 'evidence_adapter_v1', engine, adapterVersion,
+    contractVersion: '1.1.0', schemaVersion: 'evidence_adapter_v1', engine, adapterVersion,
     projectId: 'project-123', scanJobId: 'job-123', scanCellId: 'cell-123', baselineId: 'baseline-123', promptId: 'prompt-123',
     submittedPrompt: PROMPT, capturedPrompt: PROMPT, rawAnswer,
     rawReceipt: { kind: 'database', uri: `urn:builder-radar:database-receipt:ingestion-pending:cell-123:${engine}:${contentSha256}`, contentSha256, mediaType: 'text/plain;charset=utf-8', immutable: true },
@@ -210,7 +214,8 @@ function validEnvelope(engine: GenericFixture['model'] | 'perplexity' | 'google-
     provenance: {
       requestedMarket: 'US', actualRegion: 'US', regionVerificationStatus: 'verified', requestedLocale: 'en-US', actualLocale: 'en-US',
       actualConnectionMode: 'proxy', proxyRequested: true, proxyUsed: true, fallbackOccurred: false, adapterVersion,
-      browserProviderMetadata: {}, userTurnId: `${engine}:provider-user-id`, assistantTurnId: `${engine}:provider-assistant-id`,
+      browserProviderMetadata: {}, turnBindingMethod: 'provider_id', captureBindingId: null,
+      userTurnId: `${engine}:provider-user-id`, assistantTurnId: `${engine}:provider-assistant-id`,
       answerNodeId: `${engine}:provider-answer-id`, providerTerminalSignal: signal,
     },
   };
@@ -219,8 +224,8 @@ function validEnvelope(engine: GenericFixture['model'] | 'perplexity' | 'google-
 async function main() {
   console.log('=== Worker deterministic evidence tests ===');
   assert.deepEqual(BROWSER_ADAPTER_VERSIONS, {
-    'chatgpt-consumer': 'chatgpt_dom_v8', claude: 'claude_dom_v9', perplexity: 'perplexity_dom_v8',
-    'google-aio': 'google_aio_state_v7', grok: 'grok_dom_v6', 'gemini-grounded': 'not_browser_captured',
+    'chatgpt-consumer': 'chatgpt_dom_v9', claude: 'claude_dom_v10', perplexity: 'perplexity_dom_v9',
+    'google-aio': 'google_aio_state_v8', grok: 'grok_dom_v7', 'gemini-grounded': 'not_browser_captured',
     kimi: 'not_browser_captured', mistral: 'not_browser_captured', 'gpt-oss': 'not_browser_captured',
   });
   assert.throws(() => assertRuntimeCommitShas({ GITHUB_ACTIONS: 'true', GITHUB_SHA: 'bad', PRIVATE_INGESTION_COMMIT: '2'.repeat(40) }));
@@ -228,7 +233,8 @@ async function main() {
     { workerSha: '1'.repeat(40), privateSha: '2'.repeat(40) });
   assert.throws(() => buildProvenance('chatgpt-consumer', {
     terminalProof: {
-      providerState: 'complete', userTurnId: 'synthetic-user-1', assistantTurnId: 'provider-assistant-id',
+      providerState: 'complete', turnBindingMethod: 'provider_id', captureBindingId: null,
+      userTurnId: 'synthetic-user-1', assistantTurnId: 'provider-assistant-id',
       answerNodeId: 'provider-answer-id', terminalSignal: 'chatgpt_turn_actions_complete', stableChecks: 3,
     },
   }, connectionMeta));
@@ -255,11 +261,22 @@ async function main() {
     const synthetic = structuredClone(envelope);
     synthetic.provenance.userTurnId = 'synthetic-user-1';
     assert.equal(validateWorkerAdapterEnvelope(synthetic).success, false, `${engine} synthetic identity rejected`);
+    const deterministic = structuredClone(envelope);
+    deterministic.provenance.turnBindingMethod = 'deterministic_dom';
+    deterministic.provenance.captureBindingId = `local:sha256:${'a'.repeat(64)}`;
+    deterministic.provenance.userTurnId = null;
+    deterministic.provenance.assistantTurnId = null;
+    deterministic.provenance.answerNodeId = null;
+    assert.equal(validateWorkerAdapterEnvelope(deterministic).success, true, `${engine} deterministic DOM binding accepted`);
+    const unavailable = structuredClone(deterministic);
+    unavailable.provenance.turnBindingMethod = 'unavailable';
+    unavailable.provenance.captureBindingId = null;
+    assert.equal(validateWorkerAdapterEnvelope(unavailable).success, false, `${engine} unavailable binding rejected`);
     const invalidSignal = structuredClone(envelope);
     invalidSignal.provenance.providerTerminalSignal = 'complete';
     assert.equal(validateWorkerAdapterEnvelope(invalidSignal).success, false, `${engine} invalid terminal signal rejected`);
     const wrongVersion = structuredClone(envelope);
-    wrongVersion.adapterVersion = wrongVersion.adapterVersion.replace(/v[6789]$/, 'v5');
+    wrongVersion.adapterVersion = wrongVersion.adapterVersion.replace(/v(?:[6-9]|10)$/, 'v5');
     wrongVersion.provenance.adapterVersion = wrongVersion.adapterVersion;
     assert.equal(validateWorkerAdapterEnvelope(wrongVersion).success, false, `${engine} wrong adapter version rejected`);
     const syntheticObjectStore = structuredClone(envelope);

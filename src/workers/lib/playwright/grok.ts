@@ -66,12 +66,15 @@ export async function scrapeGrokPrompt(
       minimumChars: 50,
       signal,
     });
-    if (!inspection.userNodeId || !inspection.assistantNodeId || !inspection.answerNodeId || !inspection.terminalSignal) {
-      throw new Error('provider_identity_missing:grok');
+    if (!inspection.terminalSignal || inspection.turnBindingMethod === 'unavailable'
+      || (inspection.turnBindingMethod === 'deterministic_dom' && !inspection.captureBindingId)) {
+      throw new Error('prompt_binding_unverified:grok');
     }
     connectionMeta.actualLocale = await page.evaluate(() => document.documentElement.lang || 'en-US').catch(() => 'en-US');
     const terminalProof: TerminalProof = {
       providerState: 'complete',
+      turnBindingMethod: inspection.turnBindingMethod,
+      captureBindingId: inspection.captureBindingId,
       userTurnId: inspection.userNodeId,
       assistantTurnId: inspection.assistantNodeId,
       answerNodeId: inspection.answerNodeId,
@@ -81,6 +84,8 @@ export async function scrapeGrokPrompt(
     await captureDebug(page, 'grok', 'terminal-success', {
       userTurnId: inspection.userNodeId, assistantTurnId: inspection.assistantNodeId,
       answerNodeId: inspection.answerNodeId, terminalSignal: inspection.terminalSignal,
+      bindingMethod: inspection.turnBindingMethod, captureBindingId: inspection.captureBindingId,
+      submissionCount: 1,
       rawByteLength: Buffer.byteLength(inspection.rawAnswer, 'utf8'),
     });
     return {

@@ -21,7 +21,7 @@ export const CLAUDE_TURN_SPEC: ConversationDomSpec = Object.freeze({
   userSelector: '[data-is-user="true"], [data-testid="user-message"], [class*="font-user-message"]',
   assistantSelector: '[data-is-user="false"], [data-testid="assistant-message"], [class*="font-claude-response"]',
   answerSelector: '[data-testid="assistant-message-content"], [class*="font-claude-response"], .font-claude-response',
-  terminalSelector: 'button[aria-label="Copy response"], button[aria-label*="Copy response" i], button[data-testid="copy-response-button"]',
+  terminalSelector: 'button[aria-label="Copy response"], button[aria-label*="Copy response" i], button[aria-label="Copy"], button[data-testid="copy-response-button"], button[data-testid*="copy" i]',
   streamingSelector: '[data-is-streaming="true"], [aria-busy="true"], [class*="streaming"], [class*="animate-spin"], [class*="animate-pulse"]',
   globalStopSelector: 'button[aria-label="Stop response"], button[aria-label*="Stop generating" i]',
   loginSelector: 'form[action*="login"], button[data-testid="login-button"]',

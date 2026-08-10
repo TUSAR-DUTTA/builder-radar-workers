@@ -41,11 +41,14 @@ export async function scrapeGrokPrompt(
     let composer: import('playwright').Locator | null = null;
     for (let attempt = 0; attempt < 15; attempt += 1) {
       if (signal?.aborted) throw new Error('provider_deadline_aborted');
-      composer = await firstVisibleLocator(page, '#grok-input, [contenteditable="true"][data-testid="composer-input"], textarea[aria-label*="Ask" i]');
+      composer = await firstVisibleLocator(
+        page,
+        '#grok-input, [contenteditable="true"], textarea, [placeholder*="Ask" i], [placeholder*="What" i], [aria-label*="Ask" i], [aria-label*="prompt" i]',
+      );
       if (composer) break;
       await page.waitForTimeout(1_000);
     }
-    if (!composer) throw new Error('login_required:grok_missing_composer');
+    if (!composer) throw new Error('adapter_selector_missing:grok_composer');
 
     const snapshot = await page.evaluate(snapshotConversationDom, GROK_TURN_SPEC);
     await composer.click({ timeout: 20_000, force: true });
@@ -53,7 +56,10 @@ export async function scrapeGrokPrompt(
     await page.keyboard.insertText(prompt);
     const composerText = await composer.inputValue().catch(async () => composer!.innerText().catch(() => ''));
     if (composerText !== prompt) throw new Error('prompt_binding_unverified:grok_composer_round_trip');
-    const submit = await firstVisibleLocator(page, 'button[aria-label="Send"], button[aria-label="Submit"], button[data-testid="send-button"]');
+    const submit = await firstVisibleLocator(
+      page,
+      'button[aria-label*="Send" i], button[aria-label*="Submit" i], button[aria-label*="Ask" i], button[type="submit"], button:has(svg.lucide-arrow-up), button:has(svg.lucide-send), [data-testid="send-button"]',
+    );
     if (submit && !await submit.isDisabled().catch(() => true)) await submit.click();
     else await composer.press('Enter');
 
@@ -95,8 +101,22 @@ export async function scrapeGrokPrompt(
       provenance: buildProvenance('grok', { terminalProof }, connectionMeta),
     };
   } catch (error) {
+    const visibleControls = await page.evaluate(() => Array.from(document.querySelectorAll<HTMLElement>('button, textarea, [contenteditable="true"]'))
+      .filter((node) => {
+        const style = window.getComputedStyle(node);
+        return style.display !== 'none' && style.visibility !== 'hidden' && !node.hasAttribute('hidden');
+      })
+      .slice(0, 40)
+      .map((node) => ({
+        tag: node.tagName.toLowerCase(),
+        ariaLabel: node.getAttribute('aria-label'),
+        testId: node.getAttribute('data-testid'),
+        placeholder: node.getAttribute('placeholder'),
+        contentEditable: node.getAttribute('contenteditable'),
+      }))).catch(() => []);
     await captureDebug(page, 'grok', 'capture-rejected', {
       reason: error instanceof Error ? error.message.slice(0, 160) : 'unknown_error',
+      visibleControls,
     });
     await closeGrokBrowser();
     throw error;

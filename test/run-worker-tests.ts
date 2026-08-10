@@ -224,8 +224,8 @@ function validEnvelope(engine: GenericFixture['model'] | 'perplexity' | 'google-
 async function main() {
   console.log('=== Worker deterministic evidence tests ===');
   assert.deepEqual(BROWSER_ADAPTER_VERSIONS, {
-    'chatgpt-consumer': 'chatgpt_dom_v9', claude: 'claude_dom_v10', perplexity: 'perplexity_dom_v9',
-    'google-aio': 'google_aio_state_v8', grok: 'grok_dom_v7', 'gemini-grounded': 'not_browser_captured',
+    'chatgpt-consumer': 'chatgpt_dom_v9', claude: 'claude_dom_v11', perplexity: 'perplexity_dom_v9',
+    'google-aio': 'google_aio_state_v8', grok: 'grok_dom_v8', 'gemini-grounded': 'not_browser_captured',
     kimi: 'not_browser_captured', mistral: 'not_browser_captured', 'gpt-oss': 'not_browser_captured',
   });
   assert.throws(() => assertRuntimeCommitShas({ GITHUB_ACTIONS: 'true', GITHUB_SHA: 'bad', PRIVATE_INGESTION_COMMIT: '2'.repeat(40) }));
@@ -276,7 +276,7 @@ async function main() {
     invalidSignal.provenance.providerTerminalSignal = 'complete';
     assert.equal(validateWorkerAdapterEnvelope(invalidSignal).success, false, `${engine} invalid terminal signal rejected`);
     const wrongVersion = structuredClone(envelope);
-    wrongVersion.adapterVersion = wrongVersion.adapterVersion.replace(/v(?:[6-9]|10)$/, 'v5');
+    wrongVersion.adapterVersion = 'obsolete_adapter_v0';
     wrongVersion.provenance.adapterVersion = wrongVersion.adapterVersion;
     assert.equal(validateWorkerAdapterEnvelope(wrongVersion).success, false, `${engine} wrong adapter version rejected`);
     const syntheticObjectStore = structuredClone(envelope);

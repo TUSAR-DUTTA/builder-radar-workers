@@ -89,8 +89,17 @@ export async function scrapeClaudePrompt(
       provenance: buildProvenance('claude', { terminalProof }, connectionMeta),
     };
   } catch (error) {
+    const responseControls = await page.evaluate(() => Array.from(document.querySelectorAll<HTMLElement>('button'))
+      .map((node) => ({
+        ariaLabel: node.getAttribute('aria-label'),
+        testId: node.getAttribute('data-testid'),
+        title: node.getAttribute('title'),
+      }))
+      .filter((control) => /copy|retry|rewrite|thumb|feedback/i.test(`${control.ariaLabel ?? ''} ${control.testId ?? ''} ${control.title ?? ''}`))
+      .slice(0, 24)).catch(() => []);
     await captureDebug(page, 'claude', 'capture-rejected', {
       reason: error instanceof Error ? error.message.slice(0, 160) : 'unknown_error',
+      responseControls,
     });
     await closeClaudeBrowser();
     throw error;

@@ -2,10 +2,10 @@ import type { AnswerModel } from '@/lib/geo/types';
 
 export const BROWSER_ADAPTER_VERSIONS: Record<string, string> = {
   'chatgpt-consumer': 'chatgpt_dom_v9',
-  claude: 'claude_dom_v10',
+  claude: 'claude_dom_v11',
   perplexity: 'perplexity_dom_v9',
   'google-aio': 'google_aio_state_v8',
-  grok: 'grok_dom_v7',
+  grok: 'grok_dom_v8',
   'gemini-grounded': 'not_browser_captured',
   kimi: 'not_browser_captured',
   mistral: 'not_browser_captured',
@@ -31,6 +31,8 @@ export const PROVIDER_TERMINAL_SIGNALS = Object.freeze({
   claude_dom_v10: ['claude_response_actions_complete'],
   perplexity_dom_v9: ['perplexity_answer_actions_complete'],
   grok_dom_v7: ['grok_response_actions_complete'],
+  claude_dom_v11: ['claude_response_actions_complete'],
+  grok_dom_v8: ['grok_response_actions_complete'],
   google_aio_state_v8: ['aio_complete'],
 } as const);
 

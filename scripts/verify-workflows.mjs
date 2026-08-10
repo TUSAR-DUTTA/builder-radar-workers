@@ -13,7 +13,7 @@ const providerWorkflows = engines.flatMap((engine) => [
   `.github/workflows/worker-${engine}.yml`,
 ]);
 const allWorkflows = [
-  '.github/workflows/ci.yml', '.github/workflows/social-worker.yml', '.github/workflows/test-single-prompt-all.yml',
+  '.github/workflows/ci.yml', '.github/workflows/_compatibility-ci.yml', '.github/workflows/social-worker.yml', '.github/workflows/test-single-prompt-all.yml',
   '.github/workflows/_consumer-canary.yml', '.github/workflows/diagnose-perplexity-structure.yml', ...providerWorkflows,
 ];
 const failures = [];
@@ -92,11 +92,26 @@ for (const file of providerWorkflows) {
   }
 }
 
-for (const file of ['.github/workflows/ci.yml', '.github/workflows/social-worker.yml']) {
-  const text = readFileSync(file, 'utf8');
-  if (!/PRODUCTION_PRIVATE_INGESTION_COMMIT/.test(text) || !/stage-private-runtime/.test(text)) {
-    failures.push(`${file}: missing fail-closed private runtime gate`);
-  }
+const ci = readFileSync('.github/workflows/ci.yml', 'utf8');
+for (const requirement of [
+  /canary_private_commit:[\s\S]*?required:\s*true/,
+  /production-compatibility:[\s\S]*?if:\s*github\.event_name != 'workflow_dispatch'/,
+  /production-compatibility:[\s\S]*?private_commit:\s*\$\{\{ vars\.PRODUCTION_PRIVATE_INGESTION_COMMIT \}\}/,
+  /canary-compatibility:[\s\S]*?if:\s*github\.event_name == 'workflow_dispatch'/,
+  /canary-compatibility:[\s\S]*?private_commit:\s*\$\{\{ inputs\.canary_private_commit \}\}/,
+]) if (!requirement.test(ci)) failures.push(`worker CI production/canary SHA isolation missing ${requirement}`);
+
+const reusableCi = readFileSync('.github/workflows/_compatibility-ci.yml', 'utf8');
+if (!/stage-private-runtime/.test(reusableCi) || !/inputs\.private_commit/.test(reusableCi)) {
+  failures.push('reusable worker CI is missing its exact private runtime gate');
+}
+if (/vars\.(?:PRODUCTION_)?PRIVATE_INGESTION_COMMIT/.test(reusableCi)) {
+  failures.push('reusable worker CI must not depend on a repository private SHA variable');
+}
+
+const social = readFileSync('.github/workflows/social-worker.yml', 'utf8');
+if (!/PRODUCTION_PRIVATE_INGESTION_COMMIT/.test(social) || !/stage-private-runtime/.test(social)) {
+  failures.push('social-worker workflow is missing its fail-closed production private runtime gate');
 }
 
 for (const value of ['main', 'codex/feature', 'v1.2.3', '5255eed74e04', '', 'A'.repeat(40), 'g'.repeat(40)]) {

@@ -5,64 +5,26 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      canary_private_commit:
+        description: Exact 40-character private-core commit for this CI canary only
+        required: true
+        type: string
 
 permissions:
   contents: read
 
 jobs:
-  compatibility:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    env:
-      PRIVATE_INGESTION_COMMIT: ${{ vars.PRODUCTION_PRIVATE_INGESTION_COMMIT }}
-      PLAYWRIGHT_DEBUG_DIR: /tmp/playwright_debug
-    steps:
-      - name: Check out worker commit
-        uses: actions/checkout@v4
-        with:
-          persist-credentials: false
+  production-compatibility:
+    if: github.event_name != 'workflow_dispatch'
+    uses: ./.github/workflows/_compatibility-ci.yml
+    with:
+      private_commit: ${{ vars.PRODUCTION_PRIVATE_INGESTION_COMMIT }}
+    secrets: inherit
 
-      - name: Validate and stage exact private runtime
-        uses: ./.github/actions/stage-private-runtime
-        with:
-          private_commit: ${{ vars.PRODUCTION_PRIVATE_INGESTION_COMMIT }}
-          core_token: ${{ secrets.CORE_REPO_PAT }}
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-
-      - name: Install exact dependencies
-        run: npm ci
-
-      - name: Install Chromium for adapter fixtures
-        run: npx playwright install --with-deps chromium
-
-      - name: Verify evidence contract integrity
-        run: npm run verify:evidence-contract
-
-      - name: Run complete deterministic test suite
-        run: npm test
-
-      - name: Typecheck worker runtime
-        run: npm run typecheck:workers
-
-      - name: Lint worker, contract, test, and verification code
-        run: npm run lint
-
-      - name: Build and verify package contents
-        run: npm run build
-
-      - name: Verify clean patch whitespace
-        run: git diff --check
-
-      - name: Upload bounded test diagnostics
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: worker-ci-diagnostics-${{ github.run_id }}
-          path: /tmp/playwright_debug
-          if-no-files-found: ignore
-          retention-days: 3
+  canary-compatibility:
+    if: github.event_name == 'workflow_dispatch'
+    uses: ./.github/workflows/_compatibility-ci.yml
+    with:
+      private_commit: ${{ inputs.canary_private_commit }}
+    secrets: inherit

@@ -69,6 +69,12 @@ async function adapter(provider: Provider): Promise<{
   }
 }
 
+async function runtimeAdapterVersion(provider: Provider): Promise<string> {
+  const { BROWSER_ADAPTER_VERSIONS } = await import('../src/workers/lib/playwright/capture-contract');
+  const engine = provider === 'chatgpt' ? 'chatgpt-consumer' : provider;
+  return BROWSER_ADAPTER_VERSIONS[engine] ?? 'unavailable';
+}
+
 async function writeDerivedEvidence(
   page: import('playwright').Page | null,
   debugDirectory: string,
@@ -107,6 +113,7 @@ async function main(): Promise<void> {
   await mkdir(debugDirectory, { recursive: true });
   loadSessionsFromEnv();
   const selected = await adapter(providerInput);
+  const selectedAdapterVersion = await runtimeAdapterVersion(providerInput);
   let capture: Capture | null = null;
   let thrown: unknown = null;
   try { capture = await selected.scrape(prompt); }
@@ -129,7 +136,7 @@ async function main(): Promise<void> {
   const outcome = answerAccepted ? 'answer_captured' : terminalNoAnswerAccepted ? 'no_answer_terminal' : 'acquisition_failed';
   const diagnosticReason = thrown instanceof Error ? thrown.message.slice(0, 240) : thrown ? 'non_error_exception' : null;
   const manifest = {
-    schemaVersion: 'consumer_live_harness_v1',
+    schemaVersion: 'consumer_live_harness_v2',
     provider: providerInput,
     acceptanceMode: mode,
     expectationPassed,
@@ -144,9 +151,11 @@ async function main(): Promise<void> {
     citationCount: citations.length,
     bindingMethod: capture?.provenance?.turnBindingMethod ?? 'unavailable',
     captureBindingId: capture?.provenance?.captureBindingId ?? null,
-    providerTerminalSignal: capture?.provenance?.providerTerminalSignal ?? terminalProof.terminalSignal ?? null,
+    providerTerminalSignal: capture?.provenance?.providerTerminalSignal
+      ?? terminalProof.terminalSignal
+      ?? (terminalNoAnswerAccepted ? 'no_answer_terminal' : null),
     stableChecks: terminalProof.stableChecks ?? null,
-    adapterVersion: capture?.provenance?.adapterVersion ?? 'unavailable',
+    adapterVersion: capture?.provenance?.adapterVersion ?? selectedAdapterVersion,
     workerRuntimeSha: workerSha,
     privateRuntimeSha: privateSha,
     diagnosticReason,

@@ -90,6 +90,10 @@ async function assertGenericProviderMatrix(page: Page, fixture: GenericFixture):
   assert.equal((await inspectGeneric(page, fixture, prior, '<nav>Navigation only</nav>')).status, 'waiting');
   assert.equal((await inspectGeneric(page, fixture, prior, '<form action="/login">Login</form>')).status, 'login_required');
   assert.equal((await inspectGeneric(page, fixture, prior, '<div data-testid="rate-limit-message">Limit</div>')).status, 'rate_limited');
+  if (fixture.provider === 'grok') {
+    assert.equal((await inspectGeneric(page, fixture, prior,
+      '<div>2 hours before limit is gone. Upgrade to SuperGrok for higher limits.</div>')).status, 'rate_limited');
+  }
   assert.equal((await inspectGeneric(page, fixture, prior, fixture.turn('new', PROMPT, "I'm sorry, I can't help with that."))).status, 'provider_refusal');
   assert.equal((await inspectGeneric(page, fixture, prior, fixture.turn('new', PROMPT, 'No answer'))).status, 'provider_no_answer');
   assert.equal((await inspectGeneric(page, fixture, prior, fixture.interstitial)).status, 'provider_interstitial');
@@ -224,8 +228,8 @@ function validEnvelope(engine: GenericFixture['model'] | 'perplexity' | 'google-
 async function main() {
   console.log('=== Worker deterministic evidence tests ===');
   assert.deepEqual(BROWSER_ADAPTER_VERSIONS, {
-    'chatgpt-consumer': 'chatgpt_dom_v9', claude: 'claude_dom_v11', perplexity: 'perplexity_dom_v9',
-    'google-aio': 'google_aio_state_v8', grok: 'grok_dom_v8', 'gemini-grounded': 'not_browser_captured',
+    'chatgpt-consumer': 'chatgpt_dom_v10', claude: 'claude_dom_v11', perplexity: 'perplexity_dom_v9',
+    'google-aio': 'google_aio_state_v8', grok: 'grok_dom_v9', 'gemini-grounded': 'not_browser_captured',
     kimi: 'not_browser_captured', mistral: 'not_browser_captured', 'gpt-oss': 'not_browser_captured',
   });
   assert.throws(() => assertRuntimeCommitShas({ GITHUB_ACTIONS: 'true', GITHUB_SHA: 'bad', PRIVATE_INGESTION_COMMIT: '2'.repeat(40) }));

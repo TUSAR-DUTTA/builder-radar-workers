@@ -87,12 +87,12 @@ export async function scrapeChatGPTPrompt(
     );
     if (!composer || !profile || explicitLogin) {
       await captureDebug(page, 'chatgpt', 'login-required', { composerVisible: Boolean(composer), profileVisible: Boolean(profile) });
-      throw new Error('login_required:chatgpt');
+      throw new Error('session_expired:chatgpt');
     }
     const authFailures = chatGPTForbiddenUrls(forbidden);
     if (authFailures.length) {
       await captureDebug(page, 'chatgpt', 'auth-403-before-send', { count: authFailures.length });
-      throw new Error('login_required:chatgpt_backend_403');
+      throw new Error('session_expired:chatgpt_backend_403');
     }
 
     const snapshot = await page.evaluate(snapshotConversationDom, CHATGPT_TURN_SPEC);
@@ -112,7 +112,7 @@ export async function scrapeChatGPTPrompt(
       signal,
     });
     if (isBadChatGPTResponse(inspection.rawAnswer)) throw new Error('provider_no_answer:chatgpt');
-    if (chatGPTForbiddenUrls(forbidden).length) throw new Error('login_required:chatgpt_backend_403_after_send');
+    if (chatGPTForbiddenUrls(forbidden).length) throw new Error('session_expired:chatgpt_backend_403_after_send');
     if (!inspection.terminalSignal || inspection.turnBindingMethod === 'unavailable'
       || (inspection.turnBindingMethod === 'deterministic_dom' && !inspection.captureBindingId)) {
       throw new Error('prompt_binding_unverified:chatgpt');

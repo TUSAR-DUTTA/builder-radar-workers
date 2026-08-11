@@ -44,6 +44,7 @@ export const GROK_TURN_SPEC: ConversationDomSpec = Object.freeze({
   loginSelector: 'form[action*="login"], a[href*="/login"]',
   challengeSelector: 'iframe[src*="challenge"], #challenge-running',
   rateLimitSelector: '[data-testid="rate-limit-message"], [data-testid="usage-limit"]',
+  rateLimitText: ['before limit is gone', 'upgrade to supergrok'],
   interstitialSelector: '[data-testid="account-interstitial"], [data-testid="onboarding-modal"]',
   providerOrigin: 'https://grok.com',
   userIdentityAttributes: ['data-message-id', 'id'],

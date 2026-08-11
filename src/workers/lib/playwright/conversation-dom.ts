@@ -11,6 +11,7 @@ export interface ConversationDomSpec {
   loginSelector: string;
   challengeSelector: string;
   rateLimitSelector: string;
+  rateLimitText?: string[];
   interstitialSelector: string;
   providerOrigin: string;
   userIdentityAttributes: string[];
@@ -127,8 +128,12 @@ export function inspectCorrelatedConversationTurn(input: {
   const normalize = (value: string): string => value.normalize('NFKC').toLocaleLowerCase('en-US')
     .replace(/[\u200B-\u200D\uFEFF]/g, '').replace(/\s+/g, ' ').trim();
 
+  const visibleBodyText = normalize(document.body?.innerText ?? '');
   if (visible(input.spec.challengeSelector)) return empty('provider_challenge');
-  if (visible(input.spec.rateLimitSelector)) return empty('rate_limited');
+  if (visible(input.spec.rateLimitSelector)
+    || input.spec.rateLimitText?.some((text) => visibleBodyText.includes(normalize(text)))) {
+    return empty('rate_limited');
+  }
   if (visible(input.spec.loginSelector)) return empty('login_required');
   if (visible(input.spec.interstitialSelector)) return empty('provider_interstitial');
 

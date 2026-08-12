@@ -1,6 +1,7 @@
 import { launchSeededPersistentContext, captureDebug, firstVisibleLocator, PlaywrightContextHandle } from './shared';
 import { inspectGoogleAioDom } from './google-aio-dom';
 import { BrowserCapture, buildProvenance, BrowserNoAnswerError, type TerminalProof, type BrowserConnectionMetadata } from './capture-contract';
+import { createHash } from 'node:crypto';
 
 export let sharedGoogleAioBrowser: { runtime: PlaywrightContextHandle, page: import('playwright').Page, connectionMeta: BrowserConnectionMetadata } | null = null;
 
@@ -168,4 +169,3 @@ export async function scrapeGoogleAioPrompt(
     throw err;
   }
 }
-import { createHash } from 'node:crypto';

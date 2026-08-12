@@ -63,6 +63,15 @@ export async function scrapeGrokPrompt(
     if (submit && !await submit.isDisabled().catch(() => true)) await submit.click();
     else await composer.press('Enter');
 
+    // Check for rate limit / usage limit banner immediately after sending
+    const rateLimitBanner = await firstVisibleLocator(
+      page,
+      '[role="alert"], [class*="rate-limit"], [class*="limit-reached"], text="You have reached your limit", text="Usage limit exceeded", text="Try again later"'
+    );
+    if (rateLimitBanner) {
+      throw new Error('provider_rate_limit:grok_usage_cap');
+    }
+
     const inspection = await waitForTerminalCorrelatedTurn(page, {
       spec: GROK_TURN_SPEC,
       snapshot,

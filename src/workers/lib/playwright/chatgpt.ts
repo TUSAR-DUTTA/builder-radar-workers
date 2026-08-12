@@ -86,8 +86,19 @@ export async function scrapeChatGPTPrompt(
       'a[href*="/auth/login"], button[data-testid="login-button"], button:has-text("Log in")',
     );
     if (!composer || !profile || explicitLogin) {
-      await captureDebug(page, 'chatgpt', 'login-required', { composerVisible: Boolean(composer), profileVisible: Boolean(profile) });
-      throw new Error('session_expired:chatgpt');
+      // Retry with a fresh navigation before giving up
+      await page.goto('https://chatgpt.com/?retry=1', { waitUntil: 'domcontentloaded', timeout: 30_000 }).catch(() => {});
+      await page.waitForTimeout(5000);
+      composer = await firstVisibleLocator(page, '#prompt-textarea, div[contenteditable="true"][aria-label="Chat with ChatGPT"]');
+      profile = await firstVisibleLocator(page, '[data-testid="accounts-profile-button"], [aria-label*="profile menu" i]');
+      const stillLogin = await firstVisibleLocator(page, 'a[href*="/auth/login"], button[data-testid="login-button"], button:has-text("Log in")');
+      const challenge = await firstVisibleLocator(page, 'iframe[src*="challenge"], #challenge-running, [class*="cf-"]');
+      
+      if (!composer || !profile || stillLogin || challenge) {
+        await captureDebug(page, 'chatgpt', 'login-required', { composerVisible: Boolean(composer), profileVisible: Boolean(profile) });
+        if (challenge) throw new Error('provider_challenge:chatgpt');
+        throw new Error('session_expired:chatgpt_logged_out');
+      }
     }
     const authFailures = chatGPTForbiddenUrls(forbidden);
     if (authFailures.length) {

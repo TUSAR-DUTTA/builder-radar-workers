@@ -404,6 +404,19 @@ async function main() {
   assertRuntimeCommitShas();
   loadSessionsFromEnv();
 
+  // Graceful shutdown: close browsers and mark the process as exiting so
+  // any in-flight cell failures are terminal rather than retryable.
+  let shuttingDown = false;
+  const gracefulShutdown = async (signal: string) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.warn(`[runner] received ${signal} — closing browsers and exiting`);
+    await closeSharedBrowser().catch(() => {});
+    process.exit(1);
+  };
+  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+  process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
   if (process.env.SOCIAL_SCRAPE === '1') {
     const pid = process.env.SCRAPE_PROJECT_ID?.trim();
     console.log(`[runner] Social-scrape mode${pid ? ` - project=${pid}` : ' - all active projects'}`);

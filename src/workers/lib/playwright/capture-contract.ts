@@ -1,11 +1,11 @@
 import type { AnswerModel } from '@/lib/geo/types';
 
 export const BROWSER_ADAPTER_VERSIONS: Record<string, string> = {
-  'chatgpt-consumer': 'chatgpt_dom_v10',
+  'chatgpt-consumer': 'chatgpt_dom_v11',
   claude: 'claude_dom_v11',
   perplexity: 'perplexity_dom_v9',
   'google-aio': 'google_aio_state_v8',
-  grok: 'grok_dom_v9',
+  grok: 'grok_dom_v10',
   'gemini-grounded': 'not_browser_captured',
   kimi: 'not_browser_captured',
   mistral: 'not_browser_captured',
@@ -36,6 +36,8 @@ export const PROVIDER_TERMINAL_SIGNALS = Object.freeze({
   google_aio_state_v8: ['aio_complete'],
   chatgpt_dom_v10: ['chatgpt_turn_actions_complete'],
   grok_dom_v9: ['grok_response_actions_complete'],
+  chatgpt_dom_v11: ['chatgpt_turn_actions_complete'],
+  grok_dom_v10: ['grok_response_actions_complete'],
 } as const);
 
 export type TurnBindingMethod = 'provider_id' | 'deterministic_dom' | 'unavailable';

@@ -1,5 +1,9 @@
 import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { chromium, type Page } from 'playwright';
 import { sanitizeAnswerText } from '../src/lib/geo/sanitize-answer';
 import {
@@ -18,6 +22,18 @@ import {
 import { CHATGPT_TURN_SPEC, CLAUDE_TURN_SPEC, GROK_TURN_SPEC } from '../src/workers/lib/playwright/provider-turn-specs';
 import { inspectPerplexityDom, type PerplexityInspectionStatus } from '../src/workers/lib/playwright/perplexity-dom';
 import { inspectGoogleAioDom, type GoogleAioState } from '../src/workers/lib/playwright/google-aio-dom';
+import {
+  closeChatGPTBrowser,
+  configureChatGPTAdapterForTests,
+  installChatGPTBrowserForTests,
+  scrapeChatGPTPrompt,
+} from '../src/workers/lib/playwright/chatgpt';
+import {
+  closeGrokBrowser,
+  configureGrokAdapterForTests,
+  installGrokBrowserForTests,
+  scrapeGrokPrompt,
+} from '../src/workers/lib/playwright/grok';
 import { validateWorkerAdapterEnvelope } from '../src/workers/lib/evidence-contract-boundary';
 
 const PROMPT = 'Which form builder is best for a small SaaS team?';
@@ -185,15 +201,22 @@ async function inspectGoogle(page: Page, html: string, prompt = PROMPT) {
 }
 
 async function assertGoogleMatrix(page: Page): Promise<void> {
-  assert.equal((await inspectGoogle(page, googleHtml())).state, 'aio_complete');
+  const positive = await inspectGoogle(page, googleHtml());
+  assert.equal(positive.state, 'aio_complete');
+  assert.equal(positive.links.length, 1, 'positive AIO retains only container-scoped sources');
   assert.equal((await inspectGoogle(page, googleHtml({ streaming: true }))).state, 'aio_rendering');
   assert.equal((await inspectGoogle(page, googleHtml({ prompt: 'Previous prompt' }))).state, 'search_submitted');
   assert.equal((await inspectGoogle(page, googleHtml({ prompt: 'Wrong prompt' }))).state, 'search_submitted');
+  assert.equal((await inspectGoogle(page, googleHtml({ prompt: `${PROMPT} with extra terms` }))).state, 'search_submitted');
   assert.equal((await inspectGoogle(page, googleHtml({ shell: '<nav>Shell only</nav>' }))).state, 'search_submitted');
   assert.equal((await inspectGoogle(page, googleHtml({ shell: '<form action="/login">Login</form><input name="q" value="' + PROMPT + '">' }))).state, 'login_required');
   assert.equal((await inspectGoogle(page, googleHtml({ shell: '<div data-testid="rate-limit">Limit</div><input name="q" value="' + PROMPT + '">' }))).state, 'rate_limited');
   assert.equal((await inspectGoogle(page, googleHtml({ answer: "I'm sorry, I can't help." }))).state, 'refusal');
   assert.equal((await inspectGoogle(page, '<html><body><input name="q" value="' + PROMPT + '"><div id="search"><h3>Organic only</h3></div></body></html>')).state, 'results_loaded');
+  assert.equal((await inspectGoogle(page, '<html><body><input name="q" value="' + PROMPT + '"><aside role="complementary"><h2>Knowledge panel</h2><p>Tally company facts</p></aside><div id="search"><h3>Organic result</h3></div></body></html>')).state, 'results_loaded');
+  assert.equal((await inspectGoogle(page, '<html><body><input name="q" value="' + PROMPT + '"><div id="search"><div data-attrid="wa:/description"><p>Featured snippet answer</p><a href="https://example.com">Source</a></div><h3>Organic result</h3></div></body></html>')).state, 'results_loaded');
+  assert.equal((await inspectGoogle(page, '<html><body><input name="q" value="' + PROMPT + '"><aside role="complementary"><section aria-label="AI Overview"><h2>AI Overview</h2><p>Knowledge panel text only</p><button aria-label="Copy">Copy</button></section></aside><div id="search"><h3>Organic result</h3></div></body></html>')).state, 'results_loaded');
+  assert.equal((await inspectGoogle(page, googleHtml({ shell: '<form action="https://consent.google.com/save"><p>Before you continue</p></form><input name="q" value="' + PROMPT + '">' }))).state, 'consent');
   assert.equal((await inspectGoogle(page, googleHtml({ shell: '<div data-testid="account-interstitial">Setup</div><input name="q" value="' + PROMPT + '">' }))).state, 'interstitial');
   assert.equal((await inspectGoogle(page, googleHtml({ duplicate: true }))).state, 'duplicate_aio');
   assert.equal((await inspectGoogle(page, googleHtml())).state, 'aio_complete');
@@ -201,6 +224,182 @@ async function assertGoogleMatrix(page: Page): Promise<void> {
   assert.equal((await inspectGoogle(page, googleHtml({ terminal: false }))).state, 'aio_rendering');
   const timeoutState: GoogleAioState = (await inspectGoogle(page, '<html><body><input name="q" value="' + PROMPT + '"></body></html>')).state;
   assert.equal(timeoutState, 'search_submitted');
+  await page.setContent(`<html><body><input name="q" value="${PROMPT}"><main id="search"></main></body></html>`);
+  const delayedContainer = googleHtml().match(/<section[\s\S]*<\/section>/)?.[0] ?? '';
+  await page.evaluate((html) => {
+    setTimeout(() => document.querySelector('main')?.insertAdjacentHTML('beforeend', html), 25);
+  }, delayedContainer);
+  await page.waitForTimeout(150);
+  assert.equal((await page.evaluate(inspectGoogleAioDom, PROMPT)).state, 'aio_complete', 'lazy AIO is detected after it renders');
+}
+
+function chatGPTPage(kind: string): string {
+  const composer = '<textarea id="prompt-textarea" aria-label="Chat with ChatGPT"></textarea>';
+  const profile = '<button data-testid="accounts-profile-button" aria-label="Open profile menu">Profile</button>';
+  if (kind === 'login') return '<a href="/auth/login">Log in</a>';
+  if (kind === 'challenge') return '<div id="challenge-running">Security check</div>';
+  if (kind === 'outage') return '<div>ChatGPT is currently unavailable.</div>';
+  if (kind === 'chooser') return '<div data-testid="log-back-form"><button role="button">Choose account</button></div>';
+  if (kind === 'missing_composer') return profile;
+  if (kind === 'missing_profile') return composer;
+  if (kind === 'normal') return `${profile}${composer}<div class="cf-unrelated">Connection restored</div>
+    <button id="composer-submit-button" onclick="submitPrompt()">Send</button><main id="conversation"></main>
+    <script>function submitPrompt(){const prompt=document.querySelector('#prompt-textarea').value;document.querySelector('#conversation').innerHTML=
+      '<section data-turn="user" data-testid="conversation-turn-live-u"><div>'+prompt+'</div></section>'+
+      '<section data-turn="assistant" data-testid="conversation-turn-live-a"><div data-message-author-role="assistant"><div class="markdown">${ANSWER}</div></div><button data-testid="copy-turn-action-button">Copy</button></section>';}</script>`;
+  return '<main>Provider shell</main>';
+}
+
+async function withChatGPTFixture(
+  browser: Awaited<ReturnType<typeof chromium.launch>>,
+  retryKind: string,
+  run: (forbidden: string[]) => Promise<void>,
+): Promise<void> {
+  const context = await browser.newContext();
+  await context.addInitScript({ content: 'Object.defineProperty(globalThis, "__name", { value: (target) => target, configurable: true });' });
+  const page = await context.newPage();
+  const forbidden: string[] = [];
+  page.on('response', (response) => {
+    if (response.status() === 403 && response.url().includes('chatgpt.com/')) forbidden.push(response.url());
+  });
+  await page.route('https://chatgpt.com/**', async (route) => {
+    const url = route.request().url();
+    if (url.includes('/backend-api/me')) {
+      await route.fulfill({ status: 403, contentType: 'application/json', body: '{}' });
+      return;
+    }
+    const retry = url.includes('retry=1');
+    await route.fulfill({
+      status: 200,
+      contentType: 'text/html',
+      body: retry
+        ? `${chatGPTPage(retryKind === 'backend_403' ? 'shell' : retryKind)}${retryKind === 'backend_403' ? '<script>fetch("/backend-api/me")</script>' : ''}`
+        : chatGPTPage(retryKind === 'normal' ? 'normal' : 'shell'),
+    });
+  });
+  await page.goto('https://chatgpt.com/');
+  installChatGPTBrowserForTests({ runtime: { context, close: async () => context.close(), connectionMeta }, page, forbidden, connectionMeta: { ...connectionMeta } });
+  configureChatGPTAdapterForTests({ authTimeoutMs: 35, authPollMs: 5, retryWaitMs: 20, chooserWaitMs: 5 });
+  try {
+    await run(forbidden);
+  } finally {
+    await closeChatGPTBrowser();
+    configureChatGPTAdapterForTests(null);
+  }
+}
+
+async function assertChatGPTWrapperMatrix(browser: Awaited<ReturnType<typeof chromium.launch>>): Promise<void> {
+  await withChatGPTFixture(browser, 'normal', async () => {
+    const capture = await scrapeChatGPTPrompt(PROMPT, undefined, Date.now() + 10_000);
+    assert.equal(capture.rawAnswer, ANSWER);
+    assert.equal(capture.provenance.adapterVersion, 'chatgpt_dom_v11');
+  });
+  for (const [kind, code] of [
+    ['login', 'session_expired:chatgpt_logged_out'],
+    ['challenge', 'provider_challenge:chatgpt'],
+    ['outage', 'provider_outage:chatgpt'],
+    ['backend_403', 'provider_forbidden:chatgpt_backend_403'],
+    ['chooser', 'provider_interstitial:chatgpt_account_chooser'],
+    ['missing_composer', 'adapter_selector_missing:chatgpt_composer'],
+    ['missing_profile', 'adapter_selector_missing:chatgpt_profile_control'],
+  ] as const) {
+    await withChatGPTFixture(browser, kind, async () => {
+      await assert.rejects(() => scrapeChatGPTPrompt(PROMPT, undefined, Date.now() + 2_000), new RegExp(code));
+    });
+  }
+  for (const [message, code] of [
+    ['TimeoutError: Navigation timeout exceeded', 'provider_navigation_timeout:chatgpt'],
+    ['net::ERR_TUNNEL_CONNECTION_FAILED', 'provider_proxy_failure:chatgpt'],
+    ['net::ERR_NAME_NOT_RESOLVED', 'provider_network_failure:chatgpt_dns'],
+    ['Target page, context or browser has been closed', 'provider_outage:chatgpt_browser_unavailable'],
+  ] as const) {
+    await withChatGPTFixture(browser, 'shell', async () => {
+      configureChatGPTAdapterForTests({
+        authTimeoutMs: 25, authPollMs: 5, retryWaitMs: 1,
+        navigate: async () => { throw new Error(message); },
+      });
+      await assert.rejects(() => scrapeChatGPTPrompt(PROMPT, undefined, Date.now() + 2_000), new RegExp(code));
+    });
+  }
+}
+
+function grokPage(kind: 'normal' | 'unrelated' | 'immediate_quota' | 'delayed_quota'): string {
+  const alert = kind === 'unrelated' ? '<div role="alert">Your draft was saved</div>' : '';
+  return `<textarea id="grok-input"></textarea>${alert}<button type="submit" onclick="submitPrompt()">Send</button><main id="conversation"></main>
+    <script>function submitPrompt(){const prompt=document.querySelector('#grok-input').value;
+      ${kind === 'immediate_quota' ? "document.body.insertAdjacentHTML('beforeend','<div role=\"alert\">Usage limit exceeded.</div>');" : ''}
+      ${kind === 'delayed_quota' ? "setTimeout(()=>document.body.insertAdjacentHTML('beforeend','<div role=\"alert\">You have reached your limit.</div>'),60);" : ''}
+      ${kind === 'normal' || kind === 'unrelated' ? `document.querySelector('#conversation').innerHTML='<div data-message-author-role="user" data-message-id="grok-live-u">'+prompt+'</div><div data-message-author-role="assistant" data-message-id="grok-live-a"><div data-testid="message-content">${ANSWER}</div><button aria-label="Copy response">Copy</button></div>';` : ''}
+    }</script>`;
+}
+
+async function withGrokFixture(
+  browser: Awaited<ReturnType<typeof chromium.launch>>,
+  kind: Parameters<typeof grokPage>[0],
+  run: () => Promise<void>,
+): Promise<void> {
+  const context = await browser.newContext();
+  await context.addInitScript({ content: 'Object.defineProperty(globalThis, "__name", { value: (target) => target, configurable: true });' });
+  const page = await context.newPage();
+  await page.route('https://grok.com/**', (route) => route.fulfill({ contentType: 'text/html', body: grokPage(kind) }));
+  installGrokBrowserForTests({ runtime: { context, close: async () => context.close(), connectionMeta }, page, connectionMeta: { ...connectionMeta } });
+  configureGrokAdapterForTests({ quotaPollMs: 20, quotaTimeoutMs: 140 });
+  try {
+    await run();
+  } finally {
+    await closeGrokBrowser();
+    configureGrokAdapterForTests(null);
+  }
+}
+
+async function assertGrokWrapperMatrix(browser: Awaited<ReturnType<typeof chromium.launch>>): Promise<void> {
+  for (const kind of ['normal', 'unrelated'] as const) {
+    await withGrokFixture(browser, kind, async () => {
+      const capture = await scrapeGrokPrompt(PROMPT, undefined, Date.now() + 10_000);
+      assert.equal(capture.rawAnswer, ANSWER);
+      assert.equal(capture.provenance.adapterVersion, 'grok_dom_v10');
+    });
+  }
+  for (const kind of ['immediate_quota', 'delayed_quota'] as const) {
+    await withGrokFixture(browser, kind, async () => {
+      await assert.rejects(() => scrapeGrokPrompt(PROMPT, undefined, Date.now() + 2_000), /provider_rate_limit:grok_usage_cap/);
+    });
+  }
+}
+
+async function runShutdownHarness(mode: 'graceful' | 'forced'): Promise<{ code: number | null; trace: string; elapsedMs: number }> {
+  const directory = await mkdtemp(join(tmpdir(), 'builder-radar-shutdown-'));
+  const tracePath = join(directory, `${mode}.log`);
+  const started = Date.now();
+  try {
+    const child = spawn(process.execPath, ['--import', 'tsx', 'test/fixtures/shutdown-process-harness.ts', mode, tracePath], {
+      cwd: process.cwd(), stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    let stderr = '';
+    child.stderr.on('data', (chunk) => { stderr += chunk.toString(); });
+    const code = await new Promise<number | null>((resolve, reject) => {
+      const timeout = setTimeout(() => { child.kill(); reject(new Error(`shutdown harness timed out: ${stderr}`)); }, 5_000);
+      child.once('error', reject);
+      child.once('exit', (exitCode) => { clearTimeout(timeout); resolve(exitCode); });
+    });
+    return { code, trace: await readFile(tracePath, 'utf8'), elapsedMs: Date.now() - started };
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+
+async function assertShutdownProcessMatrix(): Promise<void> {
+  const graceful = await runShutdownHarness('graceful');
+  assert.equal(graceful.code, 1);
+  assert.match(graceful.trace, /operation_aborted/);
+  assert.match(graceful.trace, /fail:cell-exact:worker-exact:cancelled:false:worker_shutdown_cancelled/);
+  assert.match(graceful.trace, /browsers_closed[\s\S]*job_refreshed:job-exact[\s\S]*exit_code:1/);
+  assert.doesNotMatch(graceful.trace, /forced_exit/);
+  const forced = await runShutdownHarness('forced');
+  assert.equal(forced.code, 1);
+  assert.match(forced.trace, /operation_aborted[\s\S]*forced_exit:1/);
+  assert.doesNotMatch(forced.trace, /exit_code:1/);
+  assert.ok(forced.elapsedMs < 3_000, `forced shutdown was not bounded: ${forced.elapsedMs}ms`);
 }
 
 function validEnvelope(engine: GenericFixture['model'] | 'perplexity' | 'google-aio') {
@@ -228,8 +427,8 @@ function validEnvelope(engine: GenericFixture['model'] | 'perplexity' | 'google-
 async function main() {
   console.log('=== Worker deterministic evidence tests ===');
   assert.deepEqual(BROWSER_ADAPTER_VERSIONS, {
-    'chatgpt-consumer': 'chatgpt_dom_v10', claude: 'claude_dom_v11', perplexity: 'perplexity_dom_v9',
-    'google-aio': 'google_aio_state_v8', grok: 'grok_dom_v9', 'gemini-grounded': 'not_browser_captured',
+    'chatgpt-consumer': 'chatgpt_dom_v11', claude: 'claude_dom_v11', perplexity: 'perplexity_dom_v9',
+    'google-aio': 'google_aio_state_v8', grok: 'grok_dom_v10', 'gemini-grounded': 'not_browser_captured',
     kimi: 'not_browser_captured', mistral: 'not_browser_captured', 'gpt-oss': 'not_browser_captured',
   });
   assert.throws(() => assertRuntimeCommitShas({ GITHUB_ACTIONS: 'true', GITHUB_SHA: 'bad', PRIVATE_INGESTION_COMMIT: '2'.repeat(40) }));
@@ -255,9 +454,16 @@ async function main() {
     console.log('PASS perplexity: narrow thread/query/answer/citation matrix');
     await assertGoogleMatrix(page);
     console.log('PASS google-aio: exact aio_complete/no-answer and rejection matrix');
+    await assertChatGPTWrapperMatrix(browser);
+    console.log('PASS chatgpt: exact adapter wrapper navigation/auth classification matrix');
+    await assertGrokWrapperMatrix(browser);
+    console.log('PASS grok: installed Playwright quota locator and normal-response matrix');
   } finally {
     await browser.close();
   }
+
+  await assertShutdownProcessMatrix();
+  console.log('PASS runner: process-level graceful and bounded forced shutdown matrix');
 
   for (const engine of ['chatgpt-consumer', 'claude', 'perplexity', 'grok', 'google-aio'] as const) {
     const envelope = validEnvelope(engine);

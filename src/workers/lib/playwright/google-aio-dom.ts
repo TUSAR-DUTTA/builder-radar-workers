@@ -37,7 +37,7 @@ export function inspectGoogleAioDom(expectedPrompt?: string): GoogleAioInspectio
     const input = document.querySelector<HTMLInputElement | HTMLTextAreaElement>('textarea[name="q"], input[name="q"]');
     const currentValue = (input?.value || '').normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim();
     const expected = expectedPrompt.normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim();
-    if (!input || !currentValue.includes(expected)) {
+    if (!input || currentValue !== expected) {
       return { state: 'search_submitted', rawAnswer: '', links: [], containerIdentity: null };
     }
   }
@@ -66,7 +66,8 @@ export function inspectGoogleAioDom(expectedPrompt?: string): GoogleAioInspectio
   for (let i = explicit.length - 1; i >= 0; i--) {
     const el = explicit[i];
     const style = window.getComputedStyle(el);
-    if (style.display !== 'none' && el.getClientRects().length > 0) {
+    if (!el.closest('[role="complementary"], [data-attrid*="knowledge" i], [data-attrid="PAA"], [class*="related-questions"]')
+      && style.display !== 'none' && el.getClientRects().length > 0) {
       visibleExplicit.push(el);
     }
   }

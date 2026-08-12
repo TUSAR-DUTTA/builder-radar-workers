@@ -13,6 +13,7 @@ import { eq, and, inArray, sql } from 'drizzle-orm';
 import type { AnswerModel, BrandFact } from '@/lib/geo/types';
 import { runPromptViaPlaywrightDetailed, closeSharedBrowser, isPlaywrightAnswerModel } from './lib/geo-playwright';
 import { assertRuntimeCommitShas } from './lib/playwright/capture-contract';
+import { installShutdownSignalHandlers, ShutdownCoordinator } from './lib/shutdown-coordinator';
 import { runSocialScrapesForProject, runScheduledSocialScrapes } from './social';
 import { oldestAttemptFirst } from '@/lib/worker-scheduling';
 
@@ -70,6 +71,15 @@ interface GeoRunResult {
 
 const CELL_LEASE_MS = 300_000;
 const PROVIDER_DEADLINE_MS = 210_000;
+const runnerShutdown = new ShutdownCoordinator({
+  failCell: failScanCell,
+  closeBrowsers: closeSharedBrowser,
+  refreshJob: refreshScanJob,
+  setExitCode: (code) => { process.exitCode = code; },
+  forceExit: (code) => process.exit(code),
+  log: (message) => console.warn(message),
+  timeoutMs: 20_000,
+});
 
 async function runGeoForProject(projectId: string, sources: string[]): Promise<GeoRunResult> {
   const runtimeShas = assertRuntimeCommitShas();
@@ -214,9 +224,16 @@ async function runGeoForProject(projectId: string, sources: string[]): Promise<G
   const scanWorkerId = `worker:pw:${job.id}`;
   
   try {
-    while (true) {
+    while (runnerShutdown.canClaim) {
       const cell = await claimNextScanCell(job.id, scanWorkerId, CELL_LEASE_MS);
       if (!cell) break;
+      if (!runnerShutdown.canClaim) {
+        await failScanCell(cell.id, scanWorkerId, new Error('worker_shutdown_cancelled'), {
+          category: 'cancelled', retryable: false, code: 'worker_shutdown_cancelled', publicCode: 'publication_withheld',
+        });
+        await refreshScanJob(job.id);
+        break;
+      }
       const prompt = cell.prompt_id ? promptById.get(cell.prompt_id) : undefined;
       if (!prompt) {
         await failScanCell(cell.id, scanWorkerId, new Error('prompt changed after scheduled scan was queued'));
@@ -226,9 +243,11 @@ async function runGeoForProject(projectId: string, sources: string[]): Promise<G
       const controller = new AbortController();
       const deadlineAt = Date.now() + PROVIDER_DEADLINE_MS;
       const timer = setTimeout(() => controller.abort(new Error("provider_deadline_aborted")), PROVIDER_DEADLINE_MS);
+      runnerShutdown.beginCell({ cellId: cell.id, workerId: scanWorkerId, jobId: job.id, controller });
 
-      try {
-        const sampled = await sampleProjectPrompts({
+      const operation = (async () => {
+        try {
+          const sampled = await sampleProjectPrompts({
           router, projectId: project.id, brand: project.name, competitors,
           prompts: [prompt], models: [cell.engine], facts, identity,
           userId: project.userId ?? undefined, 
@@ -254,27 +273,37 @@ async function runGeoForProject(projectId: string, sources: string[]): Promise<G
               adapterResults: res.adapterResults,
             };
           }
-        });
+          });
 
-        if (sampled.runCount > 0 && await completeScanCell(cell.id, scanWorkerId)) {
-          // Success
-        } else {
-          await failScanCell(cell.id, scanWorkerId, new Error('provider_no_valid_answer'), sampled.failures[cell.engine]);
+          if (sampled.runCount > 0) {
+            if (await completeScanCell(cell.id, scanWorkerId)) runnerShutdown.markCellSettled(cell.id);
+          } else {
+            if (await failScanCell(cell.id, scanWorkerId, new Error('provider_no_valid_answer'), sampled.failures[cell.engine])) {
+              runnerShutdown.markCellSettled(cell.id);
+            }
+          }
+        } catch (cellError: unknown) {
+          if (runnerShutdown.isShuttingDown) return;
+          const message = cellError instanceof Error ? cellError.message : '';
+          if (message.includes('_aborted')) {
+            if (await failScanCell(cell.id, scanWorkerId, new Error(`provider_deadline_exceeded_after_${PROVIDER_DEADLINE_MS}ms`))) {
+              runnerShutdown.markCellSettled(cell.id);
+            }
+            // Ensure a timed-out provider cannot continue operating after the cell lease expires
+            await closeSharedBrowser().catch(() => {});
+          } else {
+            if (await failScanCell(cell.id, scanWorkerId, cellError)) runnerShutdown.markCellSettled(cell.id);
+          }
+        } finally {
+          clearTimeout(timer);
+          if (controller.signal.aborted && !runnerShutdown.isShuttingDown) {
+            await closeSharedBrowser();
+          }
         }
-      } catch (cellError: any) {
-        if (cellError.message && cellError.message.includes('_aborted')) {
-          await failScanCell(cell.id, scanWorkerId, new Error(`provider_deadline_exceeded_after_${PROVIDER_DEADLINE_MS}ms`));
-          // Ensure a timed-out provider cannot continue operating after the cell lease expires
-          await closeSharedBrowser().catch(() => {});
-        } else {
-          await failScanCell(cell.id, scanWorkerId, cellError);
-        }
-      } finally {
-        clearTimeout(timer);
-        if (controller.signal.aborted) {
-          await closeSharedBrowser();
-        }
-      }
+      })();
+      runnerShutdown.trackOperation(cell.id, operation);
+      await operation;
+      runnerShutdown.clearCell(cell.id);
     }
   } finally {
     await closeSharedBrowser();
@@ -376,6 +405,7 @@ async function runScheduledScrapes(): Promise<void> {
   const batch = oldestAttemptFirst(due).slice(0, MAX_SCRAPES_PER_TICK);
   const failedProjects: string[] = [];
   for (const p of batch) {
+    if (!runnerShutdown.canClaim) break;
     try {
       const result = await runGeoForProject(p.id, sourcesToRun);
       if (result.status === 'complete' && result.prompts > 0 && result.runs === 0) {
@@ -403,26 +433,16 @@ async function main() {
   // unless both running repository identities are exact immutable commits.
   assertRuntimeCommitShas();
   loadSessionsFromEnv();
-
-  // Graceful shutdown: close browsers and mark the process as exiting so
-  // any in-flight cell failures are terminal rather than retryable.
-  let shuttingDown = false;
-  const gracefulShutdown = async (signal: string) => {
-    if (shuttingDown) return;
-    shuttingDown = true;
-    console.warn(`[runner] received ${signal} — closing browsers and exiting`);
-    await closeSharedBrowser().catch(() => {});
-    process.exit(1);
-  };
-  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
-  process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+  installShutdownSignalHandlers(runnerShutdown);
 
   if (process.env.SOCIAL_SCRAPE === '1') {
     const pid = process.env.SCRAPE_PROJECT_ID?.trim();
     console.log(`[runner] Social-scrape mode${pid ? ` - project=${pid}` : ' - all active projects'}`);
     if (pid) await runSocialScrapesForProject(pid);
     else await runScheduledSocialScrapes();
-    process.exit(0);
+    if (runnerShutdown.isShuttingDown) await runnerShutdown.waitForCleanup();
+    else process.exitCode = 0;
+    return;
   }
 
   const scrapeProjectId = process.env.SCRAPE_PROJECT_ID?.trim();
@@ -439,19 +459,23 @@ async function main() {
     if (result.status === 'complete' && result.prompts > 0 && result.runs === 0) {
       throw new Error('Browser sampling produced no valid stored answers');
     }
-    process.exit(0);
+    if (runnerShutdown.isShuttingDown) await runnerShutdown.waitForCleanup();
+    else process.exitCode = 0;
+    return;
   }
 
   await runScheduledScrapes();
-  process.exit(0);
+  if (runnerShutdown.isShuttingDown) await runnerShutdown.waitForCleanup();
+  else process.exitCode = 0;
 }
 
 const runningDirectly =
   process.argv[1]?.endsWith('runner.ts') || process.argv[1]?.endsWith('runner.js');
 
 if (runningDirectly) {
-  main().catch((err) => {
+  main().catch(async (err) => {
     console.error('[runner] Fatal:', err);
-    process.exit(1);
+    if (runnerShutdown.isShuttingDown) await runnerShutdown.waitForCleanup().catch(() => {});
+    process.exitCode = 1;
   });
 }

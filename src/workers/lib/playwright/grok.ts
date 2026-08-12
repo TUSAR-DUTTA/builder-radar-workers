@@ -9,11 +9,64 @@ export let sharedGrokBrowser: {
   connectionMeta: BrowserConnectionMetadata;
 } | null = null;
 
+type GrokAdapterTestOptions = {
+  quotaPollMs?: number;
+  quotaTimeoutMs?: number;
+};
+
+let grokAdapterTestOptions: GrokAdapterTestOptions = {};
+
+/** Narrow test seam: deterministic fixtures still execute the exported adapter wrapper. */
+export function configureGrokAdapterForTests(options: GrokAdapterTestOptions | null): void {
+  grokAdapterTestOptions = options ?? {};
+}
+
+export function installGrokBrowserForTests(browser: NonNullable<typeof sharedGrokBrowser>): void {
+  sharedGrokBrowser = browser;
+}
+
 export async function closeGrokBrowser() {
   if (sharedGrokBrowser) {
     await sharedGrokBrowser.runtime.close().catch(() => {});
     sharedGrokBrowser = null;
   }
+}
+
+const GROK_QUOTA_TEXT = /^(?:you (?:have|'ve) reached (?:your )?(?:usage )?limit|usage limit exceeded|rate limit exceeded|you are out of (?:queries|messages)(?: for now)?|try again in [a-z0-9 :,.-]{1,40})(?:[.!])?$/i;
+
+/** Uses only CSS locators and proves quota from bounded visible text, never alert role alone. */
+export async function waitForGrokQuotaBanner(
+  page: import('playwright').Page,
+  signal?: AbortSignal,
+): Promise<boolean> {
+  const deadline = Date.now() + (grokAdapterTestOptions.quotaTimeoutMs ?? 4_000);
+  const candidateSelector = [
+    '[role="alert"]',
+    '[class*="rate-limit" i]',
+    '[class*="limit-reached" i]',
+    '[data-testid*="rate-limit" i]',
+    '[data-testid*="usage-limit" i]',
+    '[aria-label*="rate limit" i]',
+  ].join(', ');
+  do {
+    if (signal?.aborted) throw new Error('provider_deadline_aborted');
+    const candidates = page.locator(candidateSelector);
+    for (let index = 0; index < await candidates.count(); index += 1) {
+      const candidate = candidates.nth(index);
+      if (!await candidate.isVisible().catch(() => false)) continue;
+      const text = (await candidate.innerText().catch(() => '')).normalize('NFKC').replace(/\s+/g, ' ').trim();
+      if (text.length <= 120 && GROK_QUOTA_TEXT.test(text)) return true;
+    }
+    for (const pattern of [GROK_QUOTA_TEXT]) {
+      const textMatches = page.getByText(pattern, { exact: true });
+      for (let index = 0; index < await textMatches.count(); index += 1) {
+        if (await textMatches.nth(index).isVisible().catch(() => false)) return true;
+      }
+    }
+    if (Date.now() >= deadline) break;
+    await page.waitForTimeout(grokAdapterTestOptions.quotaPollMs ?? 250);
+  } while (Date.now() < deadline);
+  return false;
 }
 
 export async function scrapeGrokPrompt(
@@ -63,12 +116,7 @@ export async function scrapeGrokPrompt(
     if (submit && !await submit.isDisabled().catch(() => true)) await submit.click();
     else await composer.press('Enter');
 
-    // Check for rate limit / usage limit banner immediately after sending
-    const rateLimitBanner = await firstVisibleLocator(
-      page,
-      '[role="alert"], [class*="rate-limit"], [class*="limit-reached"], text="You have reached your limit", text="Usage limit exceeded", text="Try again later"'
-    );
-    if (rateLimitBanner) {
+    if (await waitForGrokQuotaBanner(page, signal)) {
       throw new Error('provider_rate_limit:grok_usage_cap');
     }
 

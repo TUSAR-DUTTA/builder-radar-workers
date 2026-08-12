@@ -25,6 +25,25 @@ export let sharedChatGPTBrowser: {
   connectionMeta: BrowserConnectionMetadata;
 } | null = null;
 
+type ChatGPTAdapterTestOptions = {
+  authTimeoutMs?: number;
+  authPollMs?: number;
+  retryWaitMs?: number;
+  chooserWaitMs?: number;
+  navigate?: (page: import('playwright').Page, url: string, timeoutMs: number) => Promise<unknown>;
+};
+
+let chatGPTAdapterTestOptions: ChatGPTAdapterTestOptions = {};
+
+/** Narrow test seam: deterministic fixtures still execute the exported adapter wrapper. */
+export function configureChatGPTAdapterForTests(options: ChatGPTAdapterTestOptions | null): void {
+  chatGPTAdapterTestOptions = options ?? {};
+}
+
+export function installChatGPTBrowserForTests(browser: NonNullable<typeof sharedChatGPTBrowser>): void {
+  sharedChatGPTBrowser = browser;
+}
+
 export async function closeChatGPTBrowser() {
   if (sharedChatGPTBrowser) {
     await sharedChatGPTBrowser.runtime.close().catch(() => {});
@@ -39,8 +58,97 @@ async function dismissAccountChooser(page: import('playwright').Page): Promise<b
   );
   if (!chooser) return false;
   await chooser.click({ timeout: 10_000 });
-  await page.waitForTimeout(2_000);
+  await page.waitForTimeout(chatGPTAdapterTestOptions.chooserWaitMs ?? 2_000);
   return true;
+}
+
+function classifiedNavigationError(error: unknown): Error {
+  const raw = error instanceof Error ? `${error.name} ${error.message}` : String(error);
+  const normalized = raw.toLowerCase().slice(0, 600);
+  if (/timeout|timed out|timeouterror/.test(normalized)) {
+    return new Error('provider_navigation_timeout:chatgpt');
+  }
+  if (/err_proxy|err_tunnel|proxy[_ ]connection|tunnel[_ ]connection|proxy[_ ]authentication|http 407/.test(normalized)) {
+    return new Error('provider_proxy_failure:chatgpt');
+  }
+  if (/err_name_not_resolved|enotfound|eai_again|dns/.test(normalized)) {
+    return new Error('provider_network_failure:chatgpt_dns');
+  }
+  if (/target page, context or browser has been closed|browser.*closed|page crashed|target crashed/.test(normalized)) {
+    return new Error('provider_outage:chatgpt_browser_unavailable');
+  }
+  return new Error('provider_network_failure:chatgpt_navigation');
+}
+
+async function navigateChatGPT(page: import('playwright').Page, url: string, timeoutMs: number): Promise<void> {
+  try {
+    if (chatGPTAdapterTestOptions.navigate) {
+      await chatGPTAdapterTestOptions.navigate(page, url, timeoutMs);
+    } else {
+      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
+    }
+  } catch (error) {
+    throw classifiedNavigationError(error);
+  }
+}
+
+async function firstVisibleText(
+  page: import('playwright').Page,
+  patterns: readonly RegExp[],
+): Promise<import('playwright').Locator | null> {
+  for (const pattern of patterns) {
+    const matches = page.getByText(pattern, { exact: true });
+    for (let index = 0; index < await matches.count(); index += 1) {
+      const match = matches.nth(index);
+      if (await match.isVisible().catch(() => false)) return match;
+    }
+  }
+  return null;
+}
+
+async function inspectChatGPTAuthUi(page: import('playwright').Page) {
+  const [composer, profile, loggedOut, chooser, challengeNode, challengeText, outageText] = await Promise.all([
+    firstVisibleLocator(page, '#prompt-textarea, div[contenteditable="true"][aria-label="Chat with ChatGPT"]'),
+    firstVisibleLocator(page, '[data-testid="accounts-profile-button"], [aria-label*="profile menu" i]'),
+    firstVisibleLocator(page, 'a[href*="/auth/login"], button[data-testid="login-button"], button:has-text("Log in")'),
+    firstVisibleLocator(page, '[data-testid="log-back-form"], button[name="session_id"], button[data-dd-action-name="Select existing session"]'),
+    firstVisibleLocator(page, 'iframe[src*="challenges.cloudflare.com"], iframe[src*="/challenge-platform/"], #challenge-running, [data-testid="challenge-page"], [name="cf-turnstile-response"]'),
+    firstVisibleText(page, [
+      /^verify you are human[.!]?$/i,
+      /^checking (?:if the site connection is secure|your browser)[.!…]?$/i,
+      /^performing security verification[.!…]?$/i,
+    ]),
+    firstVisibleText(page, [
+      /^chatgpt is currently unavailable[.!]?$/i,
+      /^we are experiencing (?:exceptionally )?high demand[.!]?$/i,
+      /^service temporarily unavailable[.!]?$/i,
+      /^something went wrong(?: while loading chatgpt)?[.!]?$/i,
+    ]),
+  ]);
+  return {
+    composer,
+    profile,
+    loggedOut,
+    chooser,
+    challenge: challengeNode ?? challengeText,
+    outage: outageText,
+  };
+}
+
+function assertChatGPTAuthState(
+  state: Awaited<ReturnType<typeof inspectChatGPTAuthUi>>,
+  forbidden: string[],
+): asserts state is Awaited<ReturnType<typeof inspectChatGPTAuthUi>> & {
+  composer: import('playwright').Locator;
+  profile: import('playwright').Locator;
+} {
+  if (chatGPTForbiddenUrls(forbidden).length) throw new Error('provider_forbidden:chatgpt_backend_403');
+  if (state.challenge) throw new Error('provider_challenge:chatgpt');
+  if (state.outage) throw new Error('provider_outage:chatgpt');
+  if (state.loggedOut) throw new Error('session_expired:chatgpt_logged_out');
+  if (state.chooser) throw new Error('provider_interstitial:chatgpt_account_chooser');
+  if (!state.composer) throw new Error('adapter_selector_missing:chatgpt_composer');
+  if (!state.profile) throw new Error('adapter_selector_missing:chatgpt_profile_control');
 }
 
 export async function scrapeChatGPTPrompt(
@@ -56,7 +164,7 @@ export async function scrapeChatGPTPrompt(
       page.on('response', (response) => {
         if (response.status() === 403 && response.url().includes('chatgpt.com/')) forbidden.push(response.url());
       });
-      await page.goto('https://chatgpt.com/', { waitUntil: 'domcontentloaded', timeout: 45_000 });
+      await navigateChatGPT(page, 'https://chatgpt.com/', 45_000);
       sharedChatGPTBrowser = { runtime, page, forbidden, connectionMeta: runtime.connectionMeta };
     } catch (error) {
       await runtime.close().catch(() => {});
@@ -68,42 +176,43 @@ export async function scrapeChatGPTPrompt(
   forbidden.length = 0;
   try {
     if (!page.url().includes('chatgpt.com') || page.url().includes('/c/')) {
-      await page.goto('https://chatgpt.com/', { waitUntil: 'domcontentloaded', timeout: 45_000 });
+      await navigateChatGPT(page, 'https://chatgpt.com/', 45_000);
     }
-    const authDeadline = Math.min(deadlineAt ?? Date.now() + 45_000, Date.now() + 45_000);
+    const authTimeoutMs = chatGPTAdapterTestOptions.authTimeoutMs ?? 45_000;
+    const authPollMs = chatGPTAdapterTestOptions.authPollMs ?? 1_000;
+    const authDeadline = Math.min(deadlineAt ?? Date.now() + authTimeoutMs, Date.now() + authTimeoutMs);
     let composer: import('playwright').Locator | null = null;
     let profile: import('playwright').Locator | null = null;
+    let authState: Awaited<ReturnType<typeof inspectChatGPTAuthUi>> | null = null;
     while (Date.now() < authDeadline) {
       if (signal?.aborted) throw new Error('provider_deadline_aborted');
       if (await dismissAccountChooser(page).catch(() => false)) continue;
-      composer = await firstVisibleLocator(page, '#prompt-textarea, div[contenteditable="true"][aria-label="Chat with ChatGPT"]');
-      profile = await firstVisibleLocator(page, '[data-testid="accounts-profile-button"], [aria-label*="profile menu" i]');
+      authState = await inspectChatGPTAuthUi(page);
+      composer = authState.composer;
+      profile = authState.profile;
       if (composer && profile) break;
-      await page.waitForTimeout(1_000);
+      if (authState.loggedOut || authState.challenge || authState.outage) break;
+      await page.waitForTimeout(authPollMs);
     }
-    const explicitLogin = await firstVisibleLocator(
-      page,
-      'a[href*="/auth/login"], button[data-testid="login-button"], button:has-text("Log in")',
-    );
-    if (!composer || !profile || explicitLogin) {
-      // Retry with a fresh navigation before giving up
-      await page.goto('https://chatgpt.com/?retry=1', { waitUntil: 'domcontentloaded', timeout: 30_000 }).catch(() => {});
-      await page.waitForTimeout(5000);
-      composer = await firstVisibleLocator(page, '#prompt-textarea, div[contenteditable="true"][aria-label="Chat with ChatGPT"]');
-      profile = await firstVisibleLocator(page, '[data-testid="accounts-profile-button"], [aria-label*="profile menu" i]');
-      const stillLogin = await firstVisibleLocator(page, 'a[href*="/auth/login"], button[data-testid="login-button"], button:has-text("Log in")');
-      const challenge = await firstVisibleLocator(page, 'iframe[src*="challenge"], #challenge-running, [class*="cf-"]');
-      
-      if (!composer || !profile || stillLogin || challenge) {
-        await captureDebug(page, 'chatgpt', 'login-required', { composerVisible: Boolean(composer), profileVisible: Boolean(profile) });
-        if (challenge) throw new Error('provider_challenge:chatgpt');
-        throw new Error('session_expired:chatgpt_logged_out');
-      }
+    if (!composer || !profile || authState?.loggedOut || authState?.challenge || authState?.outage) {
+      await navigateChatGPT(page, 'https://chatgpt.com/?retry=1', 30_000);
+      await page.waitForTimeout(chatGPTAdapterTestOptions.retryWaitMs ?? 5_000);
+      authState = await inspectChatGPTAuthUi(page);
+      await captureDebug(page, 'chatgpt', 'auth-state-rejected', {
+        composerVisible: Boolean(authState.composer),
+        profileVisible: Boolean(authState.profile),
+        classification: authState.challenge ? 'challenge' : authState.outage ? 'outage'
+          : authState.loggedOut ? 'logged_out' : authState.chooser ? 'account_chooser'
+            : !authState.composer ? 'missing_composer' : 'missing_profile',
+      });
+      assertChatGPTAuthState(authState, forbidden);
+      composer = authState.composer;
+      profile = authState.profile;
     }
     const authFailures = chatGPTForbiddenUrls(forbidden);
     if (authFailures.length) {
       await captureDebug(page, 'chatgpt', 'auth-403-before-send', { count: authFailures.length });
-      throw new Error('session_expired:chatgpt_backend_403');
+      throw new Error('provider_forbidden:chatgpt_backend_403');
     }
 
     const snapshot = await page.evaluate(snapshotConversationDom, CHATGPT_TURN_SPEC);
@@ -123,7 +232,7 @@ export async function scrapeChatGPTPrompt(
       signal,
     });
     if (isBadChatGPTResponse(inspection.rawAnswer)) throw new Error('provider_no_answer:chatgpt');
-    if (chatGPTForbiddenUrls(forbidden).length) throw new Error('session_expired:chatgpt_backend_403_after_send');
+    if (chatGPTForbiddenUrls(forbidden).length) throw new Error('provider_forbidden:chatgpt_backend_403_after_send');
     if (!inspection.terminalSignal || inspection.turnBindingMethod === 'unavailable'
       || (inspection.turnBindingMethod === 'deterministic_dom' && !inspection.captureBindingId)) {
       throw new Error('prompt_binding_unverified:chatgpt');
